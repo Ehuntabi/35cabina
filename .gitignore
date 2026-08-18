@@ -29,6 +29,9 @@
 ldgen*
 kconfig*
 
+# === Secretos locales (Fase 1: SSID/password del AP de la P4) ===
+main/wifi_credentials.h
+
 # === SDK config ===
 /sdkconfig.old
 
