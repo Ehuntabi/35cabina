@@ -32,12 +32,18 @@ Se reutiliza:
   no la usa ni la configura** — ni este proyecto ni el fork anterior
   montan `sdmmc`/`sdspi`. Si algún día hace falta almacenamiento local en
   la propia 35cabina, está disponible sin cableado adicional.
+- **Conector de expansión "Extended IO"** (JST1.25 8 pines, ver esquemático
+  oficial): expone `IO5, IO6, IO7, IO15, IO16, IO46, IO9, IO14` libres —
+  ninguno usado por la pantalla/táctil/TF card de este módulo. Hay además
+  dos JST de 4 pines más pequeños con `IO17`/`IO18` + alimentación.
 - **Acelerómetro** (inclinación al aparcar): ADXL345, I2C address `0x53`,
-  colgado del bus ya compartido con el táctil
-  (`bsp_i2c_get_bus_handle()`, GPIO4/GPIO8). Sin verificar aún en placa
-  real si esos pines están accesibles físicamente en el módulo Guition, y
-  sin verificar el mapeo de ejes pitch/roll según cómo quede montado el
-  sensor (ver comentario en `tilt.c`).
+  en un **bus I2C propio** (`I2C_NUM_1`, `IO5`=SDA / `IO6`=SCL del
+  conector Extended IO) — **no** el bus interno del táctil (GPIO4/GPIO8):
+  el esquemático muestra que ese bus es cableado interno pantalla+táctil
+  sin pad accesible desde fuera, así que no había forma física de
+  colgarse de él. Sin verificar aún en placa real el mapeo de ejes
+  pitch/roll según cómo quede montado el sensor (ver comentario en
+  `tilt.c`).
 
 ## Target / toolchain
 
@@ -56,7 +62,7 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
 └─ main/
    ├─ main.c                          # bring-up + arranque UI/red
    ├─ data_model.c/h                  # snapshot de mini_msg_t protegido por lock
-   ├─ tilt.c/h                        # ADXL345 (I2C compartido) -- pitch/roll (Fase 3)
+   ├─ tilt.c/h                        # ADXL345 (bus I2C propio IO5/IO6) -- pitch/roll (Fase 3)
    ├─ esp_bsp.c/h                     # pantalla QSPI + tactil + bus I2C
    ├─ lv_port.c/h, display.h          # bring-up LVGL / panel
    ├─ wifi_credentials.h.example      # plantilla; el real NO se versiona

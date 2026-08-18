@@ -10,6 +10,14 @@
  *
  * En modo FULL_RES la escala es fija: 3.9 mg/LSB, independiente del rango.
  *
+ * BUS I2C PROPIO, no el compartido con el tactil (I2C_NUM_0, GPIO4/GPIO8):
+ * el esquematico oficial del modulo (JC3248W535EN/5-IO pin distribution,
+ * seccion "Extended IO") muestra que GPIO4/GPIO8 son cableado interno
+ * pantalla+tactil, SIN pad accesible desde fuera -- no hay donde soldar.
+ * El conector de expansion "Extended IO" (JST1.25 8P) si expone
+ * IO5/IO6/IO7/IO15/IO16/IO46/IO9/IO14 libres; usamos IO5(SDA)/IO6(SCL) en
+ * un segundo bus I2C por hardware (I2C_NUM_1, el ESP32-S3 tiene dos).
+ *
  * OJO mapeo de ejes: pitch/roll asumen una orientacion de montaje concreta
  * del sensor respecto al chasis. Falta verificar en la placa real que
  * "pitch" = cabeceo delante-atras y "roll" = balanceo izda-dcha segun como
@@ -17,9 +25,9 @@
  * ax/ay en las formulas de abajo.
  */
 #include "tilt.h"
-#include "esp_bsp.h"
 #include "config_storage.h"
 #include "driver/i2c_master.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -31,6 +39,11 @@
 
 static const char *TAG = "tilt";
 
+#define TILT_I2C_PORT            I2C_NUM_1
+#define TILT_I2C_SDA_GPIO        GPIO_NUM_5
+#define TILT_I2C_SCL_GPIO        GPIO_NUM_6
+#define TILT_I2C_CLK_HZ          400000
+
 #define ADXL345_ADDR            0x53
 #define REG_DEVID                0x00
 #define REG_POWER_CTL             0x2D
@@ -38,6 +51,7 @@ static const char *TAG = "tilt";
 #define REG_DATAX0                0x32
 #define ADXL345_DEVID_EXPECTED   0xE5
 
+static i2c_master_bus_handle_t s_bus = NULL;
 static i2c_master_dev_handle_t s_dev = NULL;
 static bool  s_present = false;
 static float s_pitch_offset_deg = 0.0f;
@@ -81,18 +95,27 @@ static bool compute_angles(float *pitch_deg, float *roll_deg)
 
 esp_err_t tilt_init(void)
 {
-    i2c_master_bus_handle_t bus = bsp_i2c_get_bus_handle();
-    if (!bus) {
-        ESP_LOGW(TAG, "bus I2C compartido no disponible (llamar tras bsp_display_start_with_config)");
-        return ESP_FAIL;
+    i2c_master_bus_config_t bus_cfg = {
+        .i2c_port = TILT_I2C_PORT,
+        .sda_io_num = TILT_I2C_SDA_GPIO,
+        .scl_io_num = TILT_I2C_SCL_GPIO,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,  /* red de seguridad si el cableado no trae pullups */
+    };
+    esp_err_t err = i2c_new_master_bus(&bus_cfg, &s_bus);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "i2c_new_master_bus (IO%d/IO%d) fallo: %s",
+                 TILT_I2C_SDA_GPIO, TILT_I2C_SCL_GPIO, esp_err_to_name(err));
+        return err;
     }
 
     i2c_device_config_t dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address  = ADXL345_ADDR,
-        .scl_speed_hz    = 400000,
+        .scl_speed_hz    = TILT_I2C_CLK_HZ,
     };
-    esp_err_t err = i2c_master_bus_add_device(bus, &dev_cfg, &s_dev);
+    err = i2c_master_bus_add_device(s_bus, &dev_cfg, &s_dev);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "i2c_master_bus_add_device fallo: %s", esp_err_to_name(err));
         return err;
