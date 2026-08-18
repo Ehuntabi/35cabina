@@ -1,9 +1,10 @@
 /* main.c
  *
- * 35cabina — satelite tactil de la P4 (ver README.md). Fase 0: solo
- * bring-up de hardware (pantalla+tactil+LVGL) y una pantalla de arranque
- * en blanco. La recepcion UDP del P4 y las vistas reales llegan en fases
- * posteriores (ver /home/db3/.claude/plans/polished-chasing-brooks.md).
+ * 35cabina — satelite tactil de la P4 (ver README.md). Bring-up de
+ * hardware (pantalla+tactil+LVGL), recepcion UDP del broadcast de la P4 y
+ * el carrusel de 3 pantallas (nav.c). Fase 4 (canal de vuelta hacia la P4)
+ * sigue fuera de este repo — ver
+ * /home/db3/.claude/plans/polished-chasing-brooks.md.
  */
 #include <stdio.h>
 #include <inttypes.h>
@@ -12,7 +13,7 @@
 #include "esp_bsp.h"
 #include "lv_port.h"
 #include "data_model.h"
-#include "ui/view_info.h"
+#include "ui/nav.h"
 #include "net/udp_rx.h"
 #include "esp_log.h"
 #include "esp_flash.h"
@@ -134,7 +135,7 @@ void setup(void) {
     ESP_ERROR_CHECK(nvs_err);
 
     data_model_init();
-    view_info_create(lv_scr_act());
+    nav_init();
     lvgl_port_unlock();
 
     udp_rx_start();

@@ -48,7 +48,10 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
    ├─ wifi_credentials.h.example      # plantilla; el real NO se versiona
    ├─ ui/
    │  ├─ ui_theme.c/h, ui_format.c/h  # genericos, sin Victron
-   │  └─ view_info.c/h                # pantalla de info agrupada (Fase 1)
+   │  ├─ nav.c/h                      # carrusel de 3 pantallas por gesto (Fase 2)
+   │  ├─ view_info.c/h                # centro: info agrupada (Fase 1)
+   │  ├─ view_repostaje.c/h           # derecha: repostaje + bombona (Fase 2)
+   │  └─ view_inclinacion.c/h         # izquierda: placeholder (Fase 3 la rellena)
    └─ net/
       ├─ mini_proto.h                 # protocolo compartido con la P4 y el mini
       └─ udp_rx.c/h                   # STA + receptor UDP :4242 (Fase 1)
@@ -66,8 +69,10 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   `main/wifi_credentials.h`, ignorado por git (repo público) — copiar desde
   `wifi_credentials.h.example` y rellenar con los valores reales antes de
   compilar.
-- **Fase 2**: carrusel de 3 pantallas por gesto (centro: info · derecha:
-  repostajes/cambio de bombona · izquierda: inclinación).
+- **Fase 2** (hecho): carrusel de 3 pantallas por gesto horizontal (centro:
+  info · derecha: repostajes/cambio de bombona con teclado en pantalla ·
+  izquierda: placeholder de inclinación). El botón "Guardar" de los
+  formularios todavía no envía nada — eso es la Fase 4.
 - **Fase 3**: sensor de inclinación (ADXL345) sobre el bus I2C compartido.
 - **Fase 4** (fuera de este repo, requiere luz verde aparte): canal de
   vuelta hacia la P4 (`~/joint/victron`) para que los repostajes/bombona

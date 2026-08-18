@@ -371,8 +371,11 @@ static void refresh_cb(lv_timer_t *t)
 
 void view_info_create(lv_obj_t *parent)
 {
-    static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+    /* Pantalla 320x480 PORTRAIT (ver ui_theme.h) -> 2 columnas x 3 filas,
+     * no 3x2: con solo 320px de ancho, 3 columnas dejarian cada card en
+     * ~104px, demasiado estrecho para "BATERIA MOTOR" + valores. */
+    static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
 
     lv_obj_t *grid = lv_obj_create(parent);
     lv_obj_set_size(grid, lv_pct(100), lv_pct(100));
@@ -387,10 +390,10 @@ void view_info_create(lv_obj_t *parent)
 
     make_cell(grid, COL_BORDER_BAT,  "BATERIA",        0, 0, &s_bat);
     make_cell(grid, COL_BORDER_AUX,  "BATERIA MOTOR",  1, 0, &s_aux);
-    make_cell(grid, COL_BORDER_DCDC, "DC/DC",          2, 0, &s_dcdc);
-    make_cell(grid, COL_BORDER_COLD, "FRIGO",          0, 1, &s_frigo);
-    make_water_cell(grid,                              1, 1);
-    make_cell(grid, COL_BORDER_HEAT, "EXTERIOR",       2, 1, &s_ext);
+    make_cell(grid, COL_BORDER_DCDC, "DC/DC",          0, 1, &s_dcdc);
+    make_cell(grid, COL_BORDER_COLD, "FRIGO",          1, 1, &s_frigo);
+    make_water_cell(grid,                              0, 2);
+    make_cell(grid, COL_BORDER_HEAT, "EXTERIOR",       1, 2, &s_ext);
 
     s_refresh_timer = lv_timer_create(refresh_cb, 500, NULL);
 }
