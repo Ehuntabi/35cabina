@@ -1,8 +1,10 @@
-/* nav.c - Carrusel de 3 pantallas con gesto horizontal (Fase 2). */
+/* nav.c - Carrusel de 3 pantallas con gesto horizontal + pantalla de
+ * Ajustes aparte (se abre/cierra por boton, no forma parte del gesto). */
 #include "nav.h"
 #include "view_info.h"
 #include "view_registro.h"
 #include "view_inclinacion.h"
+#include "view_ajustes.h"
 #include "lvgl.h"
 
 #define NAV_COUNT       3
@@ -13,6 +15,7 @@
 #define NAV_ANIM_MS     220
 
 static lv_obj_t *s_screens[NAV_COUNT];
+static lv_obj_t *s_ajustes_screen;
 static uint8_t   s_current = NAV_INFO;
 
 static void gesture_cb(lv_event_t *e)
@@ -48,5 +51,20 @@ void nav_init(void)
     view_info_create(s_screens[NAV_INFO]);
     view_registro_create(s_screens[NAV_REGISTRO]);
 
+    s_ajustes_screen = lv_obj_create(NULL);
+    view_ajustes_create(s_ajustes_screen);
+
     lv_scr_load(s_screens[NAV_INFO]);
+}
+
+void nav_open_ajustes(void)
+{
+    view_ajustes_refresh();
+    lv_scr_load_anim(s_ajustes_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, NAV_ANIM_MS, 0, false);
+}
+
+void nav_close_ajustes(void)
+{
+    s_current = NAV_INFO;
+    lv_scr_load_anim(s_screens[NAV_INFO], LV_SCR_LOAD_ANIM_MOVE_BOTTOM, NAV_ANIM_MS, 0, false);
 }

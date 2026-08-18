@@ -1,20 +1,28 @@
 /* udp_rx.c - Receiver UDP de 35cabina, asociado al SoftAP de la P4 como STA.
  *
  * Portado de ~/joint/victron_mini/main/net/udp_rx.c (mismo protocolo,
- * mismo patron de reconexion). Unica diferencia real: el SSID/password no
- * estan hardcodeados en este fichero (que es publico) sino en
- * wifi_credentials.h, ignorado por git.
+ * mismo patron de reconexion).
+ *
+ * SSID/password NO estan hardcodeados en firmware: se guardan en NVS
+ * (config_storage.c, load/save_wifi_config) para poder cambiar de P4 (ej.
+ * la de repuesto para pruebas) desde la pantalla de Ajustes sin
+ * reflashear. wifi_credentials.h (no versionado) solo se usa como valor
+ * de fabrica la PRIMERA vez que arranca con NVS vacia -- el mismo
+ * problema que ya sufrio victron_mini (password fija en firmware, sin
+ * forma de cambiarla sin reflashear) queda resuelto aqui.
  *
  * Flujo:
  *  1. nvs/netif/event_loop init.
- *  2. esp_wifi en modo STA, conecta al AP de la P4.
- *  3. Reconexion automatica si la pierde.
- *  4. Tras obtener IP por DHCP, arranca task que bind UDP en :4242 y
+ *  2. Carga SSID/pass de NVS (o de wifi_credentials.h si es la primera vez).
+ *  3. esp_wifi en modo STA, conecta al AP de la P4.
+ *  4. Reconexion automatica si la pierde.
+ *  5. Tras obtener IP por DHCP, arranca task que bind UDP en :4242 y
  *     llama data_model_update_from_msg con cada mini_msg_t valido.
  */
 #include "udp_rx.h"
 #include "mini_proto.h"
 #include "wifi_credentials.h"
+#include "config_storage.h"
 #include "../data_model.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -42,15 +50,60 @@ static uint32_t s_msgs_bad = 0;
 static esp_timer_handle_t s_reconnect_timer;
 #define RECONNECT_DELAY_US (500 * 1000)
 
+static char s_ssid[33];
+static char s_pass[65];
+
+static void load_or_init_credentials(void)
+{
+    size_t ssid_len = sizeof(s_ssid);
+    size_t pass_len = sizeof(s_pass);
+    esp_err_t err = load_wifi_config(s_ssid, &ssid_len, s_pass, &pass_len);
+    if (err != ESP_OK) {
+        ESP_LOGI(TAG, "Sin credenciales en NVS, usando valor de fabrica de wifi_credentials.h");
+        strncpy(s_ssid, WIFI_CRED_SSID, sizeof(s_ssid) - 1);
+        s_ssid[sizeof(s_ssid) - 1] = '\0';
+        strncpy(s_pass, WIFI_CRED_PASS, sizeof(s_pass) - 1);
+        s_pass[sizeof(s_pass) - 1] = '\0';
+        save_wifi_config(s_ssid, s_pass);
+    }
+}
+
 static void wifi_configure_sta(void)
 {
     wifi_config_t wc = {0};
-    strncpy((char *)wc.sta.ssid, WIFI_CRED_SSID, sizeof(wc.sta.ssid));
-    strncpy((char *)wc.sta.password, WIFI_CRED_PASS, sizeof(wc.sta.password));
+    strncpy((char *)wc.sta.ssid, s_ssid, sizeof(wc.sta.ssid));
+    strncpy((char *)wc.sta.password, s_pass, sizeof(wc.sta.password));
     wc.sta.threshold.authmode = WIFI_AUTH_WPA_WPA2_PSK;
     wc.sta.pmf_cfg.required = false;
     esp_wifi_set_config(WIFI_IF_STA, &wc);
-    ESP_LOGI(TAG, "AP SSID='%s'", WIFI_CRED_SSID);
+    ESP_LOGI(TAG, "AP SSID='%s'", s_ssid);
+}
+
+void udp_rx_get_credentials(char *ssid_out, size_t ssid_len, char *pass_out, size_t pass_len)
+{
+    if (ssid_out && ssid_len > 0) {
+        strncpy(ssid_out, s_ssid, ssid_len - 1);
+        ssid_out[ssid_len - 1] = '\0';
+    }
+    if (pass_out && pass_len > 0) {
+        strncpy(pass_out, s_pass, pass_len - 1);
+        pass_out[pass_len - 1] = '\0';
+    }
+}
+
+void udp_rx_set_credentials(const char *ssid, const char *pass)
+{
+    if (!ssid || !pass) return;
+    strncpy(s_ssid, ssid, sizeof(s_ssid) - 1);
+    s_ssid[sizeof(s_ssid) - 1] = '\0';
+    strncpy(s_pass, pass, sizeof(s_pass) - 1);
+    s_pass[sizeof(s_pass) - 1] = '\0';
+
+    save_wifi_config(s_ssid, s_pass);
+    wifi_configure_sta();
+    ESP_LOGI(TAG, "Credenciales actualizadas, reconectando a '%s'", s_ssid);
+    esp_wifi_disconnect();
+    esp_wifi_connect();
 }
 
 /* Corre en la tarea del esp_timer, no en sys_evt: aqui si es seguro que el
@@ -71,7 +124,7 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
                 esp_wifi_connect();
                 break;
             case WIFI_EVENT_STA_CONNECTED:
-                ESP_LOGI(TAG, "Asociado a %s", WIFI_CRED_SSID);
+                ESP_LOGI(TAG, "Asociado a %s", s_ssid);
                 xEventGroupSetBits(s_wifi_events, WIFI_BIT_CONNECTED);
                 break;
             case WIFI_EVENT_STA_DISCONNECTED: {
@@ -165,6 +218,8 @@ static void rx_task(void *arg)
 
 void udp_rx_start(void)
 {
+    load_or_init_credentials();
+
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();

@@ -71,7 +71,8 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
    │  ├─ nav.c/h                      # carrusel de 3 pantallas por gesto (Fase 2)
    │  ├─ view_info.c/h                # centro: info agrupada (Fase 1)
    │  ├─ view_registro.c/h            # derecha: menu de 5 registros (Fase 2)
-   │  └─ view_inclinacion.c/h         # izquierda: burbuja de nivel (Fase 3)
+   │  ├─ view_inclinacion.c/h         # izquierda: burbuja de nivel (Fase 3)
+   │  └─ view_ajustes.c/h             # SSID/password de la P4, editable sin reflashear
    └─ net/
       ├─ mini_proto.h                 # protocolo compartido con la P4 y el mini
       └─ udp_rx.c/h                   # STA + receptor UDP :4242 (Fase 1)
@@ -85,10 +86,13 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 - **Fase 0** (hecho): scaffold + bring-up de hardware.
 - **Fase 1** (hecho): recepción UDP del broadcast de la P4 + pantalla de
   info agrupada en grid (batería, batería motor, DC/DC, frigo+ventilador,
-  aguas, exterior). El SSID/password reales viven en
-  `main/wifi_credentials.h`, ignorado por git (repo público) — copiar desde
-  `wifi_credentials.h.example` y rellenar con los valores reales antes de
-  compilar.
+  aguas, exterior). El SSID/password se guardan en **NVS**, editables sin
+  reflashear desde el icono de engranaje (⚙) arriba-derecha de la
+  pantalla de info → **Ajustes Wi-Fi** (`view_ajustes.c`) — pensado para
+  cambiar de P4 (ej. la de repuesto para pruebas) sin ordenador de por
+  medio. `main/wifi_credentials.h` (ignorado por git, copiar desde
+  `wifi_credentials.h.example`) solo se usa como valor de fábrica la
+  primera vez que arranca con NVS vacía.
 - **Fase 2** (hecho): carrusel de 3 pantallas por gesto horizontal (centro:
   info · derecha: menú de 5 iconos — **Viaje** (iniciar/finalizar),
   **Repostaje** (GPS, hora, importe+moneda, litros, precio/litro

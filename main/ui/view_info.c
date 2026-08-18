@@ -7,6 +7,7 @@
  */
 #include "view_info.h"
 #include "../data_model.h"
+#include "nav.h"
 #include "esp_timer.h"
 #include <stdio.h>
 
@@ -369,6 +370,12 @@ static void refresh_cb(lv_timer_t *t)
     update_conn_dots(&d);
 }
 
+static void gear_click_cb(lv_event_t *e)
+{
+    (void)e;
+    nav_open_ajustes();
+}
+
 void view_info_create(lv_obj_t *parent)
 {
     /* Resolucion logica LANDSCAPE 480x320 (esp_bsp.c:390-396 intercambia
@@ -396,6 +403,20 @@ void view_info_create(lv_obj_t *parent)
     make_cell(grid, COL_BORDER_COLD, "FRIGO",          0, 1, &s_frigo);
     make_water_cell(grid,                              1, 1);
     make_cell(grid, COL_BORDER_HEAT, "EXTERIOR",       2, 1, &s_ext);
+
+    /* Icono de ajustes fijo, fuera del carrusel (no ocupa un 4o slot de
+     * gesto) -- creado despues del grid para quedar por encima en z-order. */
+    lv_obj_t *gear = lv_btn_create(parent);
+    lv_obj_set_size(gear, 30, 30);
+    lv_obj_set_style_bg_color(gear, lv_color_hex(0x1A1A1A), 0);
+    lv_obj_set_style_bg_opa(gear, LV_OPA_70, 0);
+    lv_obj_set_style_radius(gear, LV_RADIUS_CIRCLE, 0);
+    lv_obj_align(gear, LV_ALIGN_TOP_RIGHT, -4, 4);
+    lv_obj_add_event_cb(gear, gear_click_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *gear_lbl = lv_label_create(gear);
+    lv_label_set_text(gear_lbl, LV_SYMBOL_SETTINGS);
+    lv_obj_set_style_text_color(gear_lbl, lv_color_hex(0x888888), 0);
+    lv_obj_center(gear_lbl);
 
     s_refresh_timer = lv_timer_create(refresh_cb, 500, NULL);
 }

@@ -18,6 +18,9 @@
 #define TILT_NAMESPACE        "tilt"
 #define TILT_PITCH_KEY        "pitch_off"
 #define TILT_ROLL_KEY         "roll_off"
+#define WIFI_NAMESPACE        "wifi"
+#define WIFI_SSID_KEY         "ssid"
+#define WIFI_PASS_KEY         "password"
 
 esp_err_t load_brightness(uint8_t *brightness_out) {
     nvs_handle_t h;
@@ -250,6 +253,43 @@ esp_err_t save_tilt_calibration(int16_t pitch_offset_centi, int16_t roll_offset_
     if (err != ESP_OK) return err;
     err = nvs_set_i16(h, TILT_PITCH_KEY, pitch_offset_centi);
     if (err == ESP_OK) err = nvs_set_i16(h, TILT_ROLL_KEY, roll_offset_centi);
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t load_wifi_config(char *ssid_out, size_t *ssid_len,
+                           char *pass_out, size_t *pass_len)
+{
+    if (!ssid_out || !ssid_len || !pass_out || !pass_len) return ESP_ERR_INVALID_ARG;
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READONLY, &h);
+    if (err != ESP_OK) {
+        /* Namespace aun no existe -> primer arranque, NVS vacia. */
+        return err;
+    }
+
+    err = nvs_get_str(h, WIFI_SSID_KEY, ssid_out, ssid_len);
+    if (err != ESP_OK) {
+        nvs_close(h);
+        return err;
+    }
+    err = nvs_get_str(h, WIFI_PASS_KEY, pass_out, pass_len);
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t save_wifi_config(const char *ssid, const char *pass)
+{
+    if (!ssid || !pass) return ESP_ERR_INVALID_ARG;
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+
+    err = nvs_set_str(h, WIFI_SSID_KEY, ssid);
+    if (err == ESP_OK) err = nvs_set_str(h, WIFI_PASS_KEY, pass);
     if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
     return err;
