@@ -84,7 +84,9 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
 Plan completo en `/home/db3/.claude/plans/polished-chasing-brooks.md` y en
 la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 
-- **Fase 0** (hecho): scaffold + bring-up de hardware.
+- **Fase 0** (hecho): scaffold + bring-up de hardware + splash de arranque
+  con el logo del fork anterior (2s sobre el top layer, luego se revela
+  el carrusel).
 - **Fase 1** (hecho): recepción UDP del broadcast de la P4 + pantalla de
   info agrupada en grid (batería, batería motor, DC/DC, frigo+ventilador,
   aguas, exterior). El SSID/password se guardan en **NVS**, editables sin

@@ -32,6 +32,40 @@ static const char *TAG = "35CABINA";
 #define LVGL_PORT_ROTATION_DEGREE 90
 #define REBOOT_INTERVAL_US (12ULL * 60 * 60 * 1000000) // 12 horas
 
+/* Splash: contenedor negro opaco en el top layer (por encima de
+ * cualquier pantalla del carrusel) + logo centrado, se autodestruye a
+ * los SPLASH_MS. Mismo patron que el fork viejo (ui.c de la 3.5"). */
+LV_IMG_DECLARE(splash_logo_3_5);
+#define SPLASH_MS 2000
+
+static void splash_done_cb(lv_timer_t *t) {
+    lv_obj_t *splash_bg = (lv_obj_t *)t->user_data;
+    lv_obj_del(splash_bg);
+}
+
+static void splash_create(void) {
+    lv_disp_t *disp = lv_disp_get_default();
+    lv_coord_t hor = lv_disp_get_hor_res(disp);
+    lv_coord_t ver = lv_disp_get_ver_res(disp);
+
+    lv_obj_t *splash_bg = lv_obj_create(lv_layer_top());
+    lv_obj_set_pos(splash_bg, 0, 0);
+    lv_obj_set_size(splash_bg, hor, ver);
+    lv_obj_set_style_bg_color(splash_bg, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(splash_bg, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(splash_bg, 0, 0);
+    lv_obj_set_style_radius(splash_bg, 0, 0);
+    lv_obj_set_style_pad_all(splash_bg, 0, 0);
+    lv_obj_clear_flag(splash_bg, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *img = lv_img_create(splash_bg);
+    lv_img_set_src(img, &splash_logo_3_5);
+    lv_obj_center(img);
+
+    lv_timer_t *t = lv_timer_create(splash_done_cb, SPLASH_MS, splash_bg);
+    lv_timer_set_repeat_count(t, 1);
+}
+
 static void reboot_timer_cb(void *arg) {
     ESP_LOGI(TAG, "Rebooting after 24h uptime (timer)...");
     esp_restart();
@@ -141,6 +175,7 @@ void setup(void) {
 
     data_model_init();
     nav_init();
+    splash_create();
     lvgl_port_unlock();
 
     udp_rx_start();
