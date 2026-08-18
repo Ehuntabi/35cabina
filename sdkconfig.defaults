@@ -1,0 +1,40 @@
+# Defaults aplicados sobre el Kconfig generado.
+# Si en el futuro se borra sdkconfig o se hace set-target, estas lineas
+# se mantienen sin volver al default de LVGL (que activa el overlay FPS).
+
+# Desactiva el overlay LVGL Performance Monitor (FPS) abajo-derecha.
+CONFIG_LV_USE_PERF_MONITOR=n
+
+# Stack canary: convierte stack overflows silenciosos en panic con
+# task name y backtrace, evitando "cuelgues" sin diagnostico.
+CONFIG_COMPILER_STACK_CHECK_MODE_NORM=y
+CONFIG_COMPILER_STACK_CHECK=y
+
+# === Coex Wi-Fi (softAP) + BLE (NimBLE) ==============================
+# Mueve la radio BLE a core 1 para que core 0 (Wi-Fi/LWIP/event) no
+# starvee la pipeline LVGL ni el flush QSPI. Tambien apoyo: pin LVGL y
+# tear task a core 1 (lv_port.h / display.h).
+CONFIG_BT_CTRL_PINNED_TO_CORE_1=y
+CONFIG_BT_NIMBLE_PINNED_TO_CORE_1=y
+# Subir host stack: 4096 era ajustado con GATT+SM_SC+EXT_SCAN+EATT.
+CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=6144
+# TX power BLE a P3 (en lugar de P9): menos auto-interferencia con
+CONFIG_ESP_TASK_WDT_PANIC=y
+
+# === LVGL: fuente 22 usada por ui_theme.c (cards) ===
+CONFIG_LV_FONT_MONTSERRAT_22=y
+
+# === LVGL: usar malloc (PSRAM) en vez del pool interno de 32KB ===
+# Sin esto las asignaciones LVGL se quedan sin sitio y crashea el boot.
+CONFIG_LV_MEM_CUSTOM=y
+CONFIG_LV_MEM_CUSTOM_INCLUDE="stdlib.h"
+
+# === Log level INFO (estaba en NONE y no se veia nada del app) ===
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LV_COLOR_16_SWAP=y
+
+# === Coredump a flash (para diagnosticar hangs sin monitor abierto) ===
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+CONFIG_ESP_COREDUMP_CHECKSUM_SHA256=y
+CONFIG_ESP_COREDUMP_MAX_TASKS_NUM=64
