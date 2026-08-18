@@ -15,6 +15,7 @@
 #include "sdkconfig.h"
 #include "driver/gpio.h"
 #include "driver/i2c.h"
+#include "driver/i2c_master.h"
 #include "lvgl.h"
 #include "lv_port.h"
 
@@ -69,6 +70,13 @@ typedef struct {
  *
  */
 esp_err_t bsp_i2c_init(void);
+
+/**
+ * @brief Handle del bus I2C compartido (tactil + otros perifericos, ej.
+ * el acelerometro ADXL345 en tilt.c). Valido solo tras bsp_i2c_init()
+ * (ya lo llama bsp_display_start_with_config()).
+ */
+i2c_master_bus_handle_t bsp_i2c_get_bus_handle(void);
 
 /**
  * @brief Deinit I2C driver and free its resources

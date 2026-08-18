@@ -26,3 +26,11 @@ esp_err_t save_relay_config(bool enabled,
                             const uint8_t *pins,
                             const char (*labels)[20],
                             uint8_t count);
+
+// Calibracion de nivel del ADXL345 (NVS namespace: "tilt").
+// Offsets en centesimas de grado (deg*100), se restan de cada lectura.
+// Si no hay calibracion guardada devuelve 0/0 (sin error).
+esp_err_t load_tilt_calibration(int16_t *pitch_offset_centi,
+                                 int16_t *roll_offset_centi);
+esp_err_t save_tilt_calibration(int16_t pitch_offset_centi,
+                                 int16_t roll_offset_centi);

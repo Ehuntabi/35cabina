@@ -13,6 +13,7 @@
 #include "esp_bsp.h"
 #include "lv_port.h"
 #include "data_model.h"
+#include "tilt.h"
 #include "ui/nav.h"
 #include "net/udp_rx.h"
 #include "esp_log.h"
@@ -133,6 +134,10 @@ void setup(void) {
         nvs_err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(nvs_err);
+
+    /* No es fatal si no responde: tilt_is_present() queda en false y la
+     * pantalla de inclinacion lo muestra en vez de crashear. */
+    tilt_init();
 
     data_model_init();
     nav_init();

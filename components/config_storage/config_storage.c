@@ -15,6 +15,9 @@
 #define RELAY_LABELS_KEY      "labels"
 #define RELAY_MAX_PINS        8
 #define RELAY_UNUSED_PIN      0xFF
+#define TILT_NAMESPACE        "tilt"
+#define TILT_PITCH_KEY        "pitch_off"
+#define TILT_ROLL_KEY         "roll_off"
 
 esp_err_t load_brightness(uint8_t *brightness_out) {
     nvs_handle_t h;
@@ -213,6 +216,41 @@ esp_err_t save_relay_config(bool enabled,
     if (err == ESP_OK) err = nvs_set_blob(h, RELAY_LABELS_KEY, stored_labels, sizeof(stored_labels));
     if (err == ESP_OK) err = nvs_commit(h);
 
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t load_tilt_calibration(int16_t *pitch_offset_centi, int16_t *roll_offset_centi)
+{
+    if (!pitch_offset_centi || !roll_offset_centi) return ESP_ERR_INVALID_ARG;
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(TILT_NAMESPACE, NVS_READONLY, &h);
+    if (err != ESP_OK) {
+        /* Namespace aun no existe -> sin calibrar todavia, no es un error. */
+        *pitch_offset_centi = 0;
+        *roll_offset_centi  = 0;
+        return ESP_OK;
+    }
+
+    int16_t p = 0, r = 0;
+    nvs_get_i16(h, TILT_PITCH_KEY, &p);
+    nvs_get_i16(h, TILT_ROLL_KEY, &r);
+    nvs_close(h);
+
+    *pitch_offset_centi = p;
+    *roll_offset_centi  = r;
+    return ESP_OK;
+}
+
+esp_err_t save_tilt_calibration(int16_t pitch_offset_centi, int16_t roll_offset_centi)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(TILT_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_i16(h, TILT_PITCH_KEY, pitch_offset_centi);
+    if (err == ESP_OK) err = nvs_set_i16(h, TILT_ROLL_KEY, roll_offset_centi);
+    if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
     return err;
 }

@@ -23,8 +23,12 @@ Se reutiliza:
 
 - **Pantalla**: Guition JC3248W535 3.5" — ESP32-S3, controlador AXS15231B
   (QSPI), táctil capacitivo, 320×480.
-- **Acelerómetro** (inclinación al aparcar): ADXL345, I2C, colgado del bus
-  ya compartido con el táctil (`bsp_i2c_get_bus_handle()`, GPIO4/GPIO8).
+- **Acelerómetro** (inclinación al aparcar): ADXL345, I2C address `0x53`,
+  colgado del bus ya compartido con el táctil
+  (`bsp_i2c_get_bus_handle()`, GPIO4/GPIO8). Sin verificar aún en placa
+  real si esos pines están accesibles físicamente en el módulo Guition, y
+  sin verificar el mapeo de ejes pitch/roll según cómo quede montado el
+  sensor (ver comentario en `tilt.c`).
 
 ## Target / toolchain
 
@@ -43,6 +47,7 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
 └─ main/
    ├─ main.c                          # bring-up + arranque UI/red
    ├─ data_model.c/h                  # snapshot de mini_msg_t protegido por lock
+   ├─ tilt.c/h                        # ADXL345 (I2C compartido) -- pitch/roll (Fase 3)
    ├─ esp_bsp.c/h                     # pantalla QSPI + tactil + bus I2C
    ├─ lv_port.c/h, display.h          # bring-up LVGL / panel
    ├─ wifi_credentials.h.example      # plantilla; el real NO se versiona
@@ -51,7 +56,7 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
    │  ├─ nav.c/h                      # carrusel de 3 pantallas por gesto (Fase 2)
    │  ├─ view_info.c/h                # centro: info agrupada (Fase 1)
    │  ├─ view_repostaje.c/h           # derecha: repostaje + bombona (Fase 2)
-   │  └─ view_inclinacion.c/h         # izquierda: placeholder (Fase 3 la rellena)
+   │  └─ view_inclinacion.c/h         # izquierda: burbuja de nivel (Fase 3)
    └─ net/
       ├─ mini_proto.h                 # protocolo compartido con la P4 y el mini
       └─ udp_rx.c/h                   # STA + receptor UDP :4242 (Fase 1)
@@ -73,7 +78,12 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   info · derecha: repostajes/cambio de bombona con teclado en pantalla ·
   izquierda: placeholder de inclinación). El botón "Guardar" de los
   formularios todavía no envía nada — eso es la Fase 4.
-- **Fase 3**: sensor de inclinación (ADXL345) sobre el bus I2C compartido.
+- **Fase 3** (hecho, sin probar en placa real): burbuja de nivel clásica
+  (círculo que se desplaza, sin assets de imagen) leyendo el ADXL345 por
+  I2C a 5Hz. Botón "Calibrar nivel" en la propia pantalla: promedia ~20
+  lecturas y guarda el offset en NVS (`config_storage.c`, namespace
+  `"tilt"`). Si el sensor no responde al arrancar, la pantalla lo indica
+  ("Sensor ADXL345 no detectado") en vez de fallar.
 - **Fase 4** (fuera de este repo, requiere luz verde aparte): canal de
   vuelta hacia la P4 (`~/joint/victron`) para que los repostajes/bombona
   lleguen al "viaje" (`trip_manager.c`).
