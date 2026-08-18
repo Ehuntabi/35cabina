@@ -21,8 +21,17 @@ Se reutiliza:
 
 ## Hardware
 
-- **Pantalla**: Guition JC3248W535 3.5" — ESP32-S3, controlador AXS15231B
-  (QSPI), táctil capacitivo, 320×480.
+- **Pantalla**: Guition JC3248W535 3.5" — ESP32-S3-WROOM-1, controlador
+  AXS15231B (QSPI), táctil capacitivo, panel nativo 320×480 pero
+  **resolución lógica LANDSCAPE 480×320** una vez aplicada la rotación de
+  90° (`esp_bsp.c:390-396` intercambia hres/vres; verificado contra el
+  código el 18-ago-2026, un comentario viejo en `ui_theme.h` decía
+  "portrait" y estaba mal). 8MB PSRAM, 16MB flash.
+- **Ranura TF/microSD**: el módulo la trae físicamente ("Reserve the TF
+  card interface", datasheet del fabricante), pero **el software actual
+  no la usa ni la configura** — ni este proyecto ni el fork anterior
+  montan `sdmmc`/`sdspi`. Si algún día hace falta almacenamiento local en
+  la propia 35cabina, está disponible sin cableado adicional.
 - **Acelerómetro** (inclinación al aparcar): ADXL345, I2C address `0x53`,
   colgado del bus ya compartido con el táctil
   (`bsp_i2c_get_bus_handle()`, GPIO4/GPIO8). Sin verificar aún en placa

@@ -6,7 +6,12 @@
 #include "lvgl.h"
 
 /* ============================================================================
- * Tema visual unificado para la 3.5"  (320x480 portrait, QSPI AXS15231B)
+ * Tema visual unificado para la 3.5" (QSPI AXS15231B). Panel nativo
+ * 320x480, pero con la rotacion de 90 grados que aplica main.c la
+ * resolucion LOGICA que ve LVGL es 480x320 LANDSCAPE (ver
+ * esp_bsp.c:390-396: intercambia hres/vres cuando rotate != NONE/180).
+ * Este comentario decia "320x480 portrait" y estaba mal -- corregido
+ * 18-ago-2026 tras verificarlo contra el codigo real.
  *
  * Estilo card-based: cada panel de información es una "card" con fondo oscuro
  * con gradiente sutil, borde fino del color que identifica su rol (batería
