@@ -1,14 +1,14 @@
 /* nav.c - Carrusel de 3 pantallas con gesto horizontal (Fase 2). */
 #include "nav.h"
 #include "view_info.h"
-#include "view_repostaje.h"
+#include "view_registro.h"
 #include "view_inclinacion.h"
 #include "lvgl.h"
 
 #define NAV_COUNT       3
 #define NAV_INCLINACION 0   /* izquierda */
 #define NAV_INFO        1   /* centro (arranque) */
-#define NAV_REPOSTAJE   2   /* derecha */
+#define NAV_REGISTRO    2   /* derecha */
 
 #define NAV_ANIM_MS     220
 
@@ -46,7 +46,7 @@ void nav_init(void)
 
     view_inclinacion_create(s_screens[NAV_INCLINACION]);
     view_info_create(s_screens[NAV_INFO]);
-    view_repostaje_create(s_screens[NAV_REPOSTAJE]);
+    view_registro_create(s_screens[NAV_REGISTRO]);
 
     lv_scr_load(s_screens[NAV_INFO]);
 }

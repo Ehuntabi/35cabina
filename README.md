@@ -70,7 +70,7 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
    │  ├─ ui_theme.c/h, ui_format.c/h  # genericos, sin Victron
    │  ├─ nav.c/h                      # carrusel de 3 pantallas por gesto (Fase 2)
    │  ├─ view_info.c/h                # centro: info agrupada (Fase 1)
-   │  ├─ view_repostaje.c/h           # derecha: repostaje + bombona (Fase 2)
+   │  ├─ view_registro.c/h            # derecha: menu de 5 registros (Fase 2)
    │  └─ view_inclinacion.c/h         # izquierda: burbuja de nivel (Fase 3)
    └─ net/
       ├─ mini_proto.h                 # protocolo compartido con la P4 y el mini
@@ -90,9 +90,19 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   `wifi_credentials.h.example` y rellenar con los valores reales antes de
   compilar.
 - **Fase 2** (hecho): carrusel de 3 pantallas por gesto horizontal (centro:
-  info · derecha: repostajes/cambio de bombona con teclado en pantalla ·
-  izquierda: placeholder de inclinación). El botón "Guardar" de los
-  formularios todavía no envía nada — eso es la Fase 4.
+  info · derecha: menú de 5 iconos — **Viaje** (iniciar/finalizar),
+  **Repostaje** (GPS, hora, importe+moneda, litros, precio/litro
+  calculado), **Peaje** (GPS, hora, importe+moneda), **Bombona** (GPS,
+  día, hora, lugar), **Mantenimiento** (GPS, tipo: aceite/filtro de
+  aceite/correa/ruedas + km) · izquierda: placeholder de inclinación).
+  Coordenada GPS en todos los formularios de datos (tecleada a mano por
+  ahora, no hay GPS real todavía) para poder geolocalizar cada evento en
+  el mapa del viaje más adelante (ver Fase 4). Selector de moneda en los
+  campos de importe (EUR por defecto, contempla otras monedas europeas —
+  GBP/CHF/SEK/NOK/DKK/PLN/CZK/HUF/RON). Todo con teclado en pantalla.
+  Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
+  viaje" es el primer candidato cuando se abra (pedido explícito del
+  usuario: que el 3.5" mande el comando de viaje, no la P4).
 - **Fase 3** (hecho, sin probar en placa real): burbuja de nivel clásica
   (círculo que se desplaza, sin assets de imagen) leyendo el ADXL345 por
   I2C a 5Hz. Botón "Calibrar nivel" en la propia pantalla: promedia ~20
