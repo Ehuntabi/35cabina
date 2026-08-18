@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# EMPIEZO — al sentarte en CUALQUIER equipo (PC o portatil): sincroniza, deja el
+# entorno al dia y abre Claude.
+#   Uso:  ./empiezo             (sincroniza y abre Claude Code)
+#         ./empiezo --no-claude (solo sincroniza, no abre Claude)
+set -euo pipefail
+cd "$(dirname "$0")"
+
+# Apartar cualquier cambio local para no perderlo y poder hacer pull.
+STASHED=0
+if [ -n "$(git status --porcelain)" ]; then
+  echo "[empiezo] tienes cambios locales -> los aparto (git stash) para hacer pull"
+  git stash push -u -m "empiezo auto $(date '+%F %H:%M')" >/dev/null && STASHED=1
+fi
+
+before=$(git rev-parse HEAD)
+echo "[empiezo] git pull --rebase..."
+git pull --rebase --tags
+after=$(git rev-parse HEAD)
+
+if [ "$STASHED" = 1 ]; then
+  echo "[empiezo] recupero tus cambios (git stash pop)"
+  if ! git stash pop; then
+    echo "[empiezo] !! CONFLICTO al recuperar tus cambios. Resuelvelos (git status). No se pierde nada: estan en el stash."
+    exit 1
+  fi
+fi
+
+# Si el pull trajo cambios en sdkconfig, borrar build para que se regenere.
+if [ "$before" != "$after" ] && git diff --name-only "$before" "$after" | grep -qE '^sdkconfig$'; then
+  echo "[empiezo] cambio sdkconfig -> borro build/ (se regenera al compilar)"
+  rm -rf build build_joint
+fi
+
+# Si el pull ANADIO o BORRO ficheros fuente, hay que reconfigurar CMake: los
+# CMakeLists usan file(GLOB ...), que solo se evalua al configurar. Sin esto el
+# build reutiliza la lista vieja y falla al enlazar con "undefined reference"
+# a las funciones del fichero nuevo (pasado real el 30-jul-2026).
+# Tocar los CMakeLists basta: CMake se reconfigura solo si son mas nuevos que la
+# cache, y el build sigue siendo incremental.
+if [ "$before" != "$after" ] && [ -d build ] && \
+   git diff --name-status "$before" "$after" | grep -qE '^[AD].*\.(c|cpp|h)$'; then
+  echo "[empiezo] el pull anadio/borro ficheros fuente -> fuerzo reconfigure de CMake"
+  find . -name CMakeLists.txt -not -path './build/*' -not -path './managed_components/*' \
+       -exec touch {} + 2>/dev/null || true
+fi
+
+# -------- Aviso: no estas en la rama principal --------
+# empiezo actualiza SOLO la rama activa. Si vienes de otro equipo donde estabas
+# en otra rama, aqui no la verias y pareceria que falta trabajo.
+_rama=$(git branch --show-current)
+_princ=main; git show-ref --verify --quiet refs/heads/main || _princ=master
+if [ -n "$_rama" ] && [ "$_rama" != "$_princ" ]; then
+  _pend=$(git rev-list --count "$_princ..$_rama" 2>/dev/null || echo '?')
+  echo ""
+  echo "  ############################################################"
+  echo "  #  OJO: NO estas en la rama principal ($_princ)"
+  echo "  #  Estas en: $_rama   ($_pend commits sin pasar a $_princ)"
+  echo "  #  Es aposta si sigues con ese trabajo. Para volver:"
+  echo "  #     git checkout $_princ"
+  echo "  ############################################################"
+  echo ""
+fi
+
+echo "[empiezo] al dia con GitHub: $(git status -sb | head -1)"
+
+# Abrir Claude Code (salvo --no-claude).
+if [ "${1:-}" != "--no-claude" ] && command -v claude >/dev/null 2>&1; then
+  echo "[empiezo] abriendo Claude Code..."
+  exec claude
+else
+  echo "[empiezo] LISTO. Para compilar/flashear:"
+  echo "    . ~/.espressif/esp-idf-5.4/export.sh && idf.py build && idf.py -p /dev/ttyACM0 flash monitor"
+fi

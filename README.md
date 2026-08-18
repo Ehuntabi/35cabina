@@ -54,6 +54,7 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
 
 ```
 35cabina/
+├─ empiezo / termino       # sync multi-equipo (PC/portatil) via git
 ├─ CMakeLists.txt
 ├─ partitions.csv          # factory ampliada (ya no hay particion spiffs)
 ├─ sdkconfig                # heredado y estable del fork 3.5" anterior
@@ -116,6 +117,19 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 - **Fase 4** (fuera de este repo, requiere luz verde aparte): canal de
   vuelta hacia la P4 (`~/joint/victron`) para que los repostajes/bombona
   lleguen al "viaje" (`trip_manager.c`).
+
+## Trabajo multi-equipo (`./empiezo` / `./termino`)
+
+Para trabajar indistintamente en PC y portátil manteniendo el repo
+siempre sincronizado (mismo patrón que `~/joint/victron` y
+`~/joint/victron_mini`):
+
+- **`./empiezo`** — al sentarte: aparta cambios locales (stash), `git
+  pull --rebase`, recupera tus cambios y abre Claude Code. `--no-claude`
+  solo sincroniza.
+- **`./termino`** — al acabar: `git add -A`, commit (Claude redacta el
+  mensaje, o pasa el tuyo: `./termino "mensaje"`), `git push`, y verifica
+  que no queda nada al aire antes de cambiar de equipo.
 
 ## Build
 
