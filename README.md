@@ -41,11 +41,17 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
 ├─ components/
 │  └─ config_storage/       # NVS: brillo, salvapantallas, rele (sin Victron)
 └─ main/
-   ├─ main.c                # bring-up + splash (Fase 0)
-   ├─ esp_bsp.c/h            # pantalla QSPI + tactil + bus I2C
-   ├─ lv_port.c/h, display.h # bring-up LVGL / panel
-   ├─ ui/                    # ui_theme, ui_format (genericos, sin Victron)
-   └─ net/                   # udp_rx + mini_proto (Fase 1)
+   ├─ main.c                          # bring-up + arranque UI/red
+   ├─ data_model.c/h                  # snapshot de mini_msg_t protegido por lock
+   ├─ esp_bsp.c/h                     # pantalla QSPI + tactil + bus I2C
+   ├─ lv_port.c/h, display.h          # bring-up LVGL / panel
+   ├─ wifi_credentials.h.example      # plantilla; el real NO se versiona
+   ├─ ui/
+   │  ├─ ui_theme.c/h, ui_format.c/h  # genericos, sin Victron
+   │  └─ view_info.c/h                # pantalla de info agrupada (Fase 1)
+   └─ net/
+      ├─ mini_proto.h                 # protocolo compartido con la P4 y el mini
+      └─ udp_rx.c/h                   # STA + receptor UDP :4242 (Fase 1)
 ```
 
 ## Hoja de ruta
@@ -53,9 +59,13 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
 Plan completo en `/home/db3/.claude/plans/polished-chasing-brooks.md` y en
 la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 
-- **Fase 0** (este commit): scaffold + bring-up de hardware, splash en blanco.
-- **Fase 1**: recepción UDP del broadcast de la P4 + pantalla de info
-  agrupada (batería, batería motor, DC/DC, frigo+ventilador, aguas, exterior).
+- **Fase 0** (hecho): scaffold + bring-up de hardware.
+- **Fase 1** (hecho): recepción UDP del broadcast de la P4 + pantalla de
+  info agrupada en grid (batería, batería motor, DC/DC, frigo+ventilador,
+  aguas, exterior). El SSID/password reales viven en
+  `main/wifi_credentials.h`, ignorado por git (repo público) — copiar desde
+  `wifi_credentials.h.example` y rellenar con los valores reales antes de
+  compilar.
 - **Fase 2**: carrusel de 3 pantallas por gesto (centro: info · derecha:
   repostajes/cambio de bombona · izquierda: inclinación).
 - **Fase 3**: sensor de inclinación (ADXL345) sobre el bus I2C compartido.
@@ -66,7 +76,8 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 ## Build
 
 ```bash
-. $HOME/esp/esp-idf/export.sh
+. $HOME/.espressif/esp-idf-5.4/export.sh   # alias "get_idf" en ~/.bashrc
+cp main/wifi_credentials.h.example main/wifi_credentials.h   # rellenar valores reales
 idf.py set-target esp32s3
 idf.py build
 ```
@@ -96,7 +107,8 @@ See the roadmap above (Fases 0-4) for what's implemented vs. planned.
 ### Build
 
 ```bash
-. $HOME/esp/esp-idf/export.sh
+. $HOME/.espressif/esp-idf-5.4/export.sh
+cp main/wifi_credentials.h.example main/wifi_credentials.h   # fill in real values
 idf.py set-target esp32s3
 idf.py build
 ```

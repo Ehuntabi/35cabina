@@ -11,6 +11,9 @@
 #include "display.h"
 #include "esp_bsp.h"
 #include "lv_port.h"
+#include "data_model.h"
+#include "ui/view_info.h"
+#include "net/udp_rx.h"
 #include "esp_log.h"
 #include "esp_flash.h"
 #include "esp_chip_info.h"
@@ -78,17 +81,6 @@ static void lvgl_wdog_task(void *arg) {
     }
 }
 
-static void splash_create(void) {
-    lv_obj_t *scr = lv_scr_act();
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x101418), 0);
-
-    lv_obj_t *label = lv_label_create(scr);
-    lv_label_set_text(label, "35cabina");
-    lv_obj_set_style_text_color(label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
-    lv_obj_center(label);
-}
-
 void setup(void);
 
 void app_main(void) {
@@ -141,8 +133,11 @@ void setup(void) {
     }
     ESP_ERROR_CHECK(nvs_err);
 
-    splash_create();
+    data_model_init();
+    view_info_create(lv_scr_act());
     lvgl_port_unlock();
+
+    udp_rx_start();
 
     static esp_timer_handle_t reboot_timer;
     const esp_timer_create_args_t reboot_timer_args = {
