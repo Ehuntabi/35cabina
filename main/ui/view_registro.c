@@ -515,14 +515,34 @@ static void ruedas_toggle_cb(lv_event_t *e)
     ruedas_actualiza_texto(marcado);
 }
 
-/* Al elegir el numero, el selector ha cumplido: se esconde y el dato se queda
- * a la vista en la propia casilla ("Ruedas: 4"). Asi el formulario recupera la
- * altura y no hay que deslizar para llegar a Guardar.
+/* OJO con lv_btnmatrix: manda LV_EVENT_VALUE_CHANGED YA AL PRESIONAR
+ * (lv_btnmatrix.c:462), y la marca CHECKED no se aplica hasta el SOLTAR
+ * (lv_btnmatrix.c:503-514), que manda un segundo VALUE_CHANGED.
  *
- * Para cambiarlo se desmarca Ruedas y se vuelve a marcar, que saca el selector
- * otra vez. Es un caso raro (no se cambian ruedas a menudo) y evita un boton
- * de "editar" que ocuparia sitio de forma permanente. */
+ * La primera version escondia el selector desde VALUE_CHANGED: se ocultaba al
+ * tocar, el dedo se levantaba sobre un objeto ya oculto, el RELEASED nunca
+ * llegaba a la botonera y la eleccion NO se aplicaba nunca. Parecia que el
+ * selector "no funcionaba".
+ *
+ * Por eso van separados: el texto se refresca en VALUE_CHANGED (al presionar
+ * saldra el valor viejo, pero el segundo aviso del soltar lo corrige) y el
+ * cierre se hace en RELEASED. Se puede confiar en ese orden: en
+ * lv_event.c:452 el manejador propio del widget corre ANTES que los callbacks
+ * anadidos con lv_obj_add_event_cb, asi que al llegar aqui la marca ya esta
+ * puesta. */
 static void ruedas_num_cb(lv_event_t *e)
+{
+    (void)e;
+    ruedas_actualiza_texto(true);
+}
+
+/* Al soltar, el selector ha cumplido: se esconde y el dato se queda a la vista
+ * en la propia casilla ("Ruedas: 4"). Asi el formulario recupera la altura y
+ * no hay que deslizar para llegar a Guardar.
+ *
+ * Para cambiarlo se desmarca Ruedas y se vuelve a marcar. Es un caso raro y
+ * evita un boton de "editar" ocupando sitio de forma permanente. */
+static void ruedas_release_cb(lv_event_t *e)
 {
     (void)e;
     ruedas_actualiza_texto(true);
@@ -911,6 +931,8 @@ static void build_mantenimiento(lv_obj_t *form)
                         LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s_mant_ruedas_bm, ruedas_num_cb,
                         LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_mant_ruedas_bm, ruedas_release_cb,
+                        LV_EVENT_RELEASED, NULL);
 
     /* Km y coste comparten linea: los dos son numeros cortos y asi caben los
      * dos grandes sin robarle altura a las seis casillas. */
