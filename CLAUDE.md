@@ -17,8 +17,12 @@ descartado como producto) y la arquitectura de red del satélite
   permite portar patrones de UI (`view_quad.c`) sin migración de API.
 - **Sin lógica Victron/BLE/AES/portal Wi-Fi propia** — todo eso lo hace la
   P4; este dispositivo solo recibe (`net/udp_rx.c`, protocolo
-  `mini_proto.h` compartido con `victron_mini`, MANTENER SINCRONIZADO entre
-  los dos proyectos) y, más adelante, envía comandos de vuelta (Fase 4).
+  `mini_proto.h`, MANTENER SINCRONIZADO con `~/joint/victron`) y, más
+  adelante, envía comandos de vuelta (Fase 4).
+- **El satélite C6 (`victron_mini`) está DESCARTADO** (20-ago-2026): esta
+  pantalla lo sustituye. Ya no hay que sincronizar `mini_proto.h` con él ni
+  diseñar pensando en sus 32 bytes heredados. Ojo mientras siga enchufado:
+  subir `MINI_PROTO_VERSION` lo deja mudo.
 - Ver `README.md` para la hoja de ruta completa (Fases 0-4) y
   `/home/db3/.claude/plans/polished-chasing-brooks.md` para el plan de
   implementación detallado.
