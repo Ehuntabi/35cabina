@@ -21,6 +21,11 @@ static void close_overlay(void)
     s_target = NULL;
 }
 
+void entry_screen_close(void)
+{
+    if (s_root) close_overlay();
+}
+
 /* Aceptar: vuelca el texto al campo original y avisa a quien escuche
  * VALUE_CHANGED (el precio/litro del repostaje cuelga de ahi). */
 static void kb_ready_cb(lv_event_t *e)

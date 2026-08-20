@@ -36,6 +36,12 @@ static void gesture_cb(lv_event_t *e)
     } else {
         return;
     }
+    /* Al abandonar la pagina de registros se vuelve a su menu de iconos: si no,
+     * al regresar te encontrabas el formulario abierto donde lo dejaste, en vez
+     * del menu. Se pierde lo tecleado a medias, que es lo esperado -- te has
+     * ido de la pantalla. */
+    if (s_current == NAV_REGISTRO) view_registro_reset();
+
     s_current = (uint8_t)next;
     lv_scr_load_anim(s_screens[s_current], anim, NAV_ANIM_MS, 0, false);
 }

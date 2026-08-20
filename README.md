@@ -155,6 +155,11 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   (`ui/entry_screen.c`): el valor en letra 40 arriba y el teclado ocupando
   240 de los 320 px, en vez del teclado a media pantalla que además tapaba el
   campo que estabas escribiendo.
+
+  **Salir de la página con un gesto vuelve al menú de iconos**
+  (`view_registro_reset()`, la llama `nav.c`). Antes el formulario seguía
+  abierto por detrás y al regresar te lo encontrabas tal cual, en vez del
+  menú. Se pierde lo tecleado a medias, que es lo esperado: te has ido.
   Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
   viaje" es el primer candidato cuando se abra (pedido explícito del
   usuario: que el 3.5" mande el comando de viaje, no la P4).

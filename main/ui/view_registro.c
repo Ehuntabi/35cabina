@@ -153,6 +153,14 @@ static void back_click_cb(lv_event_t *e)
     show_grid();
 }
 
+void view_registro_reset(void)
+{
+    /* s_grid puede no existir todavia si se llamase antes de crear la vista. */
+    if (!s_grid) return;
+    entry_screen_close();
+    show_grid();
+}
+
 /* === Edicion de campos (editor a pantalla completa) ===================== */
 
 /* Tocar un campo abre el editor a PANTALLA COMPLETA (entry_screen.c) en vez de

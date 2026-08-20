@@ -35,6 +35,11 @@ void entry_screen_init(lv_obj_t *parent);
  * aceptados a digitos y punto. */
 void entry_screen_open(lv_obj_t *target, const char *label, bool numeric);
 
+/* Cierra el editor SIN volcar lo tecleado. Para cuando algo de fuera se lleva
+ * al usuario a otra pantalla (p.ej. un gesto del carrusel) y el overlay no
+ * debe quedarse abierto por detras. No hace nada si no estaba abierto. */
+void entry_screen_close(void);
+
 #ifdef __cplusplus
 }
 #endif
