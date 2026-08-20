@@ -515,11 +515,18 @@ static void ruedas_toggle_cb(lv_event_t *e)
     ruedas_actualiza_texto(marcado);
 }
 
-/* Al cambiar el numero en la botonera, refrescar el texto de la casilla. */
+/* Al elegir el numero, el selector ha cumplido: se esconde y el dato se queda
+ * a la vista en la propia casilla ("Ruedas: 4"). Asi el formulario recupera la
+ * altura y no hay que deslizar para llegar a Guardar.
+ *
+ * Para cambiarlo se desmarca Ruedas y se vuelve a marcar, que saca el selector
+ * otra vez. Es un caso raro (no se cambian ruedas a menudo) y evita un boton
+ * de "editar" que ocuparia sitio de forma permanente. */
 static void ruedas_num_cb(lv_event_t *e)
 {
     (void)e;
     ruedas_actualiza_texto(true);
+    lv_obj_add_flag(lv_obj_get_parent(s_mant_ruedas_bm), LV_OBJ_FLAG_HIDDEN);
 }
 
 static lv_obj_t *make_readonly_row(lv_obj_t *parent, const char *label_text)
