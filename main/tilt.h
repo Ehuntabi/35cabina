@@ -1,6 +1,7 @@
 /* tilt.h - Acelerometro ADXL345 para el nivel de aparcamiento (Fase 3).
  *
- * Bus I2C PROPIO (I2C_NUM_1, IO5=SDA/IO6=SCL del conector "Extended IO"),
+ * Bus I2C PROPIO (I2C_NUM_1, IO17=SDA/IO18=SCL, los de los JST de 4 pines
+ * que ademas traen 3V3 y GND: un solo cable de 4 hilos hasta el sensor),
  * NO el compartido con el tactil -- el esquematico oficial del modulo
  * muestra que el bus del tactil (GPIO4/GPIO8) es cableado interno sin pad
  * accesible desde fuera. Funcionalidad totalmente autonoma en esta placa:
@@ -18,7 +19,7 @@
 extern "C" {
 #endif
 
-/* Crea el bus I2C dedicado (IO5/IO6) y prueba el sensor (arranca medicion
+/* Crea el bus I2C dedicado (IO17/IO18) y prueba el sensor (arranca medicion
  * si responde). Devuelve ESP_ERR_NOT_FOUND si no hay ADXL345 cableado --
  * no es fatal, tilt_get() simplemente devolvera false y la UI muestra
  * "sensor no encontrado" en vez de crashear. */

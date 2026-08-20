@@ -14,9 +14,21 @@
  * el esquematico oficial del modulo (JC3248W535EN/5-IO pin distribution,
  * seccion "Extended IO") muestra que GPIO4/GPIO8 son cableado interno
  * pantalla+tactil, SIN pad accesible desde fuera -- no hay donde soldar.
- * El conector de expansion "Extended IO" (JST1.25 8P) si expone
- * IO5/IO6/IO7/IO15/IO16/IO46/IO9/IO14 libres; usamos IO5(SDA)/IO6(SCL) en
- * un segundo bus I2C por hardware (I2C_NUM_1, el ESP32-S3 tiene dos).
+ * Usamos un segundo bus I2C por hardware (I2C_NUM_1, el ESP32-S3 tiene dos).
+ *
+ * PINES: IO17(SDA)/IO18(SCL), los de los conectores JST de 4 pines. Se
+ * eligieron sobre los IO5/IO6 del conector "Extended IO" de 8 pines (que
+ * tambien valdrian, junto con IO7/IO9/IO14/IO15/IO16) por una razon de
+ * cableado, no electrica: el conector de 8 pines lleva SOLO señales, asi que
+ * el sensor habria que llevarlo a dos conectores a la vez (datos en uno,
+ * 3V3/GND en otro). Los JST de 4 pines llevan 2 GPIO + 3V3 + GND, de modo
+ * que el ADXL345 cuelga de UN solo cable de 4 hilos.
+ *
+ * En el S3 el I2C va por matriz GPIO, asi que reasignarlo es solo cambiar
+ * los dos defines de abajo. Evitar: 33-37 (PSRAM octal, ver
+ * CONFIG_SPIRAM_MODE_OCT), 26-32 (flash), 19/20 (USB), 0/3/45/46
+ * (strapping: los pull-ups del I2C alterarian el arranque) y los que ya usa
+ * la pantalla/tactil (1, 4, 8, 21, 38, 39, 40, 45, 47, 48).
  *
  * OJO mapeo de ejes: pitch/roll asumen una orientacion de montaje concreta
  * del sensor respecto al chasis. Falta verificar en la placa real que
@@ -40,8 +52,8 @@
 static const char *TAG = "tilt";
 
 #define TILT_I2C_PORT            I2C_NUM_1
-#define TILT_I2C_SDA_GPIO        GPIO_NUM_5
-#define TILT_I2C_SCL_GPIO        GPIO_NUM_6
+#define TILT_I2C_SDA_GPIO        GPIO_NUM_17
+#define TILT_I2C_SCL_GPIO        GPIO_NUM_18
 #define TILT_I2C_CLK_HZ          400000
 
 #define ADXL345_ADDR            0x53

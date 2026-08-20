@@ -37,13 +37,28 @@ Se reutiliza:
   ninguno usado por la pantalla/táctil/TF card de este módulo. Hay además
   dos JST de 4 pines más pequeños con `IO17`/`IO18` + alimentación.
 - **Acelerómetro** (inclinación al aparcar): ADXL345, I2C address `0x53`,
-  en un **bus I2C propio** (`I2C_NUM_1`, `IO5`=SDA / `IO6`=SCL del
-  conector Extended IO) — **no** el bus interno del táctil (GPIO4/GPIO8):
+  en un **bus I2C propio** (`I2C_NUM_1`, `IO17`=SDA / `IO18`=SCL, los de
+  los **JST de 4 pines**) — **no** el bus interno del táctil (GPIO4/GPIO8):
   el esquemático muestra que ese bus es cableado interno pantalla+táctil
   sin pad accesible desde fuera, así que no había forma física de
-  colgarse de él. Sin verificar aún en placa real el mapeo de ejes
-  pitch/roll según cómo quede montado el sensor (ver comentario en
-  `tilt.c`).
+  colgarse de él.
+
+  Se usan los JST de 4 pines y no el "Extended IO" de 8 porque **aquéllos
+  traen `3V3` y `GND` en el mismo conector**: el sensor cuelga de un solo
+  cable de 4 hilos en vez de repartirse entre dos conectores. `IO5`/`IO6`
+  (y `IO7`/`IO9`/`IO14`/`IO15`/`IO16`) servirían igual — en el S3 el I2C va
+  por matriz GPIO — pero obligan a llevar la alimentación aparte.
+
+  **Cableado del módulo ADXL345**: `SDA`→IO17, `SCL`→IO18, `VCC`→3V3,
+  `GND`→GND, y además **`CS`→3V3** (si queda al aire el chip arranca en modo
+  SPI y no responde por I2C) y **`SDO`→GND** (es lo que fija la dirección
+  `0x53`; a 3V3 sería `0x1D` y el firmware no lo encontraría). `INT1`/`INT2`
+  sin conectar. No hacen falta pull-ups externos: `tilt.c` activa los
+  internos. **El orden físico de pines de los JST no está verificado** —
+  comprobarlo con el esquemático oficial o un polímetro antes de enchufar.
+
+  Sin verificar aún en placa real el mapeo de ejes pitch/roll según cómo
+  quede montado el sensor (ver comentario en `tilt.c`).
 
 ## Target / toolchain
 
@@ -63,7 +78,7 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
 └─ main/
    ├─ main.c                          # bring-up + arranque UI/red
    ├─ data_model.c/h                  # snapshot de mini_msg_t protegido por lock
-   ├─ tilt.c/h                        # ADXL345 (bus I2C propio IO5/IO6) -- pitch/roll (Fase 3)
+   ├─ tilt.c/h                        # ADXL345 (bus I2C propio IO17/IO18) -- pitch/roll (Fase 3)
    ├─ esp_bsp.c/h                     # pantalla QSPI + tactil + bus I2C
    ├─ lv_port.c/h, display.h          # bring-up LVGL / panel
    ├─ wifi_credentials.h.example      # plantilla; el real NO se versiona
@@ -110,12 +125,18 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
   viaje" es el primer candidato cuando se abra (pedido explícito del
   usuario: que el 3.5" mande el comando de viaje, no la P4).
-- **Fase 3** (hecho, sin probar en placa real): burbuja de nivel clásica
-  (círculo que se desplaza, sin assets de imagen) leyendo el ADXL345 por
-  I2C a 5Hz. Botón "Calibrar nivel" en la propia pantalla: promedia ~20
-  lecturas y guarda el offset en NVS (`config_storage.c`, namespace
-  `"tilt"`). Si el sensor no responde al arrancar, la pantalla lo indica
-  ("Sensor ADXL345 no detectado") en vez de fallar.
+- **Fase 3** (hecho; sensor ya detectado en placa real el 20-ago-2026, falta
+  validar la lectura): burbuja de nivel clásica (círculo que se desplaza, sin
+  assets de imagen) leyendo el ADXL345 por I2C a 5Hz. Botón "Calibrar nivel"
+  en la propia pantalla: promedia ~20 lecturas y guarda el offset en NVS
+  (`config_storage.c`, namespace `"tilt"`). Si el sensor no responde al
+  arrancar, la pantalla lo indica ("Sensor ADXL345 no detectado") en vez de
+  fallar.
+
+  Estado real: con el ADXL345 cableado a IO17/IO18 el arranque ya dice
+  `tilt: ADXL345 OK`. **Pendiente**: calibrar con la autocaravana nivelada y
+  comprobar que pitch/roll no salen cruzados según la orientación de montaje
+  (ver `tilt.c`).
 - **Fase 4** (fuera de este repo, requiere luz verde aparte): canal de
   vuelta hacia la P4 (`~/joint/victron`) para que los repostajes/bombona
   lleguen al "viaje" (`trip_manager.c`).
