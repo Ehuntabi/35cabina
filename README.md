@@ -19,6 +19,12 @@ Se reutiliza:
   `VictronConfig` de la P4, protocolo `mini_msg_t` (32 bytes, versión 2,
   puerto 4242).
 
+> **El C6 queda descartado (20-ago-2026): esta pantalla lo sustituye.**
+> `mini_proto.h` ya sólo se sincroniza con `~/joint/victron`, y el protocolo
+> puede crecer sin arrastrar los 32 bytes heredados. Aviso mientras el C6
+> siga enchufado: subir `MINI_PROTO_VERSION` lo deja mudo, porque rechaza
+> las versiones que no conoce.
+
 ## Hardware
 
 - **Pantalla**: Guition JC3248W535 3.5" — ESP32-S3-WROOM-1, controlador
@@ -90,7 +96,7 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
    │  ├─ view_inclinacion.c/h         # izquierda: burbuja de nivel (Fase 3)
    │  └─ view_ajustes.c/h             # SSID/password de la P4, editable sin reflashear
    └─ net/
-      ├─ mini_proto.h                 # protocolo compartido con la P4 y el mini
+      ├─ mini_proto.h                 # protocolo compartido con la P4 (el mini C6 ya no cuenta)
       └─ udp_rx.c/h                   # STA + receptor UDP :4242 (Fase 1)
 ```
 
@@ -113,15 +119,42 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   primera vez que arranca con NVS vacía.
 - **Fase 2** (hecho): carrusel de 3 pantallas por gesto horizontal (centro:
   info · derecha: menú de 5 iconos — **Viaje** (iniciar/finalizar),
-  **Repostaje** (GPS, hora, importe+moneda, litros, precio/litro
-  calculado), **Peaje** (GPS, hora, importe+moneda), **Bombona** (GPS,
-  día, hora, lugar), **Mantenimiento** (GPS, tipo: aceite/filtro de
-  aceite/correa/ruedas + km) · izquierda: placeholder de inclinación).
-  Coordenada GPS en todos los formularios de datos (tecleada a mano por
-  ahora, no hay GPS real todavía) para poder geolocalizar cada evento en
-  el mapa del viaje más adelante (ver Fase 4). Selector de moneda en los
-  campos de importe (EUR por defecto, contempla otras monedas europeas —
-  GBP/CHF/SEK/NOK/DKK/PLN/CZK/HUF/RON). Todo con teclado en pantalla.
+  **Repostaje** (importe+moneda, litros, precio/litro calculado),
+  **Peaje** (importe+moneda), **Bombona** (cuántas: 1 o 2, precio total),
+  **Mantenimiento** (tipo: aceite/filtro de aceite/correa/ruedas + km)
+  · izquierda: placeholder de inclinación).
+
+  El **menú de iconos ocupa toda la pantalla**: reparto 3+2 (tres celdas de
+  146×145 arriba, dos de 225×145 abajo), cada categoría con su **color de
+  fondo** propio. Los tamaños van en píxeles y no en porcentaje **a
+  propósito**: en LVGL el `pad_gap` no se descuenta del porcentaje y las tres
+  celdas de arriba se salían de fila. Por lo justo del encaje (458 de 460 px
+  útiles), `view_registro_create()` anula el padding y el borde que el tema de
+  LVGL pone en la pantalla; si no, la tercera celda bajaría de fila.
+
+  **Fondos claros con el contenido en negro**, no al revés: la primera versión
+  usaba la familia Material 800 con texto blanco y daba 3,8-6,4:1 de contraste,
+  que en la placa se veía apagado. Invertido pasa de 8:1 en las cinco. Los
+  valores exactos y el cálculo están en `view_registro.c`.
+
+  **Ningún formulario pide coordenada GPS ni hora** (se quitaron el
+  20-ago-2026). Tecleadas a mano no aportan y estorban en el surtidor; cuando
+  se abra la Fase 4 la fecha y la hora las pone **la P4 al recibir el evento**,
+  que es quien tiene el reloj bueno. Ojo: **no hay GPS en ningún aparato del
+  sistema** — ni en esta pantalla ni en la P4 — así que hoy la posición no
+  puede registrarla nadie; haría falta un módulo GPS de verdad.
+
+  Selector de moneda en los campos de importe (EUR por defecto, contempla
+  otras monedas europeas — GBP/CHF/SEK/NOK/DKK/PLN/CZK/HUF/RON), **solo con
+  código ASCII**: las fuentes Montserrat de LVGL se compilan con el rango
+  `0x20-0x7F,0xB0,0x2022`, así que el símbolo del euro salía como un cuadrado
+  vacío. Misma regla para toda la interfaz: nada de acentos ni eñes en los
+  textos que se pintan.
+
+  **Al tocar un campo se abre un editor a pantalla completa**
+  (`ui/entry_screen.c`): el valor en letra 40 arriba y el teclado ocupando
+  240 de los 320 px, en vez del teclado a media pantalla que además tapaba el
+  campo que estabas escribiendo.
   Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
   viaje" es el primer candidato cuando se abra (pedido explícito del
   usuario: que el 3.5" mande el comando de viaje, no la P4).
@@ -182,6 +215,12 @@ Reused:
 - The **network/data architecture** of the `victron_mini` satellite
   (ESP32-C6): UDP broadcast reception from the P4's `VictronConfig` AP,
   `mini_msg_t` protocol (32 bytes, version 2, port 4242).
+
+> **The C6 is retired (2026-08-20): this display replaces it.**
+> `mini_proto.h` is now kept in sync with `~/joint/victron` only, and the
+> protocol is free to grow beyond the inherited 32 bytes. Caveat while the
+> C6 is still plugged in: bumping `MINI_PROTO_VERSION` silences it, since it
+> rejects versions it doesn't know.
 
 See the roadmap above (Fases 0-4) for what's implemented vs. planned.
 
