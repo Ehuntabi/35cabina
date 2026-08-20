@@ -109,28 +109,53 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   con el logo del fork anterior (2s sobre el top layer, luego se revela
   el carrusel).
 - **Fase 1** (hecho): recepción UDP del broadcast de la P4 + pantalla de
-  info agrupada en grid (batería, batería motor, DC/DC, frigo+ventilador,
-  aguas, exterior). El SSID/password se guardan en **NVS**, editables sin
-  reflashear desde el icono de engranaje (⚙) arriba-derecha de la
-  pantalla de info → **Ajustes Wi-Fi** (`view_ajustes.c`) — pensado para
-  cambiar de P4 (ej. la de repuesto para pruebas) sin ordenador de por
-  medio. `main/wifi_credentials.h` (ignorado por git, copiar desde
+  info agrupada en grid: batería, batería motor, frigo+ventilador, aguas y
+  exterior, repartidas **3 arriba + 2 abajo** sobre una rejilla de seis
+  columnas (las de abajo ocupan tres cada una). **La tarjeta de DC/DC se
+  quitó** el 20-ago-2026 a petición del usuario; el dato sigue llegando en
+  el `mini_msg_t`, simplemente no se pinta. Al quitarla hubo que borrar
+  también su refresco: se quedaba apuntando a punteros nulos y habría
+  colgado la pantalla en cuanto llegara el primer paquete.
+
+  El SSID/password se guardan en **NVS**, editables sin reflashear desde la
+  **tarjeta de Wi-Fi del menú de registros** → `view_ajustes.c`; pensado
+  para cambiar de P4 (ej. la de repuesto para pruebas) sin ordenador de por
+  medio. Antes era un engranaje (⚙) en la esquina de esta pantalla, que se
+  retiró para no tener dos puertas a lo mismo.
+  `main/wifi_credentials.h` (ignorado por git, copiar desde
   `wifi_credentials.h.example`) solo se usa como valor de fábrica la
   primera vez que arranca con NVS vacía.
 - **Fase 2** (hecho): carrusel de 3 pantallas por gesto horizontal (centro:
   info · derecha: menú de 5 iconos — **Viaje** (iniciar/finalizar),
-  **Repostaje** (importe+moneda, litros, precio/litro calculado),
-  **Peaje** (importe+moneda), **Bombona** (cuántas: 1 o 2, precio total),
-  **Mantenimiento** (tipo: aceite/filtro de aceite/correa/ruedas + km)
-  · izquierda: placeholder de inclinación).
+  **Repostaje** (moneda arriba; importe y litros en la misma línea;
+  precio/litro calculado), **Peaje** (moneda arriba, importe debajo en
+  letra 40), **Bombona** (cuántas: 1 o 2, precio total),
+  **Mantenimiento** (ver abajo) · izquierda: placeholder de inclinación).
+  Una sexta celda, **Wi-Fi**, no es un registro: salta a `view_ajustes.c`.
 
-  El **menú de iconos ocupa toda la pantalla**: reparto 3+2 (tres celdas de
-  146×145 arriba, dos de 225×145 abajo), cada categoría con su **color de
-  fondo** propio. Los tamaños van en píxeles y no en porcentaje **a
-  propósito**: en LVGL el `pad_gap` no se descuenta del porcentaje y las tres
-  celdas de arriba se salían de fila. Por lo justo del encaje (458 de 460 px
-  útiles), `view_registro_create()` anula el padding y el borde que el tema de
-  LVGL pone en la pantalla; si no, la tercera celda bajaría de fila.
+  El **menú ocupa toda la pantalla**: **3+3, seis celdas de 146×145**, cada
+  una con su **color de fondo**. Los tamaños van en píxeles y no en
+  porcentaje **a propósito**: en LVGL el `pad_gap` no se descuenta del
+  porcentaje y las tres celdas de arriba se salían de fila. Por lo justo del
+  encaje (458 de 460 px útiles), `view_registro_create()` anula el padding y
+  el borde que el tema de LVGL pone en la pantalla; si no, la tercera celda
+  bajaría de fila.
+
+  **Mantenimiento** usa **casillas, no un desplegable**: con el mismo
+  kilometraje puedes haber hecho varias cosas (el aceite Y su filtro es el
+  caso típico). Seis opciones — aceite, filtro de aceite, filtro de aire,
+  filtro de habitáculo, correa y ruedas — en dos columnas. Al marcar
+  **Ruedas** aparece un contador de cuántas (1-4), oculto el resto del
+  tiempo. Debajo, **Km y Coste comparten línea**. Aviso de espacio: con
+  Ruedas marcado el formulario queda al límite de los 320 px y puede pedir
+  un pequeño desplazamiento para llegar al botón de guardar.
+
+  **Toda acción pide confirmación** (`ui/confirm_screen.c`): al pulsar
+  Guardar aparece una pantalla con **lo que se ha introducido** y un
+  "¿Es correcto?" con dos botones grandes. Viaje también pregunta, sin
+  resumen — ahí importa más que en ningún sitio, porque finalizar un viaje
+  por un roce cierra el registro en curso de la P4. Los campos vacíos salen
+  como `--`, para que se vea que faltan antes de aceptar.
 
   **Fondos claros con el contenido en negro**, no al revés: la primera versión
   usaba la familia Material 800 con texto blanco y daba 3,8-6,4:1 de contraste,

@@ -7,7 +7,6 @@
  */
 #include "view_info.h"
 #include "../data_model.h"
-#include "nav.h"
 #include "esp_timer.h"
 #include <stdio.h>
 
@@ -25,7 +24,6 @@
 
 #define COL_BORDER_BAT   lv_color_hex(0xFF9800)  /* SmartShunt naranja */
 #define COL_BORDER_AUX   lv_color_hex(0x4FC3F7)  /* Bateria motor cyan */
-#define COL_BORDER_DCDC  lv_color_hex(0xAB47BC)  /* DC/DC morado (nueva) */
 #define COL_BORDER_COLD  lv_color_hex(0x66CCFF)  /* Frigo azul claro */
 #define COL_BORDER_WATER lv_color_hex(0x29B6F6)  /* Aguas azul saturado */
 #define COL_BORDER_HEAT  lv_color_hex(0xFFD54F)  /* Exterior amarillo calido */
@@ -37,7 +35,7 @@ typedef struct {
     lv_obj_t *conn_dot;
 } info_cell_t;
 
-static info_cell_t s_bat, s_aux, s_dcdc, s_frigo, s_ext;
+static info_cell_t s_bat, s_aux, s_frigo, s_ext;
 static lv_obj_t   *s_water_card;
 static lv_obj_t   *s_water_conn_dot;
 static lv_obj_t   *s_led_clean[4];
@@ -56,27 +54,11 @@ static lv_color_t color_for_frigo(int16_t centi) {
     return COL_VAL_BAD;                        /* > -5 mal */
 }
 
-/* VIC_STATE_* de victron_records.h (proyecto P4) */
-static const char *dcdc_state_name(uint8_t state) {
-    switch (state) {
-        case 0x00: return "Apagado";
-        case 0x01: return "Bajo consumo";
-        case 0x02: return "Fallo";
-        case 0x03: return "Carga";
-        case 0x04: return "Absorcion";
-        case 0x05: return "Flotacion";
-        case 0x06: return "Almacenaje";
-        case 0x07: return "Ecualizacion";
-        case 0x0B: return "Fuente";
-        default:   return "--";
-    }
-}
-
 static lv_obj_t *make_cell(lv_obj_t *grid, lv_color_t border, const char *title_text,
-                            uint8_t col, uint8_t row, info_cell_t *out)
+                            uint8_t col, uint8_t span, uint8_t row, info_cell_t *out)
 {
     lv_obj_t *card = lv_obj_create(grid);
-    lv_obj_set_grid_cell(card, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
+    lv_obj_set_grid_cell(card, LV_GRID_ALIGN_STRETCH, col, span, LV_GRID_ALIGN_STRETCH, row, 1);
     lv_obj_set_style_bg_color(card, COL_CARD_BG_TOP, 0);
     lv_obj_set_style_bg_grad_color(card, COL_CARD_BG_BOT, 0);
     lv_obj_set_style_bg_grad_dir(card, LV_GRAD_DIR_VER, 0);
@@ -173,10 +155,10 @@ static lv_obj_t *make_led(lv_obj_t *parent, bool round)
     return led;
 }
 
-static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t row)
+static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t row)
 {
     lv_obj_t *card = lv_obj_create(grid);
-    lv_obj_set_grid_cell(card, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
+    lv_obj_set_grid_cell(card, LV_GRID_ALIGN_STRETCH, col, span, LV_GRID_ALIGN_STRETCH, row, 1);
     lv_obj_set_style_bg_color(card, COL_CARD_BG_TOP, 0);
     lv_obj_set_style_bg_grad_color(card, COL_CARD_BG_BOT, 0);
     lv_obj_set_style_bg_grad_dir(card, LV_GRAD_DIR_VER, 0);
@@ -280,21 +262,6 @@ static void refresh_aux(const mini_data_t *d)
     }
 }
 
-static void refresh_dcdc(const mini_data_t *d)
-{
-    char buf[32];
-    if (d->dcdc_has_data) {
-        snprintf(buf, sizeof(buf), "%d.%02dV",
-                 d->dcdc_v_out_centi / 100, d->dcdc_v_out_centi % 100);
-        lv_label_set_text(s_dcdc.primary, buf);
-        lv_obj_set_style_text_color(s_dcdc.primary, COL_TEXT, 0);
-        lv_label_set_text(s_dcdc.secondary, dcdc_state_name(d->dcdc_state));
-    } else {
-        lv_label_set_text(s_dcdc.primary, "--");
-        lv_label_set_text(s_dcdc.secondary, "sin datos");
-    }
-}
-
 static void refresh_temp(info_cell_t *cell, bool has, int16_t centi, bool is_frigo,
                           const char *extra_secondary)
 {
@@ -342,7 +309,6 @@ static void update_conn_dots(const mini_data_t *d)
     }
     lv_obj_set_style_bg_color(s_bat.conn_dot, col, 0);
     lv_obj_set_style_bg_color(s_aux.conn_dot, col, 0);
-    lv_obj_set_style_bg_color(s_dcdc.conn_dot, col, 0);
     lv_obj_set_style_bg_color(s_frigo.conn_dot, col, 0);
     lv_obj_set_style_bg_color(s_ext.conn_dot, col, 0);
     lv_obj_set_style_bg_color(s_water_conn_dot, col, 0);
@@ -363,17 +329,10 @@ static void refresh_cb(lv_timer_t *t)
 
     refresh_bat(&d);
     refresh_aux(&d);
-    refresh_dcdc(&d);
     refresh_temp(&s_frigo, d.frigo_has_data, d.frigo_temp_centi, true, frigo_secondary);
     refresh_temp(&s_ext, d.exterior_has_data, d.exterior_temp_centi, false, "");
     refresh_aguas(&d);
     update_conn_dots(&d);
-}
-
-static void gear_click_cb(lv_event_t *e)
-{
-    (void)e;
-    nav_open_ajustes();
 }
 
 void view_info_create(lv_obj_t *parent)
@@ -382,8 +341,13 @@ void view_info_create(lv_obj_t *parent)
      * hres/vres cuando el rotate no es NONE/180 -- con LV_DISP_ROT_90 queda
      * hor_res=480, ver_res=320; el comentario de ui_theme.h que decia
      * "320x480 portrait" estaba desactualizado, ver [[project_pantalla_35_satelite_p4]]).
-     * 3 columnas x 2 filas: con 480px de ancho hay sitio de sobra. */
-    static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+     * Rejilla de SEIS columnas para poder repartir CINCO tarjetas en 3+2 sin
+     * dejar un hueco: arriba tres de 2 columnas cada una, abajo dos de 3. Antes
+     * eran 3 columnas x 2 filas justas porque habia 6 tarjetas; al quitar la de
+     * DC/DC sobraba un sitio. */
+    static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+                                   LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+                                   LV_GRID_TEMPLATE_LAST};
     static lv_coord_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
 
     lv_obj_t *grid = lv_obj_create(parent);
@@ -397,26 +361,15 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_grid_dsc_array(grid, col_dsc, row_dsc);
     lv_obj_center(grid);
 
-    make_cell(grid, COL_BORDER_BAT,  "BATERIA",        0, 0, &s_bat);
-    make_cell(grid, COL_BORDER_AUX,  "BATERIA MOTOR",  1, 0, &s_aux);
-    make_cell(grid, COL_BORDER_DCDC, "DC/DC",          2, 0, &s_dcdc);
-    make_cell(grid, COL_BORDER_COLD, "FRIGO",          0, 1, &s_frigo);
-    make_water_cell(grid,                              1, 1);
-    make_cell(grid, COL_BORDER_HEAT, "EXTERIOR",       2, 1, &s_ext);
+    /* Arriba tres tarjetas de 2 columnas, abajo dos de 3. Sin DC/DC: quitada a
+     * peticion del usuario el 20-ago-2026 -- el dato sigue llegando en el
+     * mini_msg_t, simplemente no se pinta. */
+    make_cell(grid, COL_BORDER_BAT,  "BATERIA",        0, 2, 0, &s_bat);
+    make_cell(grid, COL_BORDER_AUX,  "BATERIA MOTOR",  2, 2, 0, &s_aux);
+    make_cell(grid, COL_BORDER_COLD, "FRIGO",          4, 2, 0, &s_frigo);
+    make_water_cell(grid,                              0, 3, 1);
+    make_cell(grid, COL_BORDER_HEAT, "EXTERIOR",       3, 3, 1, &s_ext);
 
-    /* Icono de ajustes fijo, fuera del carrusel (no ocupa un 4o slot de
-     * gesto) -- creado despues del grid para quedar por encima en z-order. */
-    lv_obj_t *gear = lv_btn_create(parent);
-    lv_obj_set_size(gear, 30, 30);
-    lv_obj_set_style_bg_color(gear, lv_color_hex(0x1A1A1A), 0);
-    lv_obj_set_style_bg_opa(gear, LV_OPA_70, 0);
-    lv_obj_set_style_radius(gear, LV_RADIUS_CIRCLE, 0);
-    lv_obj_align(gear, LV_ALIGN_TOP_RIGHT, -4, 4);
-    lv_obj_add_event_cb(gear, gear_click_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *gear_lbl = lv_label_create(gear);
-    lv_label_set_text(gear_lbl, LV_SYMBOL_SETTINGS);
-    lv_obj_set_style_text_color(gear_lbl, lv_color_hex(0x888888), 0);
-    lv_obj_center(gear_lbl);
 
     s_refresh_timer = lv_timer_create(refresh_cb, 500, NULL);
 }
