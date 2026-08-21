@@ -45,6 +45,7 @@ typedef enum {
     CAT_MANTENIMIENTO,
     CAT_PARADA,
     CAT_SERVICIOS,
+    CAT_VALORACION,
     CAT_COUNT
 } categoria_t;
 
@@ -160,34 +161,49 @@ static lv_obj_t *s_parada_servicios_btn; /* oculto salvo area */
 
 /* Servicios que ofrece el area, en su propia pantalla: las cinco casillas de
  * parada + el precio + estas seis no caben juntas en 320 px de alto. */
-/* Las dos ultimas no son servicios sino como es el sitio, pero van aqui porque
- * se apuntan en el mismo momento y de la misma manera: marcando. */
-#define SERV_COUNT           8
-#define SERV_IDX_RUIDOSO     6
-#define SERV_IDX_VALORACION  7
+/* La ultima no es un servicio: es la puerta a la pantalla de valoracion. */
+#define SERV_COUNT           7
+#define SERV_IDX_VALORACION  6
 static const char *const SERV_OPCIONES[SERV_COUNT] = {
     "Agua potable", "Vaciado grises", "Vaciado WC",
     "Electricidad", "Duchas/WC", "Basura",
-    "Ruidoso", "Valoracion"
+    "Valoracion"
 };
 /* Nombres cortos para el resumen de la confirmacion: alli el cuerpo va en
  * letra 32 y solo caben ~25 caracteres por linea (ver confirm_screen.c).
  * El de la valoracion no se usa: en su sitio va la nota elegida. */
 static const char *const SERV_CORTOS[SERV_COUNT] = {
-    "Agua", "Grises", "WC", "Luz", "Duchas", "Basura", "Ruidoso", ""
+    "Agua", "Grises", "WC", "Luz", "Duchas", "Basura", ""
 };
 static lv_obj_t *s_serv_chk[SERV_COUNT];
 static lv_obj_t *s_serv_hint;            /* explica que se esta marcando */
-static lv_obj_t *s_serv_grid;            /* para apretar las filas al desplegar */
 
-/* Valoracion del sitio. Tres notas, excluyentes, con el mismo mecanismo que el
- * contador de ruedas: la casilla despliega el selector, eliges y el selector se
- * recoge dejando la nota escrita en la propia casilla. */
+/* --- Valoracion del sitio, en pantalla propia -----------------------------
+ *
+ * Antes era una tira de tres botones que se desplegaba dentro de servicios y
+ * habia que apretar las casillas para hacerle sitio. En su propia pantalla hay
+ * espacio para botones de un dedo y con color, que es lo que hace falta para
+ * acertar sin mirar, y ademas caben debajo las dos pegas del sitio.
+ *
+ * Verde / ambar / rojo, los mismos tonos claros con texto negro del resto de
+ * la interfaz (ver el bloque de colores de arriba). */
 #define VALORACION_COUNT 3
 static const char *const VALORACION[VALORACION_COUNT] = {
     "Recomendado", "Aceptable", "Sucio"
 };
-static lv_obj_t *s_serv_valoracion_bm;
+static const uint32_t VALORACION_COL[VALORACION_COUNT] = {
+    0x66BB6A, 0xFFA726, 0xE57373
+};
+static uint8_t   s_val_nota;             /* indice en VALORACION */
+static lv_obj_t *s_val_btn[VALORACION_COUNT];
+static lv_obj_t *s_val_btn_lbl[VALORACION_COUNT];
+
+/* Las pegas del sitio: no son notas sino cosas que pueden pasar con cualquier
+ * nota (un sitio recomendable puede no tener sombra). Por eso son casillas
+ * sueltas y no opciones de la nota. */
+#define VAL_EXTRA_COUNT 2
+static const char *const VAL_EXTRAS[VAL_EXTRA_COUNT] = { "Ruidoso", "Sin sombra" };
+static lv_obj_t *s_val_extra_chk[VAL_EXTRA_COUNT];
 
 /* Mantenimiento: varias casillas a la vez, no una opcion. Con el mismo
  * kilometraje puedes haber hecho el aceite Y su filtro. */
@@ -236,7 +252,7 @@ static const char *const CURRENCY_CODES[] = {
 /* Definidos abajo, junto a los widgets que tocan. */
 static void clear_forms(void);
 static void valoracion_actualiza_texto(bool marcado);
-static void serv_grid_apretar(bool apretar);
+static void valoracion_reset(void);
 
 /* Volver al menu deja los formularios EN BLANCO: se vacian sus campos, casillas
  * y selectores. Como es el unico camino de vuelta (boton Volver, guardado
@@ -518,15 +534,10 @@ static lv_obj_t *make_choice_row(lv_obj_t *parent, const char *label_text,
 {
     lv_obj_t *cont = make_field_row(parent);
 
-    /* Sin rotulo si no hace falta: la valoracion se despliega desde su propia
-     * casilla, que ya dice lo que es, y en esa pantalla los 20 px del rotulo
-     * son la diferencia entre caber y no caber. */
-    if (label_text) {
-        lv_obj_t *lbl = lv_label_create(cont);
-        lv_label_set_text(lbl, label_text);
-        lv_obj_set_style_text_color(lbl, lv_color_hex(COL_LABEL), 0);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, 0);
-    }
+    lv_obj_t *lbl = lv_label_create(cont);
+    lv_label_set_text(lbl, label_text);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(COL_LABEL), 0);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, 0);
 
     lv_obj_t *bm = lv_btnmatrix_create(cont);
     lv_btnmatrix_set_map(bm, map);
@@ -562,8 +573,7 @@ static lv_obj_t *make_choice_row(lv_obj_t *parent, const char *label_text,
  *
  * Apretar SOLO mientras eliges la nota es lo que permite tener las dos cosas:
  * casillas separadas el resto del tiempo, que es cuando se tocan. */
-#define SERV_CHK_GAP           26
-#define SERV_CHK_GAP_ESTRECHO   6
+#define SERV_CHK_GAP  26
 
 /* 'gap' es el hueco vertical entre filas de casillas. Mantenimiento y parada
  * van con CHK_GAP (6): ahi cada pixel esta comprometido. La pantalla de
@@ -699,13 +709,11 @@ static void parada_clear_extras(void)
     for (uint8_t i = 0; i < SERV_COUNT; i++) {
         lv_obj_clear_state(s_serv_chk[i], LV_STATE_CHECKED);
     }
-    /* La valoracion, a cero y recogida: quitar el estado a mano no dispara
-     * VALUE_CHANGED, asi que valoracion_toggle_cb no se entera y hay que
-     * deshacer a mano lo que habria hecho el. */
-    btnmatrix_reset(s_serv_valoracion_bm);
+    /* Quitar el estado a mano no dispara VALUE_CHANGED, asi que
+     * valoracion_toggle_cb no se entera y hay que deshacer aqui lo que habria
+     * hecho el: nota a cero, pegas sin marcar y la casilla con su texto. */
+    valoracion_reset();
     valoracion_actualiza_texto(false);
-    lv_obj_add_flag(lv_obj_get_parent(s_serv_valoracion_bm), LV_OBJ_FLAG_HIDDEN);
-    serv_grid_apretar(false);
 }
 
 /* Vacia TODOS los formularios. Lo llama show_grid(), o sea cada vez que se
@@ -803,16 +811,18 @@ static void ruedas_release_cb(lv_event_t *e)
     lv_obj_add_flag(lv_obj_get_parent(s_mant_ruedas_bm), LV_OBJ_FLAG_HIDDEN);
 }
 
-/* === Valoracion del sitio (misma mecanica que el contador de ruedas) ====== */
+/* === Valoracion del sitio ================================================= */
 
 static const char *valoracion_elegida(void)
 {
-    return VALORACION[btnmatrix_checked(s_serv_valoracion_bm, VALORACION_COUNT)];
+    return VALORACION[s_val_nota];
 }
 
-/* Marcada, la casilla muestra la NOTA en vez de la palabra "Valoracion": asi se
- * lee de un vistazo cual has puesto. El nombre completo no cabria --
- * "Valoracion: Recomendado" son 23 caracteres y en media rejilla entran ~16. */
+/* Marcada, la casilla de servicios muestra la NOTA en vez de la palabra
+ * "Valoracion": asi se lee de un vistazo cual has puesto. El nombre completo no
+ * cabria -- "Valoracion: Recomendado" son 23 caracteres y en media rejilla
+ * entran ~16. Las pegas (ruidoso, sin sombra) no caben ahi; salen en el resumen
+ * de la confirmacion, antes de guardar. */
 static void valoracion_actualiza_texto(bool marcado)
 {
     lv_checkbox_set_text(s_serv_chk[SERV_IDX_VALORACION],
@@ -820,39 +830,48 @@ static void valoracion_actualiza_texto(bool marcado)
                                  : SERV_OPCIONES[SERV_IDX_VALORACION]);
 }
 
-/* Aprieta o suelta las filas de la rejilla segun este el selector desplegado.
- * El porque, en SERV_CHK_GAP. */
-static void serv_grid_apretar(bool apretar)
+/* La elegida va a todo color y con la marca de visto; las otras dos, apagadas.
+ * Con solo el borde no se distinguia de lejos y con solo el color tampoco: dos
+ * senales a la vez es lo que hace que se lea de una ojeada y con sol de lado. */
+static void valoracion_pinta(void)
 {
-    lv_obj_set_style_pad_row(s_serv_grid,
-                             apretar ? SERV_CHK_GAP_ESTRECHO : SERV_CHK_GAP, 0);
+    for (uint8_t i = 0; i < VALORACION_COUNT; i++) {
+        bool sel = (i == s_val_nota);
+        lv_obj_set_style_bg_opa(s_val_btn[i], sel ? LV_OPA_COVER : LV_OPA_40, 0);
+        lv_obj_set_style_border_width(s_val_btn[i], sel ? 4 : 0, 0);
+        lv_label_set_text_fmt(s_val_btn_lbl[i], "%s%s",
+                              sel ? LV_SYMBOL_OK "  " : "", VALORACION[i]);
+    }
 }
 
+static void valoracion_reset(void)
+{
+    s_val_nota = 0;
+    for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
+        lv_obj_clear_state(s_val_extra_chk[i], LV_STATE_CHECKED);
+    }
+    valoracion_pinta();
+}
+
+static void valoracion_nota_cb(lv_event_t *e)
+{
+    s_val_nota = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
+    valoracion_pinta();
+    valoracion_actualiza_texto(true);
+}
+
+/* Marcar la casilla de servicios abre la pantalla; desmarcarla borra lo que
+ * hubiera puesto, que sin valoracion no significa nada.
+ *
+ * El estado de un checkbox de LVGL cambia al SOLTAR, no al presionar, asi que
+ * abrir otra pantalla desde aqui es seguro: cuando llega este aviso el dedo ya
+ * se ha levantado y no queda ningun toque pendiente. */
 static void valoracion_toggle_cb(lv_event_t *e)
 {
     bool marcado = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
-    set_hidden(lv_obj_get_parent(s_serv_valoracion_bm), !marcado);
-    serv_grid_apretar(marcado);
+    if (!marcado) valoracion_reset();
     valoracion_actualiza_texto(marcado);
-}
-
-/* OJO, lo mismo que con las ruedas: lv_btnmatrix manda VALUE_CHANGED ya al
- * PRESIONAR y la marca no se aplica hasta el SOLTAR. Por eso el texto se
- * refresca en VALUE_CHANGED y el cierre se hace en RELEASED; cerrando al
- * presionar, el dedo se levantaria sobre un objeto ya oculto y la eleccion no
- * llegaria a aplicarse nunca. */
-static void valoracion_num_cb(lv_event_t *e)
-{
-    (void)e;
-    valoracion_actualiza_texto(true);
-}
-
-static void valoracion_release_cb(lv_event_t *e)
-{
-    (void)e;
-    valoracion_actualiza_texto(true);
-    lv_obj_add_flag(lv_obj_get_parent(s_serv_valoracion_bm), LV_OBJ_FLAG_HIDDEN);
-    serv_grid_apretar(false);
+    if (marcado) show_form(CAT_VALORACION);
 }
 
 static lv_obj_t *make_readonly_row(lv_obj_t *parent, const char *label_text)
@@ -956,7 +975,7 @@ static lv_obj_t *add_header(lv_obj_t *form, const char *title, lv_color_t color,
 
 static const char *CAT_NOMBRE[CAT_COUNT] = {
     "viaje", "repostaje", "peaje", "bombona", "mantenimiento",
-    "parada", "servicios"
+    "parada", "servicios", "valoracion"
 };
 
 static uint32_t cat_color(categoria_t c)
@@ -969,7 +988,8 @@ static uint32_t cat_color(categoria_t c)
         /* Parada y servicios cuelgan de Viaje: van con su azul para que se vea
          * que son la misma rama. */
         case CAT_PARADA:
-        case CAT_SERVICIOS:     return COL_VIAJE;
+        case CAT_SERVICIOS:
+        case CAT_VALORACION:    return COL_VIAJE;
         default:                return COL_MANTENIMIENTO;
     }
 }
@@ -1101,13 +1121,27 @@ static void build_resumen(categoria_t cat)
                     if (n < 0 || (size_t)n >= sizeof(serv) - s_used) break;
                     s_used += (size_t)n;
                 }
+                /* Las pegas van detras de la nota y solo si hay valoracion:
+                 * viven dentro de esa pantalla y sin ella no se han podido
+                 * marcar. Aqui es donde se repasan antes de guardar, porque en
+                 * la casilla de servicios no caben. */
+                if (lv_obj_has_state(s_serv_chk[SERV_IDX_VALORACION], LV_STATE_CHECKED)) {
+                    for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
+                        if (!lv_obj_has_state(s_val_extra_chk[i], LV_STATE_CHECKED)) continue;
+                        marcados++;
+                        int n = snprintf(serv + s_used, sizeof(serv) - s_used, "%s%s",
+                                         s_used ? ", " : "", VAL_EXTRAS[i]);
+                        if (n < 0 || (size_t)n >= sizeof(serv) - s_used) break;
+                        s_used += (size_t)n;
+                    }
+                }
                 if (marcados == 0) {
                     snprintf(extra + e, sizeof(extra) - e, "\nServicios:  --");
                 } else if (s_used <= 24) {
                     snprintf(extra + e, sizeof(extra) - e, "\nServicios:  %s", serv);
                 } else {
-                    snprintf(extra + e, sizeof(extra) - e, "\nServicios:  %u de %u",
-                             marcados, (unsigned)SERV_COUNT);
+                    snprintf(extra + e, sizeof(extra) - e, "\nServicios:  %u marcados",
+                             marcados);
                 }
             }
             snprintf(s_resumen, sizeof(s_resumen), "%s%s", used ? tipo : "--", extra);
@@ -1501,28 +1535,55 @@ static void build_servicios(lv_obj_t *form)
      * seis casillas, o sea 48+20+~150 de los 304 utiles. Sobraban casi 90 px
      * en negro al final, asi que se reparten entre las filas -- mas separacion
      * es menos fallo al tocar con la autocaravana en marcha. */
-    /* Se crea con el hueco ESTRECHO y se ensancha justo despues: asi la altura
-     * minima que se reserva la fila es la del caso apretado (el que tiene que
-     * caber con el selector fuera), y el hueco ancho se lo come el espacio
-     * sobrante, que es de quien es. */
-    s_serv_grid = make_check_grid(form, SERV_OPCIONES, SERV_COUNT, s_serv_chk,
-                                  COL_VIAJE, SERV_CHK_GAP_ESTRECHO);
-    serv_grid_apretar(false);
+    lv_obj_t *grid = make_check_grid(form, SERV_OPCIONES, SERV_COUNT, s_serv_chk,
+                                     COL_VIAJE, SERV_CHK_GAP);
     /* Y el bloque, centrado en lo que sobre en vez de pegado arriba. */
-    lv_obj_set_flex_align(lv_obj_get_parent(s_serv_grid), LV_FLEX_ALIGN_CENTER,
+    lv_obj_set_flex_align(lv_obj_get_parent(grid), LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
 
-    /* Selector de la nota, oculto salvo que se marque Valoracion. Sin rotulo:
-     * la casilla desde la que se despliega ya dice lo que es. */
-    static const char *valoracion_map[] = { "Recomendado", "Aceptable", "Sucio", "" };
-    s_serv_valoracion_bm = make_choice_row(form, NULL, valoracion_map);
-    lv_obj_add_flag(lv_obj_get_parent(s_serv_valoracion_bm), LV_OBJ_FLAG_HIDDEN);
+    /* La ultima casilla no marca nada: abre la pantalla de valoracion. */
     lv_obj_add_event_cb(s_serv_chk[SERV_IDX_VALORACION], valoracion_toggle_cb,
                         LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(s_serv_valoracion_bm, valoracion_num_cb,
-                        LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(s_serv_valoracion_bm, valoracion_release_cb,
-                        LV_EVENT_RELEASED, NULL);
+}
+
+/* Pantalla de valoracion. Tres botones de un dedo con su color -- verde,
+ * ambar, rojo -- y debajo las dos pegas del sitio.
+ *
+ * Reparto de los 304 utiles: cabecera 48 + tres botones que se reparten lo que
+ * sobra (~66 cada uno) + la fila de casillas 40 + 12 de huecos. Los botones son
+ * elasticos a proposito: si algun dia se anade una nota, encogen solos en vez
+ * de salirse. */
+static void build_valoracion(lv_obj_t *form)
+{
+    add_header(form, "VALORACION", lv_color_hex(COL_VIAJE), CAT_SERVICIOS);
+
+    for (uint8_t i = 0; i < VALORACION_COUNT; i++) {
+        lv_obj_t *btn = lv_btn_create(form);
+        lv_obj_set_width(btn, lv_pct(100));
+        lv_obj_set_height(btn, LV_SIZE_CONTENT);
+        lv_obj_set_style_min_height(btn, 56, 0);
+        lv_obj_set_flex_grow(btn, 1);
+        lv_obj_set_style_radius(btn, 12, 0);
+        lv_obj_set_style_bg_color(btn, lv_color_hex(VALORACION_COL[i]), 0);
+        lv_obj_set_style_border_color(btn, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_add_event_cb(btn, valoracion_nota_cb, LV_EVENT_CLICKED,
+                            (void *)(uintptr_t)i);
+
+        lv_obj_t *lbl = lv_label_create(btn);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_24, 0);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(COL_TILE_FG), 0);
+        lv_obj_center(lbl);
+
+        s_val_btn[i]     = btn;
+        s_val_btn_lbl[i] = lbl;
+    }
+
+    /* Las pegas van juntas en una fila, en su propia rejilla de dos: no son
+     * notas, sino cosas que pueden pasar con cualquiera de las tres. */
+    make_check_grid(form, VAL_EXTRAS, VAL_EXTRA_COUNT, s_val_extra_chk,
+                    COL_VIAJE, CHK_GAP);
+
+    valoracion_pinta();
 }
 
 /* === Grid principal ======================================================= */
@@ -1625,6 +1686,9 @@ void view_registro_create(lv_obj_t *parent)
 
     s_forms[CAT_SERVICIOS] = make_form_container(parent);
     build_servicios(s_forms[CAT_SERVICIOS]);
+
+    s_forms[CAT_VALORACION] = make_form_container(parent);
+    build_valoracion(s_forms[CAT_VALORACION]);
 
     /* Estado de partida: si se fue la luz en mitad de un viaje, sigue habiendo
      * viaje. viaje_refresh() deja la pantalla de Viaje y el rotulo de su

@@ -259,14 +259,11 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   importe de la vez pasada.
 
   Los **servicios** (Agua potable · Vaciado grises · Vaciado WC ·
-  Electricidad · Duchas/WC · Basura) más **Ruidoso** y **Valoración** — estas
-  dos no son servicios sino cómo es el sitio, pero se apuntan en el mismo
-  momento y de la misma forma. **Valoración despliega su selector**
-  (Recomendado · Aceptable · Sucio) con la misma mecánica que el contador de
-  ruedas: eliges, el selector se recoge y la casilla se queda con **la nota
-  escrita** en vez de la palabra "Valoración" ("Valoración: Recomendado" son
-  23 caracteres y en media rejilla entran ~16). Los servicios son el mismo
-  dato con dos lecturas, así
+  Electricidad · Duchas/WC · Basura) más una séptima casilla, **Valoración**,
+  que no marca nada: abre su propia pantalla (ver abajo). Al volver, esa
+  casilla muestra **la nota elegida** en vez de la palabra "Valoración"
+  ("Valoración: Recomendado" son 23 caracteres y en media rejilla entran ~16).
+  Los servicios son el mismo dato con dos lecturas, así
   que comparten lista y pantalla y solo cambia el rótulo que la explica: en un
   área es *"Lo que ofrece el área"* y en un camping *"Incluido en el
   precio"*. Viven en **otra pantalla**: los 320 px
@@ -276,14 +273,30 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   guardan con la parada. El botón "Servicios" comparte fila con "Guardar" en
   vez de llevar la suya, así no cuesta ni un píxel de alto.
 
-  Esa pantalla usa **dos separaciones entre filas y las cambia sobre la
-  marcha**, porque el sitio da para una o para la otra: con el selector de
-  valoración recogido quedan 224 px para la rejilla y las cuatro filas van a
-  **26 px** de separación (214, holgadas); al desplegarlo se van 56 px y solo
-  quedan 168, así que las filas **se aprietan a 6** (154) mientras eliges la
-  nota. Apretar solo en ese momento es lo que permite tener las dos cosas:
-  casillas separadas el resto del tiempo, que es cuando se tocan. El bloque va
-  además **centrado** en lo que sobre, no pegado arriba.
+  Esa pantalla sí va sobrada de alto, así que sus casillas van **más
+  separadas** (`SERV_CHK_GAP`, 26 px frente a los 6 de mantenimiento y parada)
+  y el bloque **centrado** en lo que sobra en vez de pegado arriba: más
+  separación es menos fallo al tocar en marcha.
+
+  **Valoración** (`build_valoracion`) es una **tercera pantalla**, colgada de
+  servicios. Tres botones de un dedo con su color — **Recomendado** en verde,
+  **Aceptable** en ámbar, **Sucio** en rojo — de los que solo uno queda
+  elegido: el elegido va a todo color y con la marca de visto, los otros dos
+  apagados. Dos señales a la vez y no una, porque solo con el borde no se
+  distingue de lejos y solo con el color tampoco, y esto se mira con sol de
+  lado. Debajo, las **pegas del sitio**: Ruidoso · Sin sombra, que son
+  casillas y no notas porque pueden pasar con cualquiera de las tres (un sitio
+  recomendable puede no tener sombra).
+
+  Antes esto era una tira de tres botones que se desplegaba dentro de
+  servicios y obligaba a apretar las casillas para hacerle sitio. En pantalla
+  propia hay espacio de sobra: cabecera 48 + tres botones elásticos (~66 cada
+  uno) + la fila de casillas 40 + 12 de huecos, de los 304 útiles.
+
+  **Desmarcar Valoración borra lo que hubiera dentro** (nota y pegas): sin
+  valoración no significan nada. Las pegas no caben en la casilla de
+  servicios, así que donde se repasan es en el resumen de la confirmación,
+  antes de guardar.
 
   Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
   viaje" es el primer candidato cuando se abra (pedido explícito del
