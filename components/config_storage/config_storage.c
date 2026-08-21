@@ -26,7 +26,8 @@
 #define PARADA_NAMESPACE      "parada"
 #define PARADA_ABIERTA_KEY    "abierta"
 #define PARADA_LUGAR_KEY      "lugar"
-#define PARADA_INICIO_KEY     "inicio"
+#define PARADA_INICIO_KEY     "inicio_ts"
+#define PARADA_COBRO_KEY      "cobro"
 #define PARADA_MONEDA_KEY     "moneda"
 #define PARADA_PRECIO_KEY     "precio"
 
@@ -311,7 +312,8 @@ esp_err_t load_parada_abierta(parada_abierta_t *out)
     nvs_get_u8(h, PARADA_ABIERTA_KEY, &abierta);
     if (abierta) {
         nvs_get_u8(h, PARADA_LUGAR_KEY, &out->lugar);
-        nvs_get_u16(h, PARADA_INICIO_KEY, &out->fecha_inicio);
+        nvs_get_u32(h, PARADA_INICIO_KEY, &out->epoch_inicio);
+        nvs_get_u8(h, PARADA_COBRO_KEY, &out->cobro);
         nvs_get_u8(h, PARADA_MONEDA_KEY, &out->moneda);
         size_t len = sizeof(out->precio);
         if (nvs_get_str(h, PARADA_PRECIO_KEY, out->precio, &len) != ESP_OK) {
@@ -320,10 +322,10 @@ esp_err_t load_parada_abierta(parada_abierta_t *out)
     }
     nvs_close(h);
 
-    /* Sin fecha de inicio no hay forma de contar las noches, asi que una
-     * parada asi se da por no abierta en vez de quedarse colgada para
-     * siempre preguntando lo que no se puede responder. */
-    out->abierta = (abierta != 0) && (out->fecha_inicio > 0);
+    /* Sin hora de inicio no hay forma de contar el tiempo, asi que una parada
+     * asi se da por no abierta en vez de quedarse colgada para siempre
+     * preguntando lo que no se puede responder. */
+    out->abierta = (abierta != 0) && (out->epoch_inicio > 0);
     return ESP_OK;
 }
 
@@ -336,7 +338,8 @@ esp_err_t save_parada_abierta(const parada_abierta_t *p)
     if (err != ESP_OK) return err;
     err = nvs_set_u8(h, PARADA_ABIERTA_KEY, p->abierta ? 1 : 0);
     if (err == ESP_OK) err = nvs_set_u8(h, PARADA_LUGAR_KEY, p->lugar);
-    if (err == ESP_OK) err = nvs_set_u16(h, PARADA_INICIO_KEY, p->fecha_inicio);
+    if (err == ESP_OK) err = nvs_set_u32(h, PARADA_INICIO_KEY, p->epoch_inicio);
+    if (err == ESP_OK) err = nvs_set_u8(h, PARADA_COBRO_KEY, p->cobro);
     if (err == ESP_OK) err = nvs_set_u8(h, PARADA_MONEDA_KEY, p->moneda);
     if (err == ESP_OK) err = nvs_set_str(h, PARADA_PRECIO_KEY, p->precio);
     if (err == ESP_OK) err = nvs_commit(h);

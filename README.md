@@ -16,7 +16,7 @@ Se reutiliza:
   `sdkconfig`).
 - La **arquitectura de red y datos** del satélite `victron_mini`
   (`~/joint/victron_mini`, ESP32-C6): recepción UDP broadcast del AP
-  `VictronConfig` de la P4, protocolo `mini_msg_t` (34 bytes, versión 3,
+  `VictronConfig` de la P4, protocolo `mini_msg_t` (36 bytes, versión 3,
   puerto 4242).
 
 > **El C6 queda descartado (20-ago-2026): esta pantalla lo sustituye.**
@@ -127,14 +127,23 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   también su refresco: se quedaba apuntando a punteros nulos y habría
   colgado la pantalla en cuanto llegara el primer paquete.
 
-  **Versión 3 del protocolo (21-ago-2026)**: se añadió `fecha_dias` — el día
-  de calendario de la P4, en días desde 1970 y en su hora local, 0 mientras su
-  RTC no tenga hora buena. Esta pantalla **no tiene reloj**: no lleva RTC ni
-  pila y se apaga con el contacto, así que al encender no sabe ni qué día es.
-  Con ese campo puede contar las noches de una parada abierta (ver Fase 2). Va
-  el día y no el instante a propósito: lo que se cuenta son **noches**, no
-  periodos de 24 h, y así tampoco hace falta saber nada de zonas horarias. El
-  mensaje pasó de 32 a 34 bytes; **subir la versión obliga a reflashear los
+  **Versión 3 del protocolo (21-ago-2026)**: se añadió `epoch_local` — el
+  reloj de la P4, en segundos desde 1970 **ya desplazados a su hora local**, 0
+  mientras su RTC no tenga hora buena. Esta pantalla **no tiene reloj**: no
+  lleva RTC ni pila y se apaga con el contacto, así que al encender no sabe ni
+  qué día es. Con ese campo cuenta lo que dura una parada abierta (ver
+  Fase 2), y le hacen falta las dos cosas: el **día** para las noches
+  (`epoch_local / 86400`) y la **hora** para las áreas que cobran por periodos
+  de 24 h desde que entras.
+
+  Desplazado a local y no en UTC **a propósito**: así el satélite saca el día
+  con una división entera y no necesita saber nada de husos ni de horario de
+  verano. En la P4 se arma a mano desde los campos de `localtime_r()` con
+  `days_from_civil`, porque su newlib no trae `tm_gmtoff` ni `timegm()` — y a
+  mano sale exacto, sin el "adivina el horario de verano" que haría `mktime()`
+  en las dos horas ambiguas del año.
+
+  El mensaje pasó de 32 a 36 bytes; **subir la versión obliga a reflashear los
   dos aparatos**.
 
   El SSID/password se guardan en **NVS**, editables sin reflashear desde la
@@ -263,11 +272,24 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   tiene ni lo uno ni lo otro. Aparecen y desaparecen igual que el contador de
   ruedas del mantenimiento.
 
-  El campo se llama **"Precio por noche"** (en el resumen, "Precio/noche", que
-  la línea entera tiene que caber en ~25 caracteres), en el área igual que en
-  el camping: es lo que se anuncia a la entrada, lo único comparable entre
-  sitios y lo que permite calcular el total cuando la parada acaba días
-  después. **Al cambiar de sitio se borran precio y servicios**, que eran del
+  El precio es **por unidad de estancia**, no el total: es lo que se anuncia a
+  la entrada y lo único que permite calcular la cuenta cuando la parada acaba
+  días después. Y la unidad no siempre es la noche — **hay áreas que cobran
+  por periodos de 24 h desde que entras** —, así que junto al precio hay un
+  interruptor **`Noche` / `24 h`**, en la misma línea que el rótulo:
+
+  - **Camping**: siempre por noches. El interruptor se esconde y el rótulo lo
+    dice entero, "Precio por noche".
+  - **Área**: sale el interruptor y el rótulo se queda en "Precio por", que
+    completa el botón marcado.
+
+  Va en la misma línea que el rótulo porque en su propia fila costaría 28 px
+  que esa pantalla no tiene: cabecera 48 + casillas 116 + fila de precio 74 +
+  acciones 50 + 12 de huecos = 300 de los 304 útiles. Por eso la fila de
+  precio de la parada no usa `make_money_field()` sino la suya,
+  `make_parada_precio_row()`.
+
+  **Al cambiar de sitio se borran precio, cobro y servicios**, que eran del
   anterior — el mismo problema que tenía el peaje guardándose el importe de la
   vez pasada.
 
@@ -288,15 +310,18 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
      [ No ]          [ Si, terminar ]
   ```
 
-  Noches = diferencia de días de calendario, **mínimo 1** (si llegas y te vas
-  el mismo día la parada ha existido igual, y se paga igual). Total = precio ×
-  noches; sin precio (pernocta gratis) no sale esa línea. Contestar **No** deja
-  la parada abierta y **se vuelve a preguntar en el siguiente arranque**, que
-  es justo lo que quieres si sigues allí.
+  La cuenta depende del cobro: **por noche** son cambios de día de calendario;
+  **por 24 h** son periodos desde que entras, **redondeando hacia arriba** (25
+  horas son 2), que es como cobran ellos — más vale que la cuenta salga alta y
+  no baja. **Mínimo 1** en los dos casos: si llegas y te vas el mismo día la
+  parada ha existido igual, y se paga igual. Total = precio × unidades; sin
+  precio (pernocta gratis) no sale esa línea. Contestar **No** deja la parada
+  abierta y **se vuelve a preguntar en el siguiente arranque**, que es justo lo
+  que quieres si sigues allí.
 
   **El reloj sale de la P4 y no de aquí**: la 3.5" no tiene RTC ni pila, se
   apaga con el contacto y al encender no sabe ni qué día es. Por eso el
-  protocolo lleva `fecha_dias` desde la versión 3 (ver abajo). **Sin ese dato
+  protocolo lleva `epoch_local` desde la versión 3 (ver arriba). **Sin ese dato
   no se abre parada** y tampoco se pregunta nada: más vale callar que
   inventarse las noches. Si la P4 está apagada o fuera de alcance, la pregunta
   espera a que aparezca.
@@ -403,7 +428,7 @@ Reused:
   2026-05-18 (same `sdkconfig`).
 - The **network/data architecture** of the `victron_mini` satellite
   (ESP32-C6): UDP broadcast reception from the P4's `VictronConfig` AP,
-  `mini_msg_t` protocol (34 bytes, version 3, port 4242).
+  `mini_msg_t` protocol (36 bytes, version 3, port 4242).
 
 > **The C6 is retired (2026-08-20): this display replaces it.**
 > `mini_proto.h` is now kept in sync with `~/joint/victron` only, and the

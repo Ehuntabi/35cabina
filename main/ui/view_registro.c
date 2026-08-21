@@ -155,6 +155,14 @@ static const char *const PARADA_CORTOS[PARADA_COUNT] = {
 };
 static lv_obj_t *s_parada_chk[PARADA_COUNT];
 static lv_obj_t *s_parada_precio_row;    /* oculto salvo area o camping */
+static lv_obj_t *s_parada_precio_lbl;    /* "Precio por" / "Precio por noche" */
+
+/* Como cobra el sitio. Un camping cobra por NOCHES; un area, segun cual: las
+ * hay por noche y las hay por periodos de 24 h desde que entras, y eso hay que
+ * decirlo al llegar, que es cuando tienes el cartel delante. */
+#define PARADA_COBRO_NOCHE  0
+#define PARADA_COBRO_24H    1
+static lv_obj_t *s_parada_cobro_bm;      /* solo visible en area */
 static lv_obj_t *s_parada_precio_ta;
 static lv_obj_t *s_parada_currency_dd;
 static lv_obj_t *s_parada_servicios_btn; /* oculto salvo area */
@@ -680,16 +688,45 @@ static bool parada_es_de_pago(void)
            lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
 }
 
-/* Lo que se apunta es el precio DE LA NOCHE, en el area igual que en el
- * camping: es lo que se anuncia a la entrada, lo unico comparable entre sitios
- * y lo que permite calcular el total cuando la parada termina dias despues.
+/* Como se paga el sitio ahora mismo. El camping siempre por noches; el area,
+ * lo que diga su interruptor. */
+static uint8_t parada_cobro_actual(void)
+{
+    if (lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED)) {
+        return PARADA_COBRO_NOCHE;
+    }
+    return (uint8_t)btnmatrix_checked(s_parada_cobro_bm, 2);
+}
+
+/* El precio es siempre POR UNIDAD DE ESTANCIA, no el total: es lo que se
+ * anuncia a la entrada y lo unico que permite calcular la cuenta cuando la
+ * parada acaba dias despues.
  *
- * La fila solo se ve en area o camping, asi que el rotulo puede ser fijo. */
+ * En un camping la unidad es la noche y no hay nada que elegir, asi que el
+ * interruptor se esconde y el rotulo lo dice entero. En un area sale el
+ * interruptor y el rotulo se queda en "Precio por", que lo completa el boton
+ * marcado: "Precio por [Noche|24 h]". */
 static void parada_refresh_extras(void)
 {
     bool pago = parada_es_de_pago();
     set_hidden(s_parada_precio_row, !pago);
     set_hidden(s_parada_servicios_btn, !pago);
+
+    bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
+    set_hidden(s_parada_cobro_bm, camping);
+    lv_label_set_text(s_parada_precio_lbl, camping ? "Precio por noche" : "Precio por");
+
+    /* Titulo del editor a pantalla completa: ahi si cabe entero. Los dos son
+     * literales, viven toda la ejecucion y se pueden guardar tal cual. */
+    lv_obj_set_user_data(s_parada_precio_ta,
+                         (void *)(parada_cobro_actual() == PARADA_COBRO_24H
+                                  ? "Precio por 24 h" : "Precio por noche"));
+}
+
+static void parada_cobro_cb(lv_event_t *e)
+{
+    (void)e;
+    parada_refresh_extras();
 }
 
 /* Vacia lo que depende del SITIO: el precio y los servicios. Al pasar de area a
@@ -699,6 +736,7 @@ static void parada_clear_extras(void)
 {
     lv_textarea_set_text(s_parada_precio_ta, "");
     lv_dropdown_set_selected(s_parada_currency_dd, 0);
+    btnmatrix_reset(s_parada_cobro_bm);
     for (uint8_t i = 0; i < SERV_COUNT; i++) {
         lv_obj_clear_state(s_serv_chk[i], LV_STATE_CHECKED);
     }
@@ -1087,7 +1125,9 @@ static void build_resumen(categoria_t cat)
                 /* "Precio/noche" y no "Precio por noche": la linea entera tiene
                  * que caber en ~25 caracteres y "Precio por noche:  25.00 EUR"
                  * son 28. En la pantalla, donde hay sitio, si va entero. */
-                int w = snprintf(extra, sizeof(extra), "\nPrecio/noche:  %s %s",
+                int w = snprintf(extra, sizeof(extra), "\nPrecio/%s:  %s %s",
+                                 parada_cobro_actual() == PARADA_COBRO_24H
+                                 ? "24h" : "noche",
                                  val_or_dash(s_parada_precio_ta),
                                  currency_of(s_parada_currency_dd));
                 if (w > 0) e = (size_t)w;
@@ -1154,11 +1194,37 @@ static void build_resumen(categoria_t cat)
  * esta pantalla no tiene RTC ni pila. Sin ese dato no se abre parada -- no
  * habria forma de contar las noches y quedaria colgada preguntando algo
  * incontestable. */
-static uint16_t fecha_hoy(void)
+static uint32_t reloj_p4(void)
 {
     mini_data_t d;
     data_model_get(&d);
-    return d.fecha_dias;      /* 0 = la P4 aun no ha dicho que dia es */
+    return d.epoch_local;     /* 0 = la P4 aun no ha dicho la hora */
+}
+
+/* Cuanto se cobra de una parada, en noches o en periodos de 24 h.
+ *
+ * NOCHE: lo que se cuenta son cambios de dia de calendario. El reloj viene ya
+ * en hora local (mini_proto.h), asi que la division entera da el dia directo.
+ * Llegas el viernes por la tarde y te vas el sabado por la manana: una noche.
+ *
+ * 24 H: periodos desde que entras, REDONDEANDO HACIA ARRIBA -- 25 horas son 2.
+ * Es como cobran ellos: pasado el plazo empieza otro, y mas vale que la cuenta
+ * salga alta y no baja.
+ *
+ * Minimo 1 en los dos casos: si llegas y te vas el mismo dia la parada ha
+ * existido igual, y se paga igual. */
+static unsigned parada_unidades(uint32_t inicio, uint32_t ahora, uint8_t cobro)
+{
+    if (ahora <= inicio) return 1;
+
+    unsigned n;
+    if (cobro == PARADA_COBRO_24H) {
+        uint32_t transcurrido = ahora - inicio;
+        n = (unsigned)((transcurrido + 86399u) / 86400u);
+    } else {
+        n = (unsigned)((ahora / 86400u) - (inicio / 86400u));
+    }
+    return n ? n : 1;
 }
 
 /* Cual de los tres sitios esta marcado, o -1 si la parada fue solo de vaciado,
@@ -1180,17 +1246,18 @@ static void parada_abrir_si_procede(void)
     int lugar = parada_lugar_marcado();
     if (lugar < 0) return;
 
-    uint16_t hoy = fecha_hoy();
-    if (hoy == 0) {
-        ESP_LOGW(TAG, "Parada guardada SIN abrir: la P4 no ha dado la fecha "
-                      "todavia, no se podrian contar las noches");
+    uint32_t ahora = reloj_p4();
+    if (ahora == 0) {
+        ESP_LOGW(TAG, "Parada guardada SIN abrir: la P4 no ha dado la hora "
+                      "todavia, no se podria contar el tiempo");
         return;
     }
 
     parada_abierta_t p = {
         .abierta      = true,
         .lugar        = (uint8_t)lugar,
-        .fecha_inicio = hoy,
+        .epoch_inicio = ahora,
+        .cobro        = parada_cobro_actual(),
         .moneda       = (uint8_t)lv_dropdown_get_selected(s_parada_currency_dd),
     };
     snprintf(p.precio, sizeof(p.precio), "%s",
@@ -1201,7 +1268,10 @@ static void parada_abrir_si_procede(void)
         ESP_LOGW(TAG, "No se pudo guardar la parada abierta: %s", esp_err_to_name(err));
         return;
     }
-    ESP_LOGI(TAG, "Parada ABIERTA en '%s' el dia %u", PARADA_OPCIONES[lugar], hoy);
+    ESP_LOGI(TAG, "Parada ABIERTA en '%s' (cobro %s) en t=%lu",
+             PARADA_OPCIONES[lugar],
+             p.cobro == PARADA_COBRO_24H ? "24h" : "noche",
+             (unsigned long)ahora);
 }
 
 /* La accion de verdad, ya confirmada. Hoy solo loguea; en la Fase 4 sera el
@@ -1241,28 +1311,31 @@ static void parada_fin_timer_cb(lv_timer_t *t)
         return;
     }
 
-    uint16_t hoy = fecha_hoy();
-    if (hoy == 0) return;      /* todavia sin fecha: seguir esperando */
+    uint32_t ahora = reloj_p4();
+    if (ahora == 0) return;    /* todavia sin hora: seguir esperando */
 
     lv_timer_del(t);
 
-    /* Minimo una noche: si llegas y te vas el mismo dia, la parada ha
-     * existido igual y en un area o un camping se paga igual. */
-    unsigned noches = (hoy > p.fecha_inicio) ? (unsigned)(hoy - p.fecha_inicio) : 1;
+    unsigned n = parada_unidades(p.epoch_inicio, ahora, p.cobro);
 
     const char *sitio = (p.lugar < PARADA_COUNT) ? PARADA_OPCIONES[p.lugar] : "Parada";
     const char *moneda = (p.moneda < (sizeof(CURRENCY_CODES) / sizeof(CURRENCY_CODES[0])))
                          ? CURRENCY_CODES[p.moneda] : "EUR";
 
+    /* "3 noches" o "3 x 24 h", segun como cobre el sitio. */
+    char cuanto[24];
+    if (p.cobro == PARADA_COBRO_24H) {
+        snprintf(cuanto, sizeof(cuanto), "%u x 24 h", n);
+    } else {
+        snprintf(cuanto, sizeof(cuanto), "%u noche%s", n, n == 1 ? "" : "s");
+    }
+
     /* El total solo si hay precio: una pernocta gratis no lo lleva. */
     if (p.precio[0]) {
-        snprintf(s_fin_resumen, sizeof(s_fin_resumen),
-                 "%s\n%u noche%s\nTotal:  %.2f %s",
-                 sitio, noches, noches == 1 ? "" : "s",
-                 atof(p.precio) * (double)noches, moneda);
+        snprintf(s_fin_resumen, sizeof(s_fin_resumen), "%s\n%s\nTotal:  %.2f %s",
+                 sitio, cuanto, atof(p.precio) * (double)n, moneda);
     } else {
-        snprintf(s_fin_resumen, sizeof(s_fin_resumen), "%s\n%u noche%s",
-                 sitio, noches, noches == 1 ? "" : "s");
+        snprintf(s_fin_resumen, sizeof(s_fin_resumen), "%s\n%s", sitio, cuanto);
     }
 
     confirm_screen_open("Fin de la parada?", s_fin_resumen, COL_VIAJE,
@@ -1559,6 +1632,79 @@ static void build_mantenimiento(lv_obj_t *form)
     make_save_button(form, "Guardar mantenimiento", save_generic_cb, (void *)(uintptr_t)CAT_MANTENIMIENTO);
 }
 
+/* Fila de precio de la parada: rotulo y tipo de cobro en la MISMA linea, y
+ * debajo el importe con su moneda.
+ *
+ * No usa make_money_field porque necesita el interruptor de cobro, y ponerlo en
+ * su propia fila costaria 28 px que esta pantalla no tiene: cabecera 48 +
+ * casillas 116 + esta fila 74 + acciones 50 + 12 de huecos = 300 de los 304
+ * utiles. En la misma linea que el rotulo sale gratis. */
+#define COBRO_H   28
+#define COBRO_W  150
+
+static lv_obj_t *make_parada_precio_row(lv_obj_t *parent)
+{
+    lv_obj_t *cont = make_field_row(parent);
+
+    lv_obj_t *head = lv_obj_create(cont);
+    lv_obj_set_size(head, lv_pct(100), COBRO_H);
+    lv_obj_set_style_bg_opa(head, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(head, 0, 0);
+    lv_obj_set_style_pad_all(head, 0, 0);
+    lv_obj_clear_flag(head, LV_OBJ_FLAG_SCROLLABLE);
+
+    s_parada_precio_lbl = lv_label_create(head);
+    lv_label_set_text(s_parada_precio_lbl, "Precio por");
+    lv_obj_set_style_text_color(s_parada_precio_lbl, lv_color_hex(COL_LABEL), 0);
+    lv_obj_set_style_text_font(s_parada_precio_lbl, &lv_font_montserrat_16, 0);
+    lv_obj_align(s_parada_precio_lbl, LV_ALIGN_LEFT_MID, 0, 0);
+
+    /* Excluyente y con "Noche" de partida: es lo normal, y el area de 24 h se
+     * marca cuando toca. Mismo criterio que make_choice_row, pero aqui la
+     * botonera va incrustada en la linea del rotulo. */
+    static const char *cobro_map[] = { "Noche", "24 h", "" };
+    s_parada_cobro_bm = lv_btnmatrix_create(head);
+    lv_btnmatrix_set_map(s_parada_cobro_bm, cobro_map);
+    lv_obj_set_size(s_parada_cobro_bm, COBRO_W, COBRO_H);
+    lv_obj_set_style_text_font(s_parada_cobro_bm, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_bg_opa(s_parada_cobro_bm, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(s_parada_cobro_bm, 0, 0);
+    lv_obj_set_style_pad_all(s_parada_cobro_bm, 0, 0);
+    lv_btnmatrix_set_btn_ctrl_all(s_parada_cobro_bm, LV_BTNMATRIX_CTRL_CHECKABLE);
+    lv_btnmatrix_set_one_checked(s_parada_cobro_bm, true);
+    lv_btnmatrix_set_btn_ctrl(s_parada_cobro_bm, PARADA_COBRO_NOCHE,
+                              LV_BTNMATRIX_CTRL_CHECKED);
+    lv_obj_align(s_parada_cobro_bm, LV_ALIGN_RIGHT_MID, 0, 0);
+    /* En RELEASED y no en VALUE_CHANGED: lv_btnmatrix avisa ya al presionar y
+     * la marca no se aplica hasta soltar (ver el comentario de las ruedas). */
+    lv_obj_add_event_cb(s_parada_cobro_bm, parada_cobro_cb, LV_EVENT_RELEASED, NULL);
+
+    lv_obj_t *row = lv_obj_create(cont);
+    lv_obj_set_size(row, lv_pct(100), FIELD_TA_H);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    s_parada_precio_ta = lv_textarea_create(row);
+    lv_textarea_set_one_line(s_parada_precio_ta, true);
+    lv_textarea_set_placeholder_text(s_parada_precio_ta, "0.00");
+    lv_obj_set_size(s_parada_precio_ta, lv_pct(62), FIELD_TA_H);
+    lv_obj_align(s_parada_precio_ta, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_text_font(s_parada_precio_ta, &lv_font_montserrat_24, 0);
+    lv_textarea_set_accepted_chars(s_parada_precio_ta, "0123456789.");
+    lv_obj_set_user_data(s_parada_precio_ta, (void *)"Precio por noche");
+    lv_obj_add_event_cb(s_parada_precio_ta, ta_click_cb, LV_EVENT_CLICKED,
+                        (void *)(uintptr_t)true);
+
+    s_parada_currency_dd = lv_dropdown_create(row);
+    lv_dropdown_set_options(s_parada_currency_dd, CURRENCY_OPTIONS);
+    lv_obj_set_size(s_parada_currency_dd, lv_pct(36), FIELD_TA_H);
+    lv_obj_align(s_parada_currency_dd, LV_ALIGN_RIGHT_MID, 0, 0);
+
+    return cont;
+}
+
 /* Pantalla de parada. Se llega desde Viaje y su Volver regresa alli, no al
  * menu: es la vuelta natural de donde has venido.
  *
@@ -1581,14 +1727,10 @@ static void build_parada(lv_obj_t *form)
                             LV_EVENT_VALUE_CHANGED, NULL);
     }
 
-    s_parada_precio_ta = make_money_field(form, "Precio por noche", &s_parada_currency_dd);
-    /* El importe vive dentro de una sub-fila de make_money_field (numero y
-     * moneda uno al lado del otro), de ahi los DOS saltos hasta la fila que hay
-     * que ocultar entera: con solo uno se quedaria el rotulo "Precio" colgado. */
-    s_parada_precio_row = lv_obj_get_parent(lv_obj_get_parent(s_parada_precio_ta));
+    s_parada_precio_row = make_parada_precio_row(form);
 
     lv_obj_t *acciones = lv_obj_create(form);
-    lv_obj_set_size(acciones, lv_pct(100), 54);
+    lv_obj_set_size(acciones, lv_pct(100), 50);
     lv_obj_set_style_bg_opa(acciones, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(acciones, 0, 0);
     lv_obj_set_style_pad_all(acciones, 0, 0);

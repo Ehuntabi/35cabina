@@ -55,14 +55,18 @@ esp_err_t save_trip_active(bool active);
 //
 // 'lugar' es el indice de la casilla de sitio en view_registro.c; el nombre
 // vive alli, aqui solo viaja el numero.
-// 'fecha_inicio' son dias desde 1970 en hora local, tal y como los manda la P4
-// (ver mini_proto.h). Siempre > 0: sin fecha valida no se abre parada, porque
-// no habria forma de contar las noches.
+// 'epoch_inicio' es el reloj de la P4 al llegar (segundos desde 1970 en su hora
+// local, ver mini_proto.h). Siempre > 0: sin hora valida no se abre parada,
+// porque no habria forma de contar el tiempo.
+// 'cobro' distingue como se paga el sitio: 0 = por noche (cambio de dia de
+// calendario), 1 = por periodos de 24 h desde que entras, que es como cobran
+// algunas areas.
 // 'precio' se guarda tal y como se tecleo ("25.00"), vacio si no lo hay.
 typedef struct {
     bool     abierta;
     uint8_t  lugar;
-    uint16_t fecha_inicio;
+    uint32_t epoch_inicio;
+    uint8_t  cobro;
     uint8_t  moneda;          // indice en CURRENCY_CODES de view_registro.c
     char     precio[16];
 } parada_abierta_t;

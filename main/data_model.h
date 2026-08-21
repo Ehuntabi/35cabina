@@ -50,11 +50,12 @@ typedef struct {
     uint8_t  water_gray;           /* grises */
     bool     water_has_data;
 
-    /* Dia de calendario de la P4 (dias desde 1970, hora local suya). 0 = aun
-     * sin dato. Es el UNICO reloj que tiene esta pantalla: no lleva RTC y se
-     * apaga con el contacto, asi que al encender no sabe ni que dia es. Lo usa
-     * la parada abierta para contar las noches (ver mini_proto.h). */
-    uint16_t fecha_dias;
+    /* Reloj de la P4: segundos desde 1970 ya desplazados a SU hora local, o 0
+     * si aun no ha dicho la hora. Es el UNICO reloj que tiene esta pantalla,
+     * que no lleva RTC y se apaga con el contacto. Lo usa la parada abierta
+     * para contar noches (dividiendo entre 86400 sale el dia) y periodos de
+     * 24 h (restando). Ver mini_proto.h. */
+    uint32_t epoch_local;
 } mini_data_t;
 
 void data_model_init(void);
