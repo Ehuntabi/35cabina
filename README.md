@@ -247,6 +247,11 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
     grande es **Anotar parada** y **Finalizar viaje** queda **pequeño y
     abajo** — la acción habitual se lleva la pantalla y la destructiva no se
     toca de un roce. La celda del menú pasa a decir "Viaje en curso".
+  - **Con una parada abierta** aparece además **Finalizar parada**, pequeño y
+    en azul, encima del rojo: cerrar una parada es rutina y terminar el viaje
+    no, así que se distinguen por color y el destructivo queda el último. Sale
+    **haya viaje o no**: si el viaje se terminó con una parada sin cerrar,
+    sigue habiendo que cerrarla y éste es el único sitio desde donde hacerlo.
 
   El estado lo lleva **la propia pantalla** y se guarda en NVS (namespace
   `viaje`, `load_trip_active()`/`save_trip_active()`), así que un corte de
@@ -316,6 +321,10 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
      [ No ]          [ Si, terminar ]
   ```
 
+  Ese aviso sale **una sola vez por encendido**. Contestar **No** deja la
+  parada abierta y no vuelve a preguntar solo: para cerrarla cuando tú quieras
+  está el botón **Finalizar parada** de la pantalla de Viaje.
+
   La cuenta depende del cobro: **por noche** son cambios de día de calendario;
   **por 24 h** son periodos desde que entras, **redondeando hacia arriba** (25
   horas son 2), que es como cobran ellos — más vale que la cuenta salga alta y
@@ -328,9 +337,18 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   **El reloj sale de la P4 y no de aquí**: la 3.5" no tiene RTC ni pila, se
   apaga con el contacto y al encender no sabe ni qué día es. Por eso el
   protocolo lleva `epoch_local` desde la versión 3 (ver arriba). **Sin ese dato
-  no se abre parada** y tampoco se pregunta nada: más vale callar que
-  inventarse las noches. Si la P4 está apagada o fuera de alcance, la pregunta
-  espera a que aparezca.
+  no se abre parada**: más vale no contar que inventarse las noches.
+
+  Pero **eso se dice, no se calla** (`confirm_screen_aviso()`, un cartel de una
+  sola salida sin el botón de "No, corregir"). Antes se guardaba la parada, la
+  pantalla decía "guardado" y por dentro no apuntaba nada, así que te ibas
+  creyendo que se estaba contando la estancia. Lo mismo al pulsar *Finalizar
+  parada* sin P4: dice por qué no puede en vez de no hacer nada, que parecería
+  que el botón está roto.
+
+  Si la P4 está apagada o fuera de alcance, la pregunta del arranque espera a
+  que aparezca. Síntoma en el log cuando no la encuentra:
+  `udp_rx: Desconectado reason=201` (`NO_AP_FOUND`) cada pocos segundos.
 
   Los **servicios** (Agua potable · Vaciado grises · Vaciado WC ·
   Electricidad · Duchas/WC · Basura) más una séptima casilla, **Valoración**,

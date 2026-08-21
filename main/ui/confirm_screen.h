@@ -38,6 +38,13 @@ void confirm_screen_open(const char *title, const char *body,
  * de la pagina con un gesto. */
 void confirm_screen_close(void);
 
+/* Aviso de una sola salida: mismo cartel, pero SIN el boton de "No, corregir".
+ * Para cuando no hay nada que elegir y solo hay que enterarse -- por ejemplo,
+ * que una parada no ha podido abrirse porque la P4 no esta y sin ella no hay
+ * reloj. El boton dice 'ok_text' y al pulsarlo solo se cierra. */
+void confirm_screen_aviso(const char *title, const char *body,
+                          uint32_t color, const char *ok_text);
+
 #ifdef __cplusplus
 }
 #endif

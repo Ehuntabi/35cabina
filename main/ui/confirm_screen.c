@@ -28,6 +28,7 @@
 static lv_obj_t *s_root;
 static lv_obj_t *s_title;
 static lv_obj_t *s_body;
+static lv_obj_t *s_no_btn;
 static lv_obj_t *s_ok_btn;
 static lv_obj_t *s_ok_lbl;
 
@@ -109,7 +110,7 @@ void confirm_screen_init(lv_obj_t *parent)
     /* "No" a la izquierda y "Si" a la derecha: el destructivo lejos del pulgar
      * que viene de confirmar, y el orden habitual de lectura. */
     lv_obj_t *no_lbl;
-    make_btn(s_root, COL_NO, no_cb, LV_ALIGN_BOTTOM_LEFT, &no_lbl);
+    s_no_btn = make_btn(s_root, COL_NO, no_cb, LV_ALIGN_BOTTOM_LEFT, &no_lbl);
     lv_label_set_text(no_lbl, "No, corregir");
 
     s_ok_btn = make_btn(s_root, COL_OK, ok_cb, LV_ALIGN_BOTTOM_RIGHT, &s_ok_lbl);
@@ -127,6 +128,8 @@ void confirm_screen_open(const char *title, const char *body,
 
     lv_label_set_text(s_title, title ? title : "");
     lv_obj_set_style_text_color(s_title, lv_color_hex(color), 0);
+    /* Puede venir oculto de un aviso anterior. */
+    lv_obj_clear_flag(s_no_btn, LV_OBJ_FLAG_HIDDEN);
     /* La letra del cuerpo se ajusta a lo que hay que contar. Entre el titulo y
      * los botones quedan ~184 px, y con letra 32 (46 px por linea) eso son
      * cuatro lineas justas: un resumen largo -- una parada con todos sus
@@ -156,6 +159,16 @@ void confirm_screen_open(const char *title, const char *body,
 
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(s_root);
+}
+
+void confirm_screen_aviso(const char *title, const char *body,
+                          uint32_t color, const char *ok_text)
+{
+    /* Se apoya en el dialogo normal y luego esconde el "No": no hay dos
+     * caminos, solo enterarse. Con callback nulo, aceptar solo cierra. */
+    confirm_screen_open(title, body, color, ok_text ? ok_text : "Entendido",
+                        NULL, NULL);
+    if (s_no_btn) lv_obj_add_flag(s_no_btn, LV_OBJ_FLAG_HIDDEN);
 }
 
 void confirm_screen_close(void)

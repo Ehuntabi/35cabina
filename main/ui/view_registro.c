@@ -128,6 +128,10 @@ static lv_obj_t *s_viaje_msg;
 static lv_obj_t *s_viaje_btn_iniciar;
 static lv_obj_t *s_viaje_btn_parada;
 static lv_obj_t *s_viaje_btn_finalizar;
+static lv_obj_t *s_viaje_btn_fin_parada;  /* solo si hay una parada abierta */
+/* Copia en memoria de si hay parada abierta, para no leer la NVS cada vez que
+ * se entra en la pantalla de Viaje. La NVS manda; esto solo la sigue. */
+static bool      s_parada_abierta;
 static lv_obj_t *s_tile_viaje_lbl;       /* texto de su casilla en el menu */
 
 /* --- Parada: donde has parado y que has hecho ------------------------------
@@ -1247,8 +1251,15 @@ static void parada_abrir_si_procede(void)
 
     uint32_t ahora = reloj_p4();
     if (ahora == 0) {
+        /* Callarse aqui era un fallo: guardabas la parada, la pantalla decia
+         * "guardado" y por dentro no apuntaba nada, asi que te ibas creyendo
+         * que se estaba contando la estancia. */
         ESP_LOGW(TAG, "Parada guardada SIN abrir: la P4 no ha dado la hora "
                       "todavia, no se podria contar el tiempo");
+        confirm_screen_aviso("Parada sin contar",
+                             "Sin la P4 no se que dia es,\nasi que no puedo contar\n"
+                             "los dias de esta parada.",
+                             COL_ACCION_STOP, "Entendido");
         return;
     }
 
@@ -1267,6 +1278,8 @@ static void parada_abrir_si_procede(void)
         ESP_LOGW(TAG, "No se pudo guardar la parada abierta: %s", esp_err_to_name(err));
         return;
     }
+    s_parada_abierta = true;
+    viaje_refresh();
     ESP_LOGI(TAG, "Parada ABIERTA en '%s' (cobro %s) en t=%lu",
              PARADA_OPCIONES[lugar],
              p.cobro == PARADA_COBRO_24H ? "24h" : "noche",
@@ -1293,27 +1306,21 @@ static void parada_do_cerrar(void *ud)
     (void)ud;
     ESP_LOGI(TAG, "CONFIRMADO fin de parada -- TODO Fase 4: enviar a la P4");
     clear_parada_abierta();
+    s_parada_abierta = false;
+    viaje_refresh();
 }
 
-/* Espera a que la P4 diga que dia es y entonces pregunta, una sola vez por
- * encendido. Contestar que NO deja la parada abierta: se volvera a preguntar
- * en el siguiente arranque, que es justo lo que se quiere si sigues alli.
- *
- * Si la P4 no aparece (apagada o fuera de alcance) no se pregunta nada y el
- * temporizador sigue mirando: mas vale callar que inventarse las noches. */
-static void parada_fin_timer_cb(lv_timer_t *t)
+/* Arma y saca el cartel de fin de parada. Devuelve false si ahora mismo no se
+ * puede: o no hay parada abierta, o la P4 todavia no ha dicho la hora y sin
+ * ella no hay nada que calcular. */
+static bool parada_pregunta_fin(void)
 {
     parada_abierta_t p;
     load_parada_abierta(&p);
-    if (!p.abierta) {          /* se cerro, o nunca la hubo */
-        lv_timer_del(t);
-        return;
-    }
+    if (!p.abierta) return false;
 
     uint32_t ahora = reloj_p4();
-    if (ahora == 0) return;    /* todavia sin hora: seguir esperando */
-
-    lv_timer_del(t);
+    if (ahora == 0) return false;
 
     unsigned n = parada_unidades(p.epoch_inicio, ahora, p.cobro);
 
@@ -1339,6 +1346,38 @@ static void parada_fin_timer_cb(lv_timer_t *t)
 
     confirm_screen_open("Fin de la parada?", s_fin_resumen, COL_VIAJE,
                         "Si, terminar", parada_do_cerrar, NULL);
+    return true;
+}
+
+/* Al arrancar: espera a que la P4 diga la hora y pregunta, una sola vez.
+ * Contestar que NO deja la parada abierta y no se vuelve a preguntar sola --
+ * para eso esta el boton de la pantalla de Viaje, que la cierra cuando tu
+ * quieras.
+ *
+ * Si la P4 no aparece (apagada o fuera de alcance) no se pregunta nada y el
+ * temporizador sigue mirando: mas vale callar que inventarse las noches. */
+static void parada_fin_timer_cb(lv_timer_t *t)
+{
+    parada_abierta_t p;
+    load_parada_abierta(&p);
+    if (!p.abierta) {          /* se cerro, o nunca la hubo */
+        lv_timer_del(t);
+        return;
+    }
+    if (parada_pregunta_fin()) lv_timer_del(t);
+}
+
+/* El boton de la pantalla de Viaje. A diferencia del aviso del arranque, aqui
+ * lo has pedido tu: si no se puede, hay que decir por que en vez de no hacer
+ * nada, que parece que el boton esta roto. */
+static void parada_fin_click_cb(lv_event_t *e)
+{
+    (void)e;
+    if (parada_pregunta_fin()) return;
+    confirm_screen_aviso("Sin la P4",
+                         "No se que dia es, asi que\nno puedo calcular lo que\n"
+                         "ha durado la parada.",
+                         COL_ACCION_STOP, "Entendido");
 }
 
 static void save_generic_cb(lv_event_t *e)
@@ -1361,6 +1400,10 @@ static void viaje_refresh(void)
     set_hidden(s_viaje_btn_iniciar,   s_viaje_activo);
     set_hidden(s_viaje_btn_parada,   !s_viaje_activo);
     set_hidden(s_viaje_btn_finalizar, !s_viaje_activo);
+    /* La parada se puede cerrar SIEMPRE que este abierta, haya viaje o no: si
+     * el viaje se termino con una parada sin cerrar, sigue habiendo que
+     * cerrarla y este es el unico sitio desde donde hacerlo. */
+    set_hidden(s_viaje_btn_fin_parada, !s_parada_abierta);
     lv_label_set_text(s_tile_viaje_lbl, s_viaje_activo ? "Viaje en curso" : "Viaje");
 }
 
@@ -1546,6 +1589,10 @@ static void build_viaje(lv_obj_t *form)
                                             COL_ACCION_OK, viaje_iniciar_cb, true);
     s_viaje_btn_parada  = make_viaje_button(form, LV_SYMBOL_PLUS "  Anotar parada",
                                             COL_VIAJE, parada_open_cb, true);
+    /* En azul y encima del rojo: cerrar una parada es rutina y terminar el viaje
+     * no, asi que se distinguen por color y el destructivo queda el ultimo. */
+    s_viaje_btn_fin_parada = make_viaje_button(form, "Finalizar parada",
+                                               COL_VIAJE, parada_fin_click_cb, false);
     s_viaje_btn_finalizar = make_viaje_button(form, LV_SYMBOL_STOP "  Finalizar viaje",
                                               COL_ACCION_STOP, viaje_finalizar_cb, false);
 }
@@ -1952,7 +1999,9 @@ void view_registro_create(lv_obj_t *parent)
      * principal. Cada 2 s: la fecha llega a 1 Hz y no hay ninguna prisa. */
     parada_abierta_t pendiente;
     load_parada_abierta(&pendiente);
-    if (pendiente.abierta) {
+    s_parada_abierta = pendiente.abierta;
+    viaje_refresh();           /* con el dato ya cargado: saca su boton */
+    if (s_parada_abierta) {
         lv_timer_create(parada_fin_timer_cb, 2000, NULL);
     }
 
