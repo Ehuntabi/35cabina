@@ -1,17 +1,21 @@
 /* confirm_screen.c - Confirmacion a pantalla completa. Ver confirm_screen.h. */
 #include "confirm_screen.h"
+#include <string.h>
 
 /* Reparto de los 320 px de alto. Los botones van abajo del todo, que es donde
  * cae el pulgar, y el resumen se CENTRA en el hueco que queda entre el titulo y
  * ellos (de ahi el desplazamiento negativo): antes estaba pegado arriba y
  * dejaba mas de 120 px en negro.
  *
- * Cuerpo en letra 32, que es el siguiente tamano COMPILADO (el proyecto trae
- * 14/16/20/22/24/32/40; la 28 no existe y no compila). Para que quepa se
- * acortaron dos rotulos en build_resumen(): "Precio/litro:" -> "Precio/L:" y
- * "Precio total:" -> "Precio:". Con eso la linea mas larga ronda los 390 px de
- * los 451 utiles. Si se anaden campos, vigilar que ninguna pase de ~25
- * caracteres o partira en dos lineas. */
+ * El cuerpo va en letra 32, 24 o 20 SEGUN LO LARGO QUE SEA (ver
+ * confirm_screen_open): con la 32 solo caben cuatro lineas de ~25 caracteres, y
+ * un resumen largo -- una parada con todos sus servicios -- se salia por abajo
+ * empujando los botones fuera de la pantalla. Tamanos COMPILADOS en el
+ * proyecto: 14/16/20/22/24/32/40 (la 28 no existe y no compila).
+ *
+ * Aun asi conviene no pasarse: build_resumen() usa nombres cortos para los
+ * tipos de parada por eso mismo, y dos rotulos van abreviados ("Precio/L:" en
+ * vez de "Precio/litro:", "Precio:" en vez de "Precio total:"). */
 #define CONF_TITLE_Y   8
 #define CONF_BODY_DY   -18
 #define CONF_BTN_H     72
@@ -123,7 +127,23 @@ void confirm_screen_open(const char *title, const char *body,
 
     lv_label_set_text(s_title, title ? title : "");
     lv_obj_set_style_text_color(s_title, lv_color_hex(color), 0);
-    lv_label_set_text(s_body, (body && body[0]) ? body : "");
+    /* La letra del cuerpo se ajusta a lo que hay que contar. Entre el titulo y
+     * los botones quedan ~184 px, y con letra 32 (46 px por linea) eso son
+     * cuatro lineas justas: un resumen largo -- una parada con todos sus
+     * servicios descritos -- se salia por abajo y empujaba los botones fuera de
+     * la pantalla.
+     *
+     * Bajando a 24 o a 20 caben mas lineas Y mas caracteres por linea (~45 con
+     * la 20, frente a ~25 con la 32), asi que el texto largo entra entero en vez
+     * de tener que resumirse. Se elige por longitud total, que es la medida
+     * barata: no hace falta afinar, solo no pasarse de alto. */
+    const char *texto = (body && body[0]) ? body : "";
+    size_t n = strlen(texto);
+    const lv_font_t *fuente = (n <= 60)  ? &lv_font_montserrat_32
+                            : (n <= 110) ? &lv_font_montserrat_24
+                                         : &lv_font_montserrat_20;
+    lv_obj_set_style_text_font(s_body, fuente, 0);
+    lv_label_set_text(s_body, texto);
     lv_label_set_text(s_ok_lbl, ok_text ? ok_text : "Si");
 
     /* El dialogo se muda a la pantalla que este activa. Nace colgado de la de

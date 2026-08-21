@@ -372,6 +372,14 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   servicios, así que donde se repasan es en el resumen de la confirmación,
   antes de guardar.
 
+  Ese resumen **describe los servicios con su nombre entero** (no "6
+  marcados", ni abreviados: "Vaciado grises" se entiende sin pensar y
+  "Grises" no). Cabe porque **el diálogo ajusta la letra a lo que haya que
+  contar** — 32, 24 o 20 según la longitud (`confirm_screen_open()`). Con la
+  32 sólo entran cuatro líneas de ~25 caracteres y un resumen largo se salía
+  por abajo empujando los botones fuera de la pantalla; con la 20 caben ~45
+  caracteres por línea y el peor caso (todo marcado) se queda en cinco.
+
   Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
   viaje" es el primer candidato cuando se abra (pedido explícito del
   usuario: que el 3.5" mande el comando de viaje, no la P4). La parada

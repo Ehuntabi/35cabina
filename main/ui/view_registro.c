@@ -177,12 +177,6 @@ static const char *const SERV_OPCIONES[SERV_COUNT] = {
     "Electricidad", "Duchas/WC", "Basura",
     "Valoracion"
 };
-/* Nombres cortos para el resumen de la confirmacion: alli el cuerpo va en
- * letra 32 y solo caben ~25 caracteres por linea (ver confirm_screen.c).
- * El de la valoracion no se usa: en su sitio va la nota elegida. */
-static const char *const SERV_CORTOS[SERV_COUNT] = {
-    "Agua", "Grises", "WC", "Luz", "Duchas", "Basura", ""
-};
 static lv_obj_t *s_serv_chk[SERV_COUNT];
 static lv_obj_t *s_serv_hint;            /* explica que se esta marcando */
 
@@ -1046,7 +1040,7 @@ static const char *val_or_dash(lv_obj_t *ta)
 
 /* Buffer del resumen. Estatico porque el dialogo lo sigue leyendo despues de
  * que save_generic_cb() haya terminado. */
-static char s_resumen[192];
+static char s_resumen[256];
 
 static void build_resumen(categoria_t cat)
 {
@@ -1118,7 +1112,7 @@ static void build_resumen(categoria_t cat)
                 used += (size_t)w;
             }
 
-            char extra[96];
+            char extra[160];
             extra[0] = '\0';
             size_t e = 0;
             /* Precio y servicios van juntos: los dos son cosa de las paradas
@@ -1138,7 +1132,7 @@ static void build_resumen(categoria_t cat)
                 /* Los servicios marcados, o su cuenta si la lista no cabe en
                  * una linea: mas vale un "4 de 6" exacto que una linea partida
                  * en dos que empuje los botones fuera de la pantalla. */
-                char serv[64];
+                char serv[128];
                 serv[0] = '\0';
                 size_t s_used = 0;
                 uint8_t marcados = 0;
@@ -1147,8 +1141,12 @@ static void build_resumen(categoria_t cat)
                     marcados++;
                     /* En el sitio de "Valoracion" va la nota elegida, que es el
                      * dato; la palabra sola no dice nada. */
+                    /* Con su nombre entero, no abreviados: el dialogo baja la
+                     * letra si hace falta y "Vaciado grises" se entiende sin
+                     * pensar, cosa que "Grises" no. En el sitio de "Valoracion"
+                     * va la nota elegida, que es el dato. */
                     const char *nombre = (i == SERV_IDX_VALORACION)
-                                         ? valoracion_elegida() : SERV_CORTOS[i];
+                                         ? valoracion_elegida() : SERV_OPCIONES[i];
                     int n = snprintf(serv + s_used, sizeof(serv) - s_used, "%s%s",
                                      s_used ? ", " : "", nombre);
                     if (n < 0 || (size_t)n >= sizeof(serv) - s_used) break;
@@ -1168,14 +1166,12 @@ static void build_resumen(categoria_t cat)
                         s_used += (size_t)n;
                     }
                 }
-                if (marcados == 0) {
-                    snprintf(extra + e, sizeof(extra) - e, "\nServicios:  --");
-                } else if (s_used <= 24) {
-                    snprintf(extra + e, sizeof(extra) - e, "\nServicios:  %s", serv);
-                } else {
-                    snprintf(extra + e, sizeof(extra) - e, "\nServicios:  %u marcados",
-                             marcados);
-                }
+                /* Se describen SIEMPRE, por largos que sean: el dialogo baja
+                 * la letra cuando hace falta (ver confirm_screen.c) y una lista
+                 * entera dice mucho mas que un "6 marcados" que obliga a
+                 * volver atras para saber cuales. */
+                snprintf(extra + e, sizeof(extra) - e, "\nServicios:  %s",
+                         marcados ? serv : "--");
             }
             snprintf(s_resumen, sizeof(s_resumen), "%s%s", used ? tipo : "--", extra);
             break;
