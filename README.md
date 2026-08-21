@@ -16,8 +16,10 @@ Se reutiliza:
   `sdkconfig`).
 - La **arquitectura de red y datos** del satélite `victron_mini`
   (`~/joint/victron_mini`, ESP32-C6): recepción UDP broadcast del AP
-  `VictronConfig` de la P4, protocolo `mini_msg_t` (36 bytes, versión 3,
-  puerto 4242).
+  de la P4 (**`ESP_DC078D`**, no `VictronConfig`: ese es sólo el valor de
+  fábrica del código de la P4, y lo que manda es lo guardado en su NVS —
+  comprobado en su log el 21-ago-2026), protocolo `mini_msg_t` (36 bytes,
+  versión 3, puerto 4242).
 
 > **El C6 queda descartado (20-ago-2026): esta pantalla lo sustituye.**
 > `mini_proto.h` ya sólo se sincroniza con `~/joint/victron`, y el protocolo
@@ -459,7 +461,7 @@ Reused:
   I2C bus, LVGL. Stability inherited from the "hang saga" closed on
   2026-05-18 (same `sdkconfig`).
 - The **network/data architecture** of the `victron_mini` satellite
-  (ESP32-C6): UDP broadcast reception from the P4's `VictronConfig` AP,
+  (ESP32-C6): UDP broadcast reception from the P4's Soft-AP (`ESP_DC078D`),
   `mini_msg_t` protocol (36 bytes, version 3, port 4242).
 
 > **The C6 is retired (2026-08-20): this display replaces it.**
