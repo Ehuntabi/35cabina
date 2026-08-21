@@ -712,9 +712,12 @@ static void parada_refresh_extras(void)
     set_hidden(s_parada_precio_row, !pago);
     set_hidden(s_parada_servicios_btn, !pago);
 
+    /* En un camping siempre se cobra por noches: el selector se esconde -- y los
+     * otros dos se reparten su hueco, que la fila es elastica -- y el rotulo lo
+     * dice entero. En un area lo dice el boton marcado del selector. */
     bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
     set_hidden(s_parada_cobro_bm, camping);
-    lv_label_set_text(s_parada_precio_lbl, camping ? "Precio por noche" : "Precio por");
+    lv_label_set_text(s_parada_precio_lbl, camping ? "Precio por noche" : "Precio");
 
     /* Titulo del editor a pantalla completa: ahi si cabe entero. Los dos son
      * literales, viven toda la ejecucion y se pueden guardar tal cual. */
@@ -1632,66 +1635,51 @@ static void build_mantenimiento(lv_obj_t *form)
     make_save_button(form, "Guardar mantenimiento", save_generic_cb, (void *)(uintptr_t)CAT_MANTENIMIENTO);
 }
 
-/* Fila de precio de la parada: rotulo y tipo de cobro en la MISMA linea, y
- * debajo el importe con su moneda.
+/* Fila de precio de la parada: importe, moneda y tipo de cobro TODOS en la
+ * misma linea, y grandes -- son los tres el mismo dato ("cuanto cuesta cada
+ * noche / cada 24 h") y leerlos de un vistazo importa mas que su tamano por
+ * separado.
  *
- * No usa make_money_field porque necesita el interruptor de cobro, y ponerlo en
- * su propia fila costaria 28 px que esta pantalla no tiene: cabecera 48 +
- * casillas 116 + esta fila 74 + acciones 50 + 12 de huecos = 300 de los 304
- * utiles. En la misma linea que el rotulo sale gratis. */
-#define COBRO_H   28
-#define COBRO_W  150
+ * Reparto elastico y no en pixeles: cuando el sitio es un camping el selector
+ * se esconde (alli siempre se cobra por noches) y los otros dos se reparten su
+ * hueco solos, en vez de dejar un agujero.
+ *
+ * No usa make_money_field porque aquella pone el importe y la moneda en letra
+ * 24 sin sitio para nada mas. Alturas: rotulo 16 + fila 52 + huecos = 74, que
+ * con cabecera 48 + casillas 116 + acciones 50 + 12 de huecos suman 300 de los
+ * 304 utiles. */
+#define PRECIO_ROW_H   52
+#define PRECIO_GROW_TA  4
+#define PRECIO_GROW_DD  2
+#define PRECIO_GROW_BM  3
 
 static lv_obj_t *make_parada_precio_row(lv_obj_t *parent)
 {
     lv_obj_t *cont = make_field_row(parent);
 
-    lv_obj_t *head = lv_obj_create(cont);
-    lv_obj_set_size(head, lv_pct(100), COBRO_H);
-    lv_obj_set_style_bg_opa(head, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(head, 0, 0);
-    lv_obj_set_style_pad_all(head, 0, 0);
-    lv_obj_clear_flag(head, LV_OBJ_FLAG_SCROLLABLE);
-
-    s_parada_precio_lbl = lv_label_create(head);
-    lv_label_set_text(s_parada_precio_lbl, "Precio por");
+    s_parada_precio_lbl = lv_label_create(cont);
+    lv_label_set_text(s_parada_precio_lbl, "Precio");
     lv_obj_set_style_text_color(s_parada_precio_lbl, lv_color_hex(COL_LABEL), 0);
     lv_obj_set_style_text_font(s_parada_precio_lbl, &lv_font_montserrat_16, 0);
-    lv_obj_align(s_parada_precio_lbl, LV_ALIGN_LEFT_MID, 0, 0);
-
-    /* Excluyente y con "Noche" de partida: es lo normal, y el area de 24 h se
-     * marca cuando toca. Mismo criterio que make_choice_row, pero aqui la
-     * botonera va incrustada en la linea del rotulo. */
-    static const char *cobro_map[] = { "Noche", "24 h", "" };
-    s_parada_cobro_bm = lv_btnmatrix_create(head);
-    lv_btnmatrix_set_map(s_parada_cobro_bm, cobro_map);
-    lv_obj_set_size(s_parada_cobro_bm, COBRO_W, COBRO_H);
-    lv_obj_set_style_text_font(s_parada_cobro_bm, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_bg_opa(s_parada_cobro_bm, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(s_parada_cobro_bm, 0, 0);
-    lv_obj_set_style_pad_all(s_parada_cobro_bm, 0, 0);
-    lv_btnmatrix_set_btn_ctrl_all(s_parada_cobro_bm, LV_BTNMATRIX_CTRL_CHECKABLE);
-    lv_btnmatrix_set_one_checked(s_parada_cobro_bm, true);
-    lv_btnmatrix_set_btn_ctrl(s_parada_cobro_bm, PARADA_COBRO_NOCHE,
-                              LV_BTNMATRIX_CTRL_CHECKED);
-    lv_obj_align(s_parada_cobro_bm, LV_ALIGN_RIGHT_MID, 0, 0);
-    /* En RELEASED y no en VALUE_CHANGED: lv_btnmatrix avisa ya al presionar y
-     * la marca no se aplica hasta soltar (ver el comentario de las ruedas). */
-    lv_obj_add_event_cb(s_parada_cobro_bm, parada_cobro_cb, LV_EVENT_RELEASED, NULL);
 
     lv_obj_t *row = lv_obj_create(cont);
-    lv_obj_set_size(row, lv_pct(100), FIELD_TA_H);
+    lv_obj_set_size(row, lv_pct(100), PRECIO_ROW_H);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(row, 0, 0);
     lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_column(row, 8, 0);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
 
     s_parada_precio_ta = lv_textarea_create(row);
     lv_textarea_set_one_line(s_parada_precio_ta, true);
     lv_textarea_set_placeholder_text(s_parada_precio_ta, "0.00");
-    lv_obj_set_size(s_parada_precio_ta, lv_pct(62), FIELD_TA_H);
-    lv_obj_align(s_parada_precio_ta, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_set_style_text_font(s_parada_precio_ta, &lv_font_montserrat_24, 0);
+    lv_obj_set_height(s_parada_precio_ta, lv_pct(100));
+    lv_obj_set_flex_grow(s_parada_precio_ta, PRECIO_GROW_TA);
+    lv_obj_set_style_text_font(s_parada_precio_ta, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_align(s_parada_precio_ta, LV_TEXT_ALIGN_CENTER, 0);
     lv_textarea_set_accepted_chars(s_parada_precio_ta, "0123456789.");
     lv_obj_set_user_data(s_parada_precio_ta, (void *)"Precio por noche");
     lv_obj_add_event_cb(s_parada_precio_ta, ta_click_cb, LV_EVENT_CLICKED,
@@ -1699,8 +1687,28 @@ static lv_obj_t *make_parada_precio_row(lv_obj_t *parent)
 
     s_parada_currency_dd = lv_dropdown_create(row);
     lv_dropdown_set_options(s_parada_currency_dd, CURRENCY_OPTIONS);
-    lv_obj_set_size(s_parada_currency_dd, lv_pct(36), FIELD_TA_H);
-    lv_obj_align(s_parada_currency_dd, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_set_height(s_parada_currency_dd, lv_pct(100));
+    lv_obj_set_flex_grow(s_parada_currency_dd, PRECIO_GROW_DD);
+    lv_obj_set_style_text_font(s_parada_currency_dd, &lv_font_montserrat_20, 0);
+
+    /* Excluyente y con "Noche" de partida: es lo normal, y el area de 24 h se
+     * marca cuando toca. */
+    static const char *cobro_map[] = { "Noche", "24 h", "" };
+    s_parada_cobro_bm = lv_btnmatrix_create(row);
+    lv_btnmatrix_set_map(s_parada_cobro_bm, cobro_map);
+    lv_obj_set_height(s_parada_cobro_bm, lv_pct(100));
+    lv_obj_set_flex_grow(s_parada_cobro_bm, PRECIO_GROW_BM);
+    lv_obj_set_style_text_font(s_parada_cobro_bm, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_bg_opa(s_parada_cobro_bm, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(s_parada_cobro_bm, 0, 0);
+    lv_obj_set_style_pad_all(s_parada_cobro_bm, 0, 0);
+    lv_btnmatrix_set_btn_ctrl_all(s_parada_cobro_bm, LV_BTNMATRIX_CTRL_CHECKABLE);
+    lv_btnmatrix_set_one_checked(s_parada_cobro_bm, true);
+    lv_btnmatrix_set_btn_ctrl(s_parada_cobro_bm, PARADA_COBRO_NOCHE,
+                              LV_BTNMATRIX_CTRL_CHECKED);
+    /* En RELEASED y no en VALUE_CHANGED: lv_btnmatrix avisa ya al presionar y
+     * la marca no se aplica hasta soltar (ver el comentario de las ruedas). */
+    lv_obj_add_event_cb(s_parada_cobro_bm, parada_cobro_cb, LV_EVENT_RELEASED, NULL);
 
     return cont;
 }

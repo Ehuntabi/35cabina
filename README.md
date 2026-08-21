@@ -280,14 +280,20 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 
   - **Camping**: siempre por noches. El interruptor se esconde y el rótulo lo
     dice entero, "Precio por noche".
-  - **Área**: sale el interruptor y el rótulo se queda en "Precio por", que
-    completa el botón marcado.
+  - **Área**: sale el interruptor y lo dice el botón marcado.
 
-  Va en la misma línea que el rótulo porque en su propia fila costaría 28 px
-  que esa pantalla no tiene: cabecera 48 + casillas 116 + fila de precio 74 +
-  acciones 50 + 12 de huecos = 300 de los 304 útiles. Por eso la fila de
-  precio de la parada no usa `make_money_field()` sino la suya,
-  `make_parada_precio_row()`.
+  **Importe, moneda y selector van los tres en la misma línea y grandes**
+  (importe en letra 32, los otros dos en 20): son el mismo dato —"cuánto
+  cuesta cada noche / cada 24 h"— y leerlo de un vistazo importa más que su
+  tamaño por separado. El reparto es **elástico** (4/2/3), no en píxeles: en
+  un camping, al esconderse el selector, importe y moneda se reparten su hueco
+  solos en vez de dejar un agujero.
+
+  Por eso la fila de precio de la parada no usa `make_money_field()` sino la
+  suya, `make_parada_precio_row()`: aquélla deja importe y moneda en letra 24
+  sin sitio para nada más. Alturas: rótulo 16 + fila 52 + huecos = 74, que con
+  cabecera 48 + casillas 116 + acciones 50 + 12 de huecos suman 300 de los 304
+  útiles.
 
   **Al cambiar de sitio se borran precio, cobro y servicios**, que eran del
   anterior — el mismo problema que tenía el peaje guardándose el importe de la
