@@ -111,27 +111,23 @@ static void wifi_configure_sta(void)
     wifi_config_t wc = {0};
     strncpy((char *)wc.sta.ssid, s_ssid, sizeof(wc.sta.ssid));
     strncpy((char *)wc.sta.password, s_pass, sizeof(wc.sta.password));
-    /* Se aceptan redes ABIERTAS, y no es un descuido.
+    /* 'threshold' es el cifrado MINIMO que se acepta y va por el valor del enum,
+     * asi que poner uno mas alto que el del AP hace que el escaneo lo descarte y
+     * el sintoma sea un enganoso "reason=201 (NO_AP_FOUND)": parece que la red
+     * no esta, cuando esta delante.
      *
-     * El AP del 7" NO se llama como el 7" cree ni va cifrado: esp_hosted (el
-     * C6 que le hace de radio) le pone SU nombre automatico, "ESP_<3 ultimos
-     * bytes de la MAC>", y lo levanta abierto. La configuracion que manda el 7"
-     * (SSID propio + WPA2) devuelve ESP_OK y se queda en el camino: verificado
-     * el 21-ago-2026 leyendo la config de vuelta con esp_wifi_get_config y
-     * escaneando desde aqui -- en el aire solo hay 'ESP_DC078D' con
-     * authmode=0. Y asi lleva desde julio: el satelite viejo (victron_mini) ya
-     * se asociaba a ese mismo nombre y abierto.
+     * Historia, porque costo una noche entera (21-ago-2026): el AP del 7" estuvo
+     * ABIERTO y llamandose "ESP_<MAC>" desde julio -- el C6 llevaba el firmware
+     * de fabrica de la placa, hablaba otro protocolo, la configuracion del AP le
+     * llegaba vacia y levantaba el suyo por defecto. Se arreglo actualizando el
+     * firmware del C6 desde el propio 7" (Ajustes -> Wi-Fi -> Actualizar radio),
+     * y desde entonces el AP es "VictronConfig" con WPA2 de verdad.
      *
-     * 'threshold' es el cifrado MINIMO aceptado y va por el valor del enum, asi
-     * que cualquier cosa por encima de OPEN descarta ese AP en el escaneo y el
-     * sintoma es un enganoso "reason=201 (NO_AP_FOUND)": parece que la red no
-     * esta, cuando esta delante. Mientras el AP siga abierto, esto tiene que
-     * quedarse en OPEN.
-     *
-     * La red es local, aislada y solo lleva telemetria del vehiculo, pero que
-     * conste que va SIN CIFRAR: si algun dia se arregla el AP en el 7", subir
-     * esto a WPA2_PSK. */
-    wc.sta.threshold.authmode = WIFI_AUTH_OPEN;
+     * Por eso esto vuelve a WPA2_PSK: acepta el AP y rechaza redes abiertas o
+     * WEP, que es de lo que protege. Si alguna vez reaparece el AP abierto, el
+     * problema esta en el C6, NO aqui: no bajar esto sin mirar antes el log del
+     * 7" ("AP en la radio: ssid=... authmode=..."). */
+    wc.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     wc.sta.pmf_cfg.required = false;
     esp_wifi_set_config(WIFI_IF_STA, &wc);
     ESP_LOGI(TAG, "AP SSID='%s'", s_ssid);
