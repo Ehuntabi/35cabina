@@ -47,6 +47,31 @@ esp_err_t save_wifi_config(const char *ssid, const char *pass);
 esp_err_t load_trip_active(bool *active_out);
 esp_err_t save_trip_active(bool active);
 
+// Parada en curso (NVS namespace: "parada").
+//
+// Una parada en un area, un camping o una pernocta puede durar varios dias, y
+// entre medias la pantalla se apaga con el contacto. Se guarda lo que hace
+// falta para cerrarla al volver: donde fue, cuando empezo y a que precio.
+//
+// 'lugar' es el indice de la casilla de sitio en view_registro.c; el nombre
+// vive alli, aqui solo viaja el numero.
+// 'fecha_inicio' son dias desde 1970 en hora local, tal y como los manda la P4
+// (ver mini_proto.h). Siempre > 0: sin fecha valida no se abre parada, porque
+// no habria forma de contar las noches.
+// 'precio' se guarda tal y como se tecleo ("25.00"), vacio si no lo hay.
+typedef struct {
+    bool     abierta;
+    uint8_t  lugar;
+    uint16_t fecha_inicio;
+    uint8_t  moneda;          // indice en CURRENCY_CODES de view_registro.c
+    char     precio[16];
+} parada_abierta_t;
+
+// Si no hay nada guardado devuelve .abierta=false (sin error).
+esp_err_t load_parada_abierta(parada_abierta_t *out);
+esp_err_t save_parada_abierta(const parada_abierta_t *p);
+esp_err_t clear_parada_abierta(void);
+
 // Calibracion de nivel del ADXL345 (NVS namespace: "tilt").
 // Offsets en centesimas de grado (deg*100), se restan de cada lectura.
 // Si no hay calibracion guardada devuelve 0/0 (sin error).

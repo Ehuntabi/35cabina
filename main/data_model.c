@@ -89,6 +89,10 @@ void data_model_update_from_msg(const struct mini_msg *msg)
         tmp.exterior_has_data   = false;
     }
 
+    /* Dia de calendario. Se copia tal cual, incluido el 0 = "la P4 aun no tiene
+     * hora buena": el que lo use ya distingue. */
+    tmp.fecha_dias = msg->fecha_dias;
+
     tmp.last_update_ms = now;
 
     portENTER_CRITICAL(&s_data_mux);

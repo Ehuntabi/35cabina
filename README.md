@@ -16,7 +16,7 @@ Se reutiliza:
   `sdkconfig`).
 - La **arquitectura de red y datos** del satélite `victron_mini`
   (`~/joint/victron_mini`, ESP32-C6): recepción UDP broadcast del AP
-  `VictronConfig` de la P4, protocolo `mini_msg_t` (32 bytes, versión 2,
+  `VictronConfig` de la P4, protocolo `mini_msg_t` (34 bytes, versión 3,
   puerto 4242).
 
 > **El C6 queda descartado (20-ago-2026): esta pantalla lo sustituye.**
@@ -71,8 +71,10 @@ Se reutiliza:
   **El orden físico de pines de los JST no está verificado** — comprobarlo
   con el esquemático oficial o un polímetro antes de enchufar.
 
-  Sin verificar aún en placa real el mapeo de ejes pitch/roll según cómo
-  quede montado el sensor (ver comentario en `tilt.c`).
+  Mapeo de ejes pitch/roll **verificado en placa real el 21-ago-2026** con el
+  sensor montado como está: cabeceo y balanceo salen en el sentido correcto.
+  Si algún día se cambia su orientación física hay que volver a comprobarlo
+  (ver comentario en `tilt.c`).
 
 ## Target / toolchain
 
@@ -124,6 +126,16 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   el `mini_msg_t`, simplemente no se pinta. Al quitarla hubo que borrar
   también su refresco: se quedaba apuntando a punteros nulos y habría
   colgado la pantalla en cuanto llegara el primer paquete.
+
+  **Versión 3 del protocolo (21-ago-2026)**: se añadió `fecha_dias` — el día
+  de calendario de la P4, en días desde 1970 y en su hora local, 0 mientras su
+  RTC no tenga hora buena. Esta pantalla **no tiene reloj**: no lleva RTC ni
+  pila y se apaga con el contacto, así que al encender no sabe ni qué día es.
+  Con ese campo puede contar las noches de una parada abierta (ver Fase 2). Va
+  el día y no el instante a propósito: lo que se cuenta son **noches**, no
+  periodos de 24 h, y así tampoco hace falta saber nada de zonas horarias. El
+  mensaje pasó de 32 a 34 bytes; **subir la versión obliga a reflashear los
+  dos aparatos**.
 
   El SSID/password se guardan en **NVS**, editables sin reflashear desde la
   **tarjeta de Wi-Fi del menú de registros** → `view_ajustes.c`; pensado
@@ -251,12 +263,43 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   tiene ni lo uno ni lo otro. Aparecen y desaparecen igual que el contador de
   ruedas del mantenimiento.
 
-  En un camping el campo pasa a llamarse **"Precio por noche"** (en el
-  resumen, "Precio/noche", que la línea entera tiene que caber en ~25
-  caracteres): es lo que ves anunciado en la entrada y lo único comparable
-  entre campings. **Al cambiar de sitio se borran precio y servicios**, que
-  eran del anterior — el mismo problema que tenía el peaje guardándose el
-  importe de la vez pasada.
+  El campo se llama **"Precio por noche"** (en el resumen, "Precio/noche", que
+  la línea entera tiene que caber en ~25 caracteres), en el área igual que en
+  el camping: es lo que se anuncia a la entrada, lo único comparable entre
+  sitios y lo que permite calcular el total cuando la parada acaba días
+  después. **Al cambiar de sitio se borran precio y servicios**, que eran del
+  anterior — el mismo problema que tenía el peaje guardándose el importe de la
+  vez pasada.
+
+  **Una parada con sitio queda ABIERTA** (`parada_abrir_si_procede()`): no
+  termina cuando la guardas, sino cuando te vas, que puede ser días después y
+  con la pantalla apagada por medio (se va con el contacto). Se guarda en NVS
+  (namespace `parada`) el sitio, el precio, la moneda y el día de llegada. Las
+  paradas de solo vaciado, llenado o agua se acaban en el sitio y no dejan
+  nada abierto.
+
+  **Al volver a encender**, en cuanto la P4 dice qué día es, sale el aviso
+  sobre la pantalla principal:
+
+  ```
+          Fin de la parada?
+          Camping · 3 noches
+          Total:  75.00 EUR
+     [ No ]          [ Si, terminar ]
+  ```
+
+  Noches = diferencia de días de calendario, **mínimo 1** (si llegas y te vas
+  el mismo día la parada ha existido igual, y se paga igual). Total = precio ×
+  noches; sin precio (pernocta gratis) no sale esa línea. Contestar **No** deja
+  la parada abierta y **se vuelve a preguntar en el siguiente arranque**, que
+  es justo lo que quieres si sigues allí.
+
+  **El reloj sale de la P4 y no de aquí**: la 3.5" no tiene RTC ni pila, se
+  apaga con el contacto y al encender no sabe ni qué día es. Por eso el
+  protocolo lleva `fecha_dias` desde la versión 3 (ver abajo). **Sin ese dato
+  no se abre parada** y tampoco se pregunta nada: más vale callar que
+  inventarse las noches. Si la P4 está apagada o fuera de alcance, la pregunta
+  espera a que aparezca.
 
   Los **servicios** (Agua potable · Vaciado grises · Vaciado WC ·
   Electricidad · Duchas/WC · Basura) más una séptima casilla, **Valoración**,
@@ -360,7 +403,7 @@ Reused:
   2026-05-18 (same `sdkconfig`).
 - The **network/data architecture** of the `victron_mini` satellite
   (ESP32-C6): UDP broadcast reception from the P4's `VictronConfig` AP,
-  `mini_msg_t` protocol (32 bytes, version 2, port 4242).
+  `mini_msg_t` protocol (34 bytes, version 3, port 4242).
 
 > **The C6 is retired (2026-08-20): this display replaces it.**
 > `mini_proto.h` is now kept in sync with `~/joint/victron` only, and the

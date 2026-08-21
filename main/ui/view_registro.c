@@ -27,6 +27,7 @@
 #include "entry_screen.h"
 #include "confirm_screen.h"
 #include "config_storage.h"
+#include "../data_model.h"
 #include "esp_log.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -154,7 +155,6 @@ static const char *const PARADA_CORTOS[PARADA_COUNT] = {
 };
 static lv_obj_t *s_parada_chk[PARADA_COUNT];
 static lv_obj_t *s_parada_precio_row;    /* oculto salvo area o camping */
-static lv_obj_t *s_parada_precio_lbl;    /* "Precio" / "Precio por noche" */
 static lv_obj_t *s_parada_precio_ta;
 static lv_obj_t *s_parada_currency_dd;
 static lv_obj_t *s_parada_servicios_btn; /* oculto salvo area */
@@ -680,23 +680,16 @@ static bool parada_es_de_pago(void)
            lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
 }
 
-/* En un camping lo que se apunta es el precio DE LA NOCHE, no el total de la
- * estancia: es lo que ves anunciado en la entrada y lo unico comparable entre
- * campings. En un area es el precio de la parada y punto.
+/* Lo que se apunta es el precio DE LA NOCHE, en el area igual que en el
+ * camping: es lo que se anuncia a la entrada, lo unico comparable entre sitios
+ * y lo que permite calcular el total cuando la parada termina dias despues.
  *
- * El rotulo se cambia en los dos sitios: el de la fila y el user_data del
- * campo, que es el titulo que saca el editor a pantalla completa. Los dos son
- * literales, asi que viven toda la ejecucion y se pueden guardar tal cual. */
+ * La fila solo se ve en area o camping, asi que el rotulo puede ser fijo. */
 static void parada_refresh_extras(void)
 {
     bool pago = parada_es_de_pago();
     set_hidden(s_parada_precio_row, !pago);
     set_hidden(s_parada_servicios_btn, !pago);
-
-    bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
-    const char *rotulo = camping ? "Precio por noche" : "Precio";
-    lv_label_set_text(s_parada_precio_lbl, rotulo);
-    lv_obj_set_user_data(s_parada_precio_ta, (void *)rotulo);
 }
 
 /* Vacia lo que depende del SITIO: el precio y los servicios. Al pasar de area a
@@ -1091,13 +1084,10 @@ static void build_resumen(categoria_t cat)
              * que se pagan (area o camping) y en una pernocta gratis no se
              * pintan ni el uno ni los otros. */
             if (parada_es_de_pago()) {
-                bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING],
-                                                LV_STATE_CHECKED);
                 /* "Precio/noche" y no "Precio por noche": la linea entera tiene
                  * que caber en ~25 caracteres y "Precio por noche:  25.00 EUR"
                  * son 28. En la pantalla, donde hay sitio, si va entero. */
-                int w = snprintf(extra, sizeof(extra), "\n%s:  %s %s",
-                                 camping ? "Precio/noche" : "Precio",
+                int w = snprintf(extra, sizeof(extra), "\nPrecio/noche:  %s %s",
                                  val_or_dash(s_parada_precio_ta),
                                  currency_of(s_parada_currency_dd));
                 if (w > 0) e = (size_t)w;
@@ -1153,6 +1143,67 @@ static void build_resumen(categoria_t cat)
     }
 }
 
+/* === Parada abierta: la que dura varios dias ==============================
+ *
+ * Una parada en un area, un camping o una pernocta no termina cuando la
+ * guardas: termina cuando te vas, que puede ser dias despues y con la pantalla
+ * apagada por medio (se va con el contacto). Asi que al guardarla queda
+ * ABIERTA, y al volver a encender se pregunta si ha terminado.
+ *
+ * El unico reloj que hay es el dia de calendario que manda la P4 (mini_proto.h):
+ * esta pantalla no tiene RTC ni pila. Sin ese dato no se abre parada -- no
+ * habria forma de contar las noches y quedaria colgada preguntando algo
+ * incontestable. */
+static uint16_t fecha_hoy(void)
+{
+    mini_data_t d;
+    data_model_get(&d);
+    return d.fecha_dias;      /* 0 = la P4 aun no ha dicho que dia es */
+}
+
+/* Cual de los tres sitios esta marcado, o -1 si la parada fue solo de vaciado,
+ * llenado o agua: esas se acaban en el sitio y no dejan nada abierto. */
+static int parada_lugar_marcado(void)
+{
+    for (uint8_t i = 0; i < sizeof(PARADA_LUGARES); i++) {
+        if (lv_obj_has_state(s_parada_chk[PARADA_LUGARES[i]], LV_STATE_CHECKED)) {
+            return PARADA_LUGARES[i];
+        }
+    }
+    return -1;
+}
+
+/* Se llama con el formulario TODAVIA lleno: show_grid() lo vacia justo
+ * despues. */
+static void parada_abrir_si_procede(void)
+{
+    int lugar = parada_lugar_marcado();
+    if (lugar < 0) return;
+
+    uint16_t hoy = fecha_hoy();
+    if (hoy == 0) {
+        ESP_LOGW(TAG, "Parada guardada SIN abrir: la P4 no ha dado la fecha "
+                      "todavia, no se podrian contar las noches");
+        return;
+    }
+
+    parada_abierta_t p = {
+        .abierta      = true,
+        .lugar        = (uint8_t)lugar,
+        .fecha_inicio = hoy,
+        .moneda       = (uint8_t)lv_dropdown_get_selected(s_parada_currency_dd),
+    };
+    snprintf(p.precio, sizeof(p.precio), "%s",
+             lv_textarea_get_text(s_parada_precio_ta));
+
+    esp_err_t err = save_parada_abierta(&p);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "No se pudo guardar la parada abierta: %s", esp_err_to_name(err));
+        return;
+    }
+    ESP_LOGI(TAG, "Parada ABIERTA en '%s' el dia %u", PARADA_OPCIONES[lugar], hoy);
+}
+
 /* La accion de verdad, ya confirmada. Hoy solo loguea; en la Fase 4 sera el
  * envio por mini_cmd_t a la P4. */
 static void do_save(void *user_data)
@@ -1160,7 +1211,62 @@ static void do_save(void *user_data)
     categoria_t cat = (categoria_t)(uintptr_t)user_data;
     ESP_LOGI(TAG, "CONFIRMADO '%s' -- TODO Fase 4: enviar por mini_cmd_t a la P4",
              CAT_NOMBRE[cat]);
+    if (cat == CAT_PARADA) parada_abrir_si_procede();
     show_grid();
+}
+
+/* --- Fin de parada, al volver a encender ---------------------------------- */
+
+static char s_fin_resumen[96];
+
+static void parada_do_cerrar(void *ud)
+{
+    (void)ud;
+    ESP_LOGI(TAG, "CONFIRMADO fin de parada -- TODO Fase 4: enviar a la P4");
+    clear_parada_abierta();
+}
+
+/* Espera a que la P4 diga que dia es y entonces pregunta, una sola vez por
+ * encendido. Contestar que NO deja la parada abierta: se volvera a preguntar
+ * en el siguiente arranque, que es justo lo que se quiere si sigues alli.
+ *
+ * Si la P4 no aparece (apagada o fuera de alcance) no se pregunta nada y el
+ * temporizador sigue mirando: mas vale callar que inventarse las noches. */
+static void parada_fin_timer_cb(lv_timer_t *t)
+{
+    parada_abierta_t p;
+    load_parada_abierta(&p);
+    if (!p.abierta) {          /* se cerro, o nunca la hubo */
+        lv_timer_del(t);
+        return;
+    }
+
+    uint16_t hoy = fecha_hoy();
+    if (hoy == 0) return;      /* todavia sin fecha: seguir esperando */
+
+    lv_timer_del(t);
+
+    /* Minimo una noche: si llegas y te vas el mismo dia, la parada ha
+     * existido igual y en un area o un camping se paga igual. */
+    unsigned noches = (hoy > p.fecha_inicio) ? (unsigned)(hoy - p.fecha_inicio) : 1;
+
+    const char *sitio = (p.lugar < PARADA_COUNT) ? PARADA_OPCIONES[p.lugar] : "Parada";
+    const char *moneda = (p.moneda < (sizeof(CURRENCY_CODES) / sizeof(CURRENCY_CODES[0])))
+                         ? CURRENCY_CODES[p.moneda] : "EUR";
+
+    /* El total solo si hay precio: una pernocta gratis no lo lleva. */
+    if (p.precio[0]) {
+        snprintf(s_fin_resumen, sizeof(s_fin_resumen),
+                 "%s\n%u noche%s\nTotal:  %.2f %s",
+                 sitio, noches, noches == 1 ? "" : "s",
+                 atof(p.precio) * (double)noches, moneda);
+    } else {
+        snprintf(s_fin_resumen, sizeof(s_fin_resumen), "%s\n%u noche%s",
+                 sitio, noches, noches == 1 ? "" : "s");
+    }
+
+    confirm_screen_open("Fin de la parada?", s_fin_resumen, COL_VIAJE,
+                        "Si, terminar", parada_do_cerrar, NULL);
 }
 
 static void save_generic_cb(lv_event_t *e)
@@ -1475,15 +1581,11 @@ static void build_parada(lv_obj_t *form)
                             LV_EVENT_VALUE_CHANGED, NULL);
     }
 
-    s_parada_precio_ta = make_money_field(form, "Precio", &s_parada_currency_dd);
+    s_parada_precio_ta = make_money_field(form, "Precio por noche", &s_parada_currency_dd);
     /* El importe vive dentro de una sub-fila de make_money_field (numero y
      * moneda uno al lado del otro), de ahi los DOS saltos hasta la fila que hay
      * que ocultar entera: con solo uno se quedaria el rotulo "Precio" colgado. */
     s_parada_precio_row = lv_obj_get_parent(lv_obj_get_parent(s_parada_precio_ta));
-    /* Hijo 0 de esa fila = el rotulo (el 1 es la sub-fila con numero y moneda).
-     * Se guarda porque cambia con el sitio: en un camping pasa a "Precio por
-     * noche". El texto de partida lo pone parada_refresh_extras(). */
-    s_parada_precio_lbl = lv_obj_get_child(s_parada_precio_row, 0);
 
     lv_obj_t *acciones = lv_obj_create(form);
     lv_obj_set_size(acciones, lv_pct(100), 54);
@@ -1697,6 +1799,16 @@ void view_registro_create(lv_obj_t *parent)
     load_trip_active(&s_viaje_activo);
     viaje_refresh();
     parada_refresh_extras();
+
+    /* Si quedo una parada sin cerrar, vigilar en segundo plano hasta que la P4
+     * diga que dia es y preguntar entonces. El dialogo se muda solo a la
+     * pantalla que este activa (ver confirm_screen.c), que al arrancar es la
+     * principal. Cada 2 s: la fecha llega a 1 Hz y no hay ninguna prisa. */
+    parada_abierta_t pendiente;
+    load_parada_abierta(&pendiente);
+    if (pendiente.abierta) {
+        lv_timer_create(parada_fin_timer_cb, 2000, NULL);
+    }
 
     /* --- Editor de campo --- */
     /* Editor de campo a pantalla completa. Se crea el ULTIMO a proposito: asi

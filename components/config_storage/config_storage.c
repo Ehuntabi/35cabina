@@ -23,6 +23,12 @@
 #define WIFI_PASS_KEY         "password"
 #define TRIP_NAMESPACE        "viaje"
 #define TRIP_ACTIVE_KEY       "activo"
+#define PARADA_NAMESPACE      "parada"
+#define PARADA_ABIERTA_KEY    "abierta"
+#define PARADA_LUGAR_KEY      "lugar"
+#define PARADA_INICIO_KEY     "inicio"
+#define PARADA_MONEDA_KEY     "moneda"
+#define PARADA_PRECIO_KEY     "precio"
 
 esp_err_t load_brightness(uint8_t *brightness_out) {
     nvs_handle_t h;
@@ -287,6 +293,65 @@ esp_err_t save_trip_active(bool active)
     esp_err_t err = nvs_open(TRIP_NAMESPACE, NVS_READWRITE, &h);
     if (err != ESP_OK) return err;
     err = nvs_set_u8(h, TRIP_ACTIVE_KEY, active ? 1 : 0);
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t load_parada_abierta(parada_abierta_t *out)
+{
+    if (!out) return ESP_ERR_INVALID_ARG;
+    memset(out, 0, sizeof(*out));
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(PARADA_NAMESPACE, NVS_READONLY, &h);
+    if (err != ESP_OK) return ESP_OK;   /* nunca hubo parada; no es un error */
+
+    uint8_t abierta = 0;
+    nvs_get_u8(h, PARADA_ABIERTA_KEY, &abierta);
+    if (abierta) {
+        nvs_get_u8(h, PARADA_LUGAR_KEY, &out->lugar);
+        nvs_get_u16(h, PARADA_INICIO_KEY, &out->fecha_inicio);
+        nvs_get_u8(h, PARADA_MONEDA_KEY, &out->moneda);
+        size_t len = sizeof(out->precio);
+        if (nvs_get_str(h, PARADA_PRECIO_KEY, out->precio, &len) != ESP_OK) {
+            out->precio[0] = '\0';
+        }
+    }
+    nvs_close(h);
+
+    /* Sin fecha de inicio no hay forma de contar las noches, asi que una
+     * parada asi se da por no abierta en vez de quedarse colgada para
+     * siempre preguntando lo que no se puede responder. */
+    out->abierta = (abierta != 0) && (out->fecha_inicio > 0);
+    return ESP_OK;
+}
+
+esp_err_t save_parada_abierta(const parada_abierta_t *p)
+{
+    if (!p) return ESP_ERR_INVALID_ARG;
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(PARADA_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_u8(h, PARADA_ABIERTA_KEY, p->abierta ? 1 : 0);
+    if (err == ESP_OK) err = nvs_set_u8(h, PARADA_LUGAR_KEY, p->lugar);
+    if (err == ESP_OK) err = nvs_set_u16(h, PARADA_INICIO_KEY, p->fecha_inicio);
+    if (err == ESP_OK) err = nvs_set_u8(h, PARADA_MONEDA_KEY, p->moneda);
+    if (err == ESP_OK) err = nvs_set_str(h, PARADA_PRECIO_KEY, p->precio);
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t clear_parada_abierta(void)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(PARADA_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    /* Basta con bajar la bandera: el resto de campos se reescriben enteros la
+     * proxima vez que se abra una parada. */
+    err = nvs_set_u8(h, PARADA_ABIERTA_KEY, 0);
     if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
     return err;

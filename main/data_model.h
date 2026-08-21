@@ -49,6 +49,12 @@ typedef struct {
     uint8_t  water_clean;          /* limpia */
     uint8_t  water_gray;           /* grises */
     bool     water_has_data;
+
+    /* Dia de calendario de la P4 (dias desde 1970, hora local suya). 0 = aun
+     * sin dato. Es el UNICO reloj que tiene esta pantalla: no lleva RTC y se
+     * apaga con el contacto, asi que al encender no sabe ni que dia es. Lo usa
+     * la parada abierta para contar las noches (ver mini_proto.h). */
+    uint16_t fecha_dias;
 } mini_data_t;
 
 void data_model_init(void);
