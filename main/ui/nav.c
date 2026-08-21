@@ -25,6 +25,24 @@ static void gesture_cb(lv_event_t *e)
     if (!indev) return;
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
 
+    /* Un deslizamiento NO es un toque.
+     *
+     * LVGL manda el CLICKED al objeto donde se APOYO el dedo cuando se levanta,
+     * aunque por el medio haya saltado un gesto (lv_indev.c:1005-1020: solo se
+     * lo salta si hubo scroll, no si hubo gesto). Sin esto pasaba lo siguiente:
+     * apoyabas el dedo sobre un campo del formulario, deslizabas, se limpiaba
+     * el formulario y se cambiaba de pantalla -- correcto -- y al levantar el
+     * dedo llegaba el clic al campo de origen, que volvia a abrir el
+     * formulario en la pantalla ya oculta. Al regresar te lo encontrabas
+     * abierto. Intermitente: solo si el dedo arrancaba encima de un widget.
+     *
+     * wait_release hace que al levantar el dedo se mande PRESS_LOST en vez de
+     * CLICKED. Va antes de decidir la direccion a proposito: el toque se anula
+     * aunque el gesto no lleve a ninguna parte (deslizar hacia la izquierda
+     * estando ya en el ultimo cromo), que si no abriria un formulario por
+     * sorpresa. */
+    lv_indev_wait_release(indev);
+
     int next = s_current;
     lv_scr_load_anim_t anim;
     if (dir == LV_DIR_LEFT && s_current < NAV_COUNT - 1) {
@@ -38,8 +56,8 @@ static void gesture_cb(lv_event_t *e)
     }
     /* Al abandonar la pagina de registros se vuelve a su menu de iconos: si no,
      * al regresar te encontrabas el formulario abierto donde lo dejaste, en vez
-     * del menu. Se pierde lo tecleado a medias, que es lo esperado -- te has
-     * ido de la pantalla. */
+     * del menu. Solo se CIERRA (formulario, editor de campo y confirmacion): lo
+     * ya tecleado se queda en los campos y sigue ahi si reabres la categoria. */
     if (s_current == NAV_REGISTRO) view_registro_reset();
 
     s_current = (uint8_t)next;

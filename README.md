@@ -184,7 +184,15 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   **Salir de la página con un gesto vuelve al menú de iconos**
   (`view_registro_reset()`, la llama `nav.c`). Antes el formulario seguía
   abierto por detrás y al regresar te lo encontrabas tal cual, en vez del
-  menú. Se pierde lo tecleado a medias, que es lo esperado: te has ido.
+  menú. Se cierran también el editor de campo y la confirmación, pero **lo
+  ya tecleado se conserva** en los campos: si reabres la categoría sigue ahí.
+
+  Y **un deslizamiento no cuenta como toque** (`lv_indev_wait_release()` en
+  `nav.c`): LVGL manda el `CLICKED` al objeto donde se apoyó el dedo aunque
+  por el medio haya saltado un gesto, así que al deslizar desde encima de un
+  campo se cambiaba de pantalla y acto seguido el clic reabría el formulario
+  por detrás — al volver te lo encontrabas abierto, de forma intermitente
+  (solo si el dedo arrancaba encima de un widget).
   Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
   viaje" es el primer candidato cuando se abra (pedido explícito del
   usuario: que el 3.5" mande el comando de viaje, no la P4).
