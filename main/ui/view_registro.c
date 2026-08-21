@@ -160,18 +160,34 @@ static lv_obj_t *s_parada_servicios_btn; /* oculto salvo area */
 
 /* Servicios que ofrece el area, en su propia pantalla: las cinco casillas de
  * parada + el precio + estas seis no caben juntas en 320 px de alto. */
-#define SERV_COUNT 6
+/* Las dos ultimas no son servicios sino como es el sitio, pero van aqui porque
+ * se apuntan en el mismo momento y de la misma manera: marcando. */
+#define SERV_COUNT           8
+#define SERV_IDX_RUIDOSO     6
+#define SERV_IDX_VALORACION  7
 static const char *const SERV_OPCIONES[SERV_COUNT] = {
     "Agua potable", "Vaciado grises", "Vaciado WC",
-    "Electricidad", "Duchas/WC", "Basura"
+    "Electricidad", "Duchas/WC", "Basura",
+    "Ruidoso", "Valoracion"
 };
 /* Nombres cortos para el resumen de la confirmacion: alli el cuerpo va en
- * letra 32 y solo caben ~25 caracteres por linea (ver confirm_screen.c). */
+ * letra 32 y solo caben ~25 caracteres por linea (ver confirm_screen.c).
+ * El de la valoracion no se usa: en su sitio va la nota elegida. */
 static const char *const SERV_CORTOS[SERV_COUNT] = {
-    "Agua", "Grises", "WC", "Luz", "Duchas", "Basura"
+    "Agua", "Grises", "WC", "Luz", "Duchas", "Basura", "Ruidoso", ""
 };
 static lv_obj_t *s_serv_chk[SERV_COUNT];
 static lv_obj_t *s_serv_hint;            /* explica que se esta marcando */
+static lv_obj_t *s_serv_grid;            /* para apretar las filas al desplegar */
+
+/* Valoracion del sitio. Tres notas, excluyentes, con el mismo mecanismo que el
+ * contador de ruedas: la casilla despliega el selector, eliges y el selector se
+ * recoge dejando la nota escrita en la propia casilla. */
+#define VALORACION_COUNT 3
+static const char *const VALORACION[VALORACION_COUNT] = {
+    "Recomendado", "Aceptable", "Sucio"
+};
+static lv_obj_t *s_serv_valoracion_bm;
 
 /* Mantenimiento: varias casillas a la vez, no una opcion. Con el mismo
  * kilometraje puedes haber hecho el aceite Y su filtro. */
@@ -217,7 +233,10 @@ static const char *const CURRENCY_CODES[] = {
 
 /* === Navegacion grid <-> formulario ===================================== */
 
-static void clear_forms(void);   /* definido abajo, junto a los widgets que toca */
+/* Definidos abajo, junto a los widgets que tocan. */
+static void clear_forms(void);
+static void valoracion_actualiza_texto(bool marcado);
+static void serv_grid_apretar(bool apretar);
 
 /* Volver al menu deja los formularios EN BLANCO: se vacian sus campos, casillas
  * y selectores. Como es el unico camino de vuelta (boton Volver, guardado
@@ -499,10 +518,15 @@ static lv_obj_t *make_choice_row(lv_obj_t *parent, const char *label_text,
 {
     lv_obj_t *cont = make_field_row(parent);
 
-    lv_obj_t *lbl = lv_label_create(cont);
-    lv_label_set_text(lbl, label_text);
-    lv_obj_set_style_text_color(lbl, lv_color_hex(COL_LABEL), 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, 0);
+    /* Sin rotulo si no hace falta: la valoracion se despliega desde su propia
+     * casilla, que ya dice lo que es, y en esa pantalla los 20 px del rotulo
+     * son la diferencia entre caber y no caber. */
+    if (label_text) {
+        lv_obj_t *lbl = lv_label_create(cont);
+        lv_label_set_text(lbl, label_text);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(COL_LABEL), 0);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, 0);
+    }
 
     lv_obj_t *bm = lv_btnmatrix_create(cont);
     lv_btnmatrix_set_map(bm, map);
@@ -527,10 +551,19 @@ static lv_obj_t *make_choice_row(lv_obj_t *parent, const char *label_text,
  * grandes; en una sola columna las cuatro no caben sin encoger. */
 #define CHK_H      32   /* alto de cada casilla con su texto */
 #define CHK_GAP     6
-/* Hueco de la pantalla de servicios, que va sobrada de alto: tres filas a 32 px
- * con 26 de separacion son 148, y con cabecera y rotulo se queda en ~216 de los
- * 304 utiles. Ver build_servicios(). */
-#define SERV_CHK_GAP  26
+/* La pantalla de servicios usa DOS huecos y los cambia sobre la marcha, porque
+ * el sitio da para uno o para el otro segun este el selector de valoracion:
+ *
+ *   selector recogido -> 48 cabecera + 20 rotulo + rejilla + 12 de huecos, con
+ *     224 px libres para la rejilla: cuatro filas a 32 con 26 de separacion son
+ *     214, entran holgadas y se ve despejado.
+ *   selector desplegado -> se le van 56 px, quedan 168 para la rejilla: a 26 de
+ *     separacion se saldria (214), asi que se aprieta a 6 y baja a 154.
+ *
+ * Apretar SOLO mientras eliges la nota es lo que permite tener las dos cosas:
+ * casillas separadas el resto del tiempo, que es cuando se tocan. */
+#define SERV_CHK_GAP           26
+#define SERV_CHK_GAP_ESTRECHO   6
 
 /* 'gap' es el hueco vertical entre filas de casillas. Mantenimiento y parada
  * van con CHK_GAP (6): ahi cada pixel esta comprometido. La pantalla de
@@ -666,6 +699,13 @@ static void parada_clear_extras(void)
     for (uint8_t i = 0; i < SERV_COUNT; i++) {
         lv_obj_clear_state(s_serv_chk[i], LV_STATE_CHECKED);
     }
+    /* La valoracion, a cero y recogida: quitar el estado a mano no dispara
+     * VALUE_CHANGED, asi que valoracion_toggle_cb no se entera y hay que
+     * deshacer a mano lo que habria hecho el. */
+    btnmatrix_reset(s_serv_valoracion_bm);
+    valoracion_actualiza_texto(false);
+    lv_obj_add_flag(lv_obj_get_parent(s_serv_valoracion_bm), LV_OBJ_FLAG_HIDDEN);
+    serv_grid_apretar(false);
 }
 
 /* Vacia TODOS los formularios. Lo llama show_grid(), o sea cada vez que se
@@ -761,6 +801,58 @@ static void ruedas_release_cb(lv_event_t *e)
     (void)e;
     ruedas_actualiza_texto(true);
     lv_obj_add_flag(lv_obj_get_parent(s_mant_ruedas_bm), LV_OBJ_FLAG_HIDDEN);
+}
+
+/* === Valoracion del sitio (misma mecanica que el contador de ruedas) ====== */
+
+static const char *valoracion_elegida(void)
+{
+    return VALORACION[btnmatrix_checked(s_serv_valoracion_bm, VALORACION_COUNT)];
+}
+
+/* Marcada, la casilla muestra la NOTA en vez de la palabra "Valoracion": asi se
+ * lee de un vistazo cual has puesto. El nombre completo no cabria --
+ * "Valoracion: Recomendado" son 23 caracteres y en media rejilla entran ~16. */
+static void valoracion_actualiza_texto(bool marcado)
+{
+    lv_checkbox_set_text(s_serv_chk[SERV_IDX_VALORACION],
+                         marcado ? valoracion_elegida()
+                                 : SERV_OPCIONES[SERV_IDX_VALORACION]);
+}
+
+/* Aprieta o suelta las filas de la rejilla segun este el selector desplegado.
+ * El porque, en SERV_CHK_GAP. */
+static void serv_grid_apretar(bool apretar)
+{
+    lv_obj_set_style_pad_row(s_serv_grid,
+                             apretar ? SERV_CHK_GAP_ESTRECHO : SERV_CHK_GAP, 0);
+}
+
+static void valoracion_toggle_cb(lv_event_t *e)
+{
+    bool marcado = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
+    set_hidden(lv_obj_get_parent(s_serv_valoracion_bm), !marcado);
+    serv_grid_apretar(marcado);
+    valoracion_actualiza_texto(marcado);
+}
+
+/* OJO, lo mismo que con las ruedas: lv_btnmatrix manda VALUE_CHANGED ya al
+ * PRESIONAR y la marca no se aplica hasta el SOLTAR. Por eso el texto se
+ * refresca en VALUE_CHANGED y el cierre se hace en RELEASED; cerrando al
+ * presionar, el dedo se levantaria sobre un objeto ya oculto y la eleccion no
+ * llegaria a aplicarse nunca. */
+static void valoracion_num_cb(lv_event_t *e)
+{
+    (void)e;
+    valoracion_actualiza_texto(true);
+}
+
+static void valoracion_release_cb(lv_event_t *e)
+{
+    (void)e;
+    valoracion_actualiza_texto(true);
+    lv_obj_add_flag(lv_obj_get_parent(s_serv_valoracion_bm), LV_OBJ_FLAG_HIDDEN);
+    serv_grid_apretar(false);
 }
 
 static lv_obj_t *make_readonly_row(lv_obj_t *parent, const char *label_text)
@@ -1000,8 +1092,12 @@ static void build_resumen(categoria_t cat)
                 for (uint8_t i = 0; i < SERV_COUNT; i++) {
                     if (!lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED)) continue;
                     marcados++;
+                    /* En el sitio de "Valoracion" va la nota elegida, que es el
+                     * dato; la palabra sola no dice nada. */
+                    const char *nombre = (i == SERV_IDX_VALORACION)
+                                         ? valoracion_elegida() : SERV_CORTOS[i];
                     int n = snprintf(serv + s_used, sizeof(serv) - s_used, "%s%s",
-                                     s_used ? ", " : "", SERV_CORTOS[i]);
+                                     s_used ? ", " : "", nombre);
                     if (n < 0 || (size_t)n >= sizeof(serv) - s_used) break;
                     s_used += (size_t)n;
                 }
@@ -1405,11 +1501,28 @@ static void build_servicios(lv_obj_t *form)
      * seis casillas, o sea 48+20+~150 de los 304 utiles. Sobraban casi 90 px
      * en negro al final, asi que se reparten entre las filas -- mas separacion
      * es menos fallo al tocar con la autocaravana en marcha. */
-    lv_obj_t *grid = make_check_grid(form, SERV_OPCIONES, SERV_COUNT, s_serv_chk,
-                                     COL_VIAJE, SERV_CHK_GAP);
+    /* Se crea con el hueco ESTRECHO y se ensancha justo despues: asi la altura
+     * minima que se reserva la fila es la del caso apretado (el que tiene que
+     * caber con el selector fuera), y el hueco ancho se lo come el espacio
+     * sobrante, que es de quien es. */
+    s_serv_grid = make_check_grid(form, SERV_OPCIONES, SERV_COUNT, s_serv_chk,
+                                  COL_VIAJE, SERV_CHK_GAP_ESTRECHO);
+    serv_grid_apretar(false);
     /* Y el bloque, centrado en lo que sobre en vez de pegado arriba. */
-    lv_obj_set_flex_align(lv_obj_get_parent(grid), LV_FLEX_ALIGN_CENTER,
+    lv_obj_set_flex_align(lv_obj_get_parent(s_serv_grid), LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
+
+    /* Selector de la nota, oculto salvo que se marque Valoracion. Sin rotulo:
+     * la casilla desde la que se despliega ya dice lo que es. */
+    static const char *valoracion_map[] = { "Recomendado", "Aceptable", "Sucio", "" };
+    s_serv_valoracion_bm = make_choice_row(form, NULL, valoracion_map);
+    lv_obj_add_flag(lv_obj_get_parent(s_serv_valoracion_bm), LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(s_serv_chk[SERV_IDX_VALORACION], valoracion_toggle_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_serv_valoracion_bm, valoracion_num_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_serv_valoracion_bm, valoracion_release_cb,
+                        LV_EVENT_RELEASED, NULL);
 }
 
 /* === Grid principal ======================================================= */

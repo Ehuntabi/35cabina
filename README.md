@@ -259,7 +259,14 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   importe de la vez pasada.
 
   Los **servicios** (Agua potable · Vaciado grises · Vaciado WC ·
-  Electricidad · Duchas/WC · Basura) son el mismo dato con dos lecturas, así
+  Electricidad · Duchas/WC · Basura) más **Ruidoso** y **Valoración** — estas
+  dos no son servicios sino cómo es el sitio, pero se apuntan en el mismo
+  momento y de la misma forma. **Valoración despliega su selector**
+  (Recomendado · Aceptable · Sucio) con la misma mecánica que el contador de
+  ruedas: eliges, el selector se recoge y la casilla se queda con **la nota
+  escrita** en vez de la palabra "Valoración" ("Valoración: Recomendado" son
+  23 caracteres y en media rejilla entran ~16). Los servicios son el mismo
+  dato con dos lecturas, así
   que comparten lista y pantalla y solo cambia el rótulo que la explica: en un
   área es *"Lo que ofrece el área"* y en un camping *"Incluido en el
   precio"*. Viven en **otra pantalla**: los 320 px
@@ -269,10 +276,14 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   guardan con la parada. El botón "Servicios" comparte fila con "Guardar" en
   vez de llevar la suya, así no cuesta ni un píxel de alto.
 
-  Esa pantalla sí va sobrada de alto (cabecera + rótulo + seis casillas), así
-  que sus casillas van **más separadas** (`SERV_CHK_GAP`, 26 px frente a los 6
-  de mantenimiento y parada) y el bloque **centrado** en lo que sobra en vez
-  de pegado arriba: más separación es menos fallo al tocar en marcha.
+  Esa pantalla usa **dos separaciones entre filas y las cambia sobre la
+  marcha**, porque el sitio da para una o para la otra: con el selector de
+  valoración recogido quedan 224 px para la rejilla y las cuatro filas van a
+  **26 px** de separación (214, holgadas); al desplegarlo se van 56 px y solo
+  quedan 168, así que las filas **se aprietan a 6** (154) mientras eliges la
+  nota. Apretar solo en ese momento es lo que permite tener las dos cosas:
+  casillas separadas el resto del tiempo, que es cuando se tocan. El bloque va
+  además **centrado** en lo que sobre, no pegado arriba.
 
   Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
   viaje" es el primer candidato cuando se abra (pedido explícito del
