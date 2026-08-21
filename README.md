@@ -404,8 +404,12 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   viaje" es el primer candidato cuando se abra (pedido explícito del
   usuario: que el 3.5" mande el comando de viaje, no la P4). La parada
   entera va detrás, por el mismo canal.
-- **Fase 3** (hecho y validado en placa real el 21-ago-2026): burbuja de nivel
-  clásica (círculo que se desplaza, sin
+- **Fase 3** (hecho y validado en placa real el 21-ago-2026): **la bola rueda
+  al lado BAJO**, como una canica — donde esté la bola, ahí va la rampa, sin
+  traducir nada mentalmente. El balanceo ya salía así; el cabeceo iba al revés
+  (las dos fórmulas de `tilt.c` no llevan el mismo signo) y se corrige en el
+  dibujo, no en el sensor, para no invertir también el ángulo escrito ni la
+  calibración guardada. Burbuja de nivel clásica (círculo que se desplaza, sin
   assets de imagen) leyendo el ADXL345 por I2C a 5Hz. Botón "Calibrar nivel"
   en la propia pantalla: promedia ~20 lecturas y guarda el offset en NVS
   (`config_storage.c`, namespace `"tilt"`). Si el sensor no responde al

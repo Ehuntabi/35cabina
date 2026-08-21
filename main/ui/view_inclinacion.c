@@ -16,21 +16,64 @@
 #include <stdio.h>
 #include <math.h>
 
-#define LEVEL_RADIUS    70   /* px, circulo exterior */
-#define BUBBLE_RADIUS   14   /* px, burbuja */
-#define MAX_DEG_SHOWN   15.0f /* a partir de esto la burbuja se pega al borde */
+/* El borde son 10 grados y no 15: nivelando una autocaravana todo lo que
+ * importa pasa entre 0 y 5, y con 15 ese recorrido se quedaba en el primer
+ * cuarto del circulo, donde no se aprecia. */
+#define LEVEL_RADIUS    100  /* px, circulo exterior */
+#define BUBBLE_RADIUS   12   /* px, burbuja */
+#define MAX_DEG_SHOWN   10.0f /* a partir de esto la burbuja se pega al borde */
+
+/* Por debajo de esto se da por nivelada: es lo que se suele dar por bueno para
+ * dormir sin notar la pendiente y para que el frigorifico de absorcion trabaje
+ * bien. Decision del usuario (21-ago-2026). */
+#define NIVELADO_DEG    0.5f
+
+/* Anillos de referencia rotulados. Sin ellos la bola te dice hacia donde, pero
+ * no CUANTO: habia que bajar la vista al texto para enterarse. */
+#define ANILLO_1_DEG    2.0f
+#define ANILLO_2_DEG    5.0f
+
+/* Radio en pixeles de una inclinacion dada. */
+#define RADIO_DE(grados) ((int)(((grados) / MAX_DEG_SHOWN) * LEVEL_RADIUS))
 
 static lv_obj_t *s_circle;
 static lv_obj_t *s_bubble;
 static lv_obj_t *s_label_deg;
 static lv_obj_t *s_label_status;
+static lv_obj_t *s_label_nivel;   /* "NIVELADA", aparte del estado */
 static lv_timer_t *s_timer;
 
 static lv_color_t color_for_level(float mag_deg)
 {
-    if (mag_deg <= 2.0f) return lv_color_hex(0x4CD964);
-    if (mag_deg <= 6.0f) return lv_color_hex(0xFFD54F);
+    if (mag_deg <= NIVELADO_DEG) return lv_color_hex(0x4CD964);   /* nivelada */
+    if (mag_deg <= ANILLO_1_DEG) return lv_color_hex(0xFFD54F);   /* casi */
     return lv_color_hex(0xFF4444);
+}
+
+/* Un anillo de referencia: circulo hueco con el borde fino. Se crean ANTES que
+ * la burbuja para que esta quede por encima. */
+static void make_anillo(lv_obj_t *padre, int radio, uint32_t color, int grosor)
+{
+    lv_obj_t *a = lv_obj_create(padre);
+    lv_obj_set_size(a, radio * 2, radio * 2);
+    lv_obj_set_style_radius(a, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(a, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(a, grosor, 0);
+    lv_obj_set_style_border_color(a, lv_color_hex(color), 0);
+    lv_obj_set_style_pad_all(a, 0, 0);
+    lv_obj_clear_flag(a, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_center(a);
+}
+
+/* Rotulo del anillo, sobre el eje horizontal y justo debajo de la linea: ahi no
+ * pisa ni la cruz ni el recorrido vertical de la bola. */
+static void make_rotulo_anillo(lv_obj_t *padre, int radio, const char *txt)
+{
+    lv_obj_t *l = lv_label_create(padre);
+    lv_label_set_text(l, txt);
+    lv_obj_set_style_text_color(l, lv_color_hex(0x777777), 0);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
+    lv_obj_align(l, LV_ALIGN_CENTER, radio - 12, 10);
 }
 
 static void calib_btn_cb(lv_event_t *e)
@@ -47,12 +90,14 @@ static void refresh_cb(lv_timer_t *t)
     if (!tilt_is_present()) {
         lv_obj_add_flag(s_bubble, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(s_label_deg, "--");
+        lv_label_set_text(s_label_nivel, "");
         lv_label_set_text(s_label_status, "Sensor ADXL345 no detectado");
         return;
     }
 
     float pitch, roll;
     if (!tilt_get(&pitch, &roll)) {
+        lv_label_set_text(s_label_nivel, "");
         lv_label_set_text(s_label_status, "Error de lectura I2C");
         return;
     }
@@ -60,14 +105,30 @@ static void refresh_cb(lv_timer_t *t)
 
     float cr = roll  >  MAX_DEG_SHOWN ?  MAX_DEG_SHOWN : (roll  < -MAX_DEG_SHOWN ? -MAX_DEG_SHOWN : roll);
     float cp = pitch >  MAX_DEG_SHOWN ?  MAX_DEG_SHOWN : (pitch < -MAX_DEG_SHOWN ? -MAX_DEG_SHOWN : pitch);
+    /* La bola rueda al lado BAJO, como una canica: donde este la bola, ahi va la
+     * rampa. Asi no hay que traducir nada mentalmente al nivelar.
+     *
+     * El balanceo ya salia asi, pero el cabeceo iba al reves (levantabas el
+     * morro y la bola se iba hacia delante, o sea al lado ALTO): las dos
+     * formulas de tilt.c no llevan el mismo signo, una tiene el menos y la otra
+     * no. Se corrige AQUI, en el dibujo, y no en tilt.c a proposito: alli
+     * cambiaria tambien el signo del angulo que se escribe debajo ("Cabeceo
+     * +2.3") y el de la calibracion ya guardada en NVS, que no tienen nada de
+     * malo. */
     int off_x = (int)((cr / MAX_DEG_SHOWN) * (LEVEL_RADIUS - BUBBLE_RADIUS));
-    int off_y = (int)((cp / MAX_DEG_SHOWN) * (LEVEL_RADIUS - BUBBLE_RADIUS));
+    int off_y = -(int)((cp / MAX_DEG_SHOWN) * (LEVEL_RADIUS - BUBBLE_RADIUS));
     lv_obj_align(s_bubble, LV_ALIGN_CENTER, off_x, off_y);
 
     float mag = fabsf(pitch) > fabsf(roll) ? fabsf(pitch) : fabsf(roll);
     lv_color_t col = color_for_level(mag);
     lv_obj_set_style_bg_color(s_bubble, col, 0);
     lv_obj_set_style_border_color(s_circle, col, 0);
+
+    /* Que este nivelada se dice ADEMAS con palabras: el color solo no vale si
+     * lo miras de reojo desde fuera del vehiculo, colocando las rampas. */
+    /* En su propia linea y no en la de estado: esa la usa el boton de calibrar
+     * ("Calibrando...", "Calibrado") y el refresco de 200 ms se la comeria. */
+    lv_label_set_text(s_label_nivel, mag <= NIVELADO_DEG ? "NIVELADA" : "");
 
     char buf[48];
     snprintf(buf, sizeof(buf), "Cabeceo %+.1f\xC2\xB0\nBalanceo %+.1f\xC2\xB0", pitch, roll);
@@ -102,22 +163,38 @@ void view_inclinacion_create(lv_obj_t *parent)
     lv_obj_clear_flag(s_circle, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_center(s_circle);
 
-    /* Cruz central de referencia (nivel = 0,0) */
+    /* Anillos de referencia, de fuera adentro. El del centro es la zona de
+     * NIVELADO y va en verde: cuando la bola entra ahi, ya puedes parar. Es
+     * pequeno (0,5 grados a esta escala son 5 px) y la propia bola lo tapa --
+     * a proposito: taparlo ES la senal. */
+    make_anillo(s_circle, RADIO_DE(ANILLO_2_DEG), 0x555555, 1);
+    make_anillo(s_circle, RADIO_DE(ANILLO_1_DEG), 0x555555, 1);
+    make_anillo(s_circle, RADIO_DE(NIVELADO_DEG), 0x4CD964, 2);
+
+    /* Cruz central de referencia (nivel = 0,0), de lado a lado */
+    /* 2 px y gris claro: a 1 px y en 0x444444 sobre el fondo casi negro del
+     * dial no se veia, que es como no tenerla. */
     lv_obj_t *cross_h = lv_obj_create(s_circle);
-    lv_obj_set_size(cross_h, LEVEL_RADIUS, 1);
-    lv_obj_set_style_bg_color(cross_h, lv_color_hex(0x444444), 0);
+    lv_obj_set_size(cross_h, LEVEL_RADIUS * 2, 2);
+    lv_obj_set_style_bg_color(cross_h, lv_color_hex(0x888888), 0);
     lv_obj_set_style_bg_opa(cross_h, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(cross_h, 0, 0);
     lv_obj_clear_flag(cross_h, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_center(cross_h);
 
     lv_obj_t *cross_v = lv_obj_create(s_circle);
-    lv_obj_set_size(cross_v, 1, LEVEL_RADIUS);
-    lv_obj_set_style_bg_color(cross_v, lv_color_hex(0x444444), 0);
+    lv_obj_set_size(cross_v, 2, LEVEL_RADIUS * 2);
+    lv_obj_set_style_bg_color(cross_v, lv_color_hex(0x888888), 0);
     lv_obj_set_style_bg_opa(cross_v, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(cross_v, 0, 0);
     lv_obj_clear_flag(cross_v, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_center(cross_v);
+
+    /* Cuanto vale cada anillo, escrito. Sin esto los anillos decoran pero no
+     * miden. */
+    make_rotulo_anillo(s_circle, RADIO_DE(ANILLO_1_DEG), "2");
+    make_rotulo_anillo(s_circle, RADIO_DE(ANILLO_2_DEG), "5");
+    make_rotulo_anillo(s_circle, LEVEL_RADIUS, "10\xC2\xB0");
 
     s_bubble = lv_obj_create(s_circle);
     lv_obj_set_size(s_bubble, BUBBLE_RADIUS * 2, BUBBLE_RADIUS * 2);
@@ -147,8 +224,13 @@ void view_inclinacion_create(lv_obj_t *parent)
     s_label_deg = lv_label_create(right);
     lv_label_set_text(s_label_deg, "--");
     lv_obj_set_style_text_color(s_label_deg, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_font(s_label_deg, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(s_label_deg, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_align(s_label_deg, LV_TEXT_ALIGN_CENTER, 0);
+
+    s_label_nivel = lv_label_create(right);
+    lv_label_set_text(s_label_nivel, "");
+    lv_obj_set_style_text_color(s_label_nivel, lv_color_hex(0x4CD964), 0);
+    lv_obj_set_style_text_font(s_label_nivel, &lv_font_montserrat_22, 0);
 
     s_label_status = lv_label_create(right);
     lv_label_set_text(s_label_status, "");
