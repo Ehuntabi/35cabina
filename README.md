@@ -235,14 +235,25 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   preguntárselo. Si las dos se descoordinan, hoy no se enteran.
 
   **Parada** (`build_parada`) cuelga de Viaje y su Volver regresa allí, no al
-  menú. Casillas de marcar **varias a la vez** — en un área sueles vaciar Y
-  llenar en la misma parada: Vaciado · Llenado · Pernocta gratis · Área ·
-  Camping. El **precio** (con moneda) solo aparece si marcas Área o Camping,
-  y el botón **Servicios** solo si marcas Área, igual que el contador de
+  menú. Cinco casillas de dos clases distintas:
+
+  - **Lo que haces** — Vaciado · Llenado. Se marcan libremente y a la vez: en
+    un área sueles vaciar Y llenar en la misma parada.
+  - **Dónde has parado** — Pernocta gratis · Área · Camping. Los tres son
+    **excluyentes**: al marcar uno se **desmarcan solos** los otros dos. Se
+    hace desmarcando y no poniéndolos en gris para que cambiar de idea sea un
+    único toque sobre el que quieres, sin acordarse de quitar el anterior.
+
+  **Área y Camping son las paradas que se pagan**, así que solo ellas sacan el
+  **precio** (con moneda) y el botón de **Servicios**; una pernocta gratis no
+  tiene ni lo uno ni lo otro. Aparecen y desaparecen igual que el contador de
   ruedas del mantenimiento.
 
-  Los **servicios del área** (Agua potable · Vaciado grises · Vaciado WC ·
-  Electricidad · Duchas/WC · Basura) viven en **otra pantalla**: los 320 px
+  Los **servicios** (Agua potable · Vaciado grises · Vaciado WC ·
+  Electricidad · Duchas/WC · Basura) son el mismo dato con dos lecturas, así
+  que comparten lista y pantalla y solo cambia el rótulo que la explica: en un
+  área es *"Lo que ofrece el área"* y en un camping *"Incluido en el
+  precio"*. Viven en **otra pantalla**: los 320 px
   de alto ya van justos (48 de cabecera + 116 de las cinco casillas + 62 del
   precio + 54 de la fila de acciones = 280 de los 304 útiles), y seis
   casillas más no caben de ninguna manera. No llevan botón de guardar: se

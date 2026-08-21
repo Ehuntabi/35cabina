@@ -130,9 +130,17 @@ static lv_obj_t *s_tile_viaje_lbl;       /* texto de su casilla en el menu */
 
 /* --- Parada: donde has parado y que has hecho ------------------------------
  * Varias a la vez: en un area sueles vaciar Y llenar en la misma parada. */
-#define PARADA_COUNT        5
-#define PARADA_IDX_AREA     3
-#define PARADA_IDX_CAMPING  4
+#define PARADA_COUNT         5
+#define PARADA_IDX_PERNOCTA  2
+#define PARADA_IDX_AREA      3
+#define PARADA_IDX_CAMPING   4
+
+/* Los tres SITIOS son excluyentes entre si: has parado en un sitio de un tipo,
+ * no en dos a la vez. Vaciado y llenado quedan fuera de esta lista a proposito
+ * -- son cosas que HACES, y se pueden hacer en cualquiera de los tres. */
+static const uint8_t PARADA_LUGARES[] = {
+    PARADA_IDX_PERNOCTA, PARADA_IDX_AREA, PARADA_IDX_CAMPING
+};
 static const char *const PARADA_OPCIONES[PARADA_COUNT] = {
     "Vaciado", "Llenado", "Pernocta gratis", "Area", "Camping"
 };
@@ -155,6 +163,7 @@ static const char *const SERV_CORTOS[SERV_COUNT] = {
     "Agua", "Grises", "WC", "Luz", "Duchas", "Basura"
 };
 static lv_obj_t *s_serv_chk[SERV_COUNT];
+static lv_obj_t *s_serv_hint;            /* explica que se esta marcando */
 
 /* Mantenimiento: varias casillas a la vez, no una opcion. Con el mismo
  * kilometraje puedes haber hecho el aceite Y su filtro. */
@@ -597,15 +606,25 @@ static void btnmatrix_reset(lv_obj_t *bm)
     lv_btnmatrix_set_btn_ctrl(bm, 0, LV_BTNMATRIX_CTRL_CHECKED);
 }
 
-/* El precio solo tiene sentido en un area o un camping (una pernocta gratis no
- * se paga), y los servicios solo en un area. Aparecen y desaparecen segun las
- * casillas marcadas, igual que el contador de ruedas del mantenimiento. */
+/* Area y camping son las paradas que se PAGAN: solo ellas sacan el precio y la
+ * lista de servicios. Una pernocta gratis no tiene ni lo uno ni lo otro.
+ * Aparecen y desaparecen segun las casillas, igual que el contador de ruedas
+ * del mantenimiento.
+ *
+ * Los servicios son el mismo dato con dos lecturas: en un area es lo que
+ * OFRECE y en un camping lo que va INCLUIDO en el precio. Misma lista y misma
+ * pantalla; lo unico que cambia es el rotulo que la explica. */
+static bool parada_es_de_pago(void)
+{
+    return lv_obj_has_state(s_parada_chk[PARADA_IDX_AREA], LV_STATE_CHECKED) ||
+           lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
+}
+
 static void parada_refresh_extras(void)
 {
-    bool area    = lv_obj_has_state(s_parada_chk[PARADA_IDX_AREA], LV_STATE_CHECKED);
-    bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
-    set_hidden(s_parada_precio_row, !(area || camping));
-    set_hidden(s_parada_servicios_btn, !area);
+    bool pago = parada_es_de_pago();
+    set_hidden(s_parada_precio_row, !pago);
+    set_hidden(s_parada_servicios_btn, !pago);
 }
 
 /* Vacia TODOS los formularios. Lo llama show_grid(), o sea cada vez que se
@@ -916,16 +935,16 @@ static void build_resumen(categoria_t cat)
             char extra[96];
             extra[0] = '\0';
             size_t e = 0;
-            bool area    = lv_obj_has_state(s_parada_chk[PARADA_IDX_AREA], LV_STATE_CHECKED);
-            bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
-            if (area || camping) {
+            /* Precio y servicios van juntos: los dos son cosa de las paradas
+             * que se pagan (area o camping) y en una pernocta gratis no se
+             * pintan ni el uno ni los otros. */
+            if (parada_es_de_pago()) {
                 int w = snprintf(extra, sizeof(extra), "\nPrecio:  %s %s",
                                  val_or_dash(s_parada_precio_ta),
                                  currency_of(s_parada_currency_dd));
                 if (w > 0) e = (size_t)w;
-            }
-            if (area) {
-                int w = snprintf(extra + e, sizeof(extra) - e, "\nServicios:  ");
+
+                w = snprintf(extra + e, sizeof(extra) - e, "\nServicios:  ");
                 if (w > 0 && (size_t)w < sizeof(extra) - e) {
                     e += (size_t)w;
                     bool alguno = false;
@@ -1024,12 +1043,30 @@ static void parada_open_cb(lv_event_t *e)
 static void servicios_open_cb(lv_event_t *e)
 {
     (void)e;
+    /* El rotulo dice que se esta marcando, que no es lo mismo segun donde
+     * hayas parado: en un area, lo que la instalacion ofrece; en un camping,
+     * lo que ya va pagado en el precio de la noche. */
+    bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
+    lv_label_set_text(s_serv_hint, camping ? "Incluido en el precio"
+                                           : "Lo que ofrece el area");
     show_form(CAT_SERVICIOS);
 }
 
-static void parada_toggle_cb(lv_event_t *e)
+/* Al marcar un sitio se desmarcan los otros dos, en vez de bloquearlos en gris:
+ * asi cambiar de idea es UN toque sobre el que quieres, sin acordarse de quitar
+ * antes el anterior -- que es lo que hace falta con el vehiculo parando.
+ *
+ * No se llama a si mismo en cadena: lv_obj_clear_state() no dispara
+ * LV_EVENT_VALUE_CHANGED, solo lo hace el toque del usuario. */
+static void parada_lugar_cb(lv_event_t *e)
 {
-    (void)e;
+    lv_obj_t *target = lv_event_get_target(e);
+    if (lv_obj_has_state(target, LV_STATE_CHECKED)) {
+        for (uint8_t i = 0; i < sizeof(PARADA_LUGARES); i++) {
+            lv_obj_t *otro = s_parada_chk[PARADA_LUGARES[i]];
+            if (otro != target) lv_obj_clear_state(otro, LV_STATE_CHECKED);
+        }
+    }
     parada_refresh_extras();
 }
 
@@ -1244,10 +1281,10 @@ static void build_parada(lv_obj_t *form)
     add_header(form, "PARADA", lv_color_hex(COL_VIAJE), CAT_VIAJE);
 
     make_check_grid(form, PARADA_OPCIONES, PARADA_COUNT, s_parada_chk, COL_VIAJE);
-    lv_obj_add_event_cb(s_parada_chk[PARADA_IDX_AREA], parada_toggle_cb,
-                        LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(s_parada_chk[PARADA_IDX_CAMPING], parada_toggle_cb,
-                        LV_EVENT_VALUE_CHANGED, NULL);
+    for (uint8_t i = 0; i < sizeof(PARADA_LUGARES); i++) {
+        lv_obj_add_event_cb(s_parada_chk[PARADA_LUGARES[i]], parada_lugar_cb,
+                            LV_EVENT_VALUE_CHANGED, NULL);
+    }
 
     s_parada_precio_ta = make_money_field(form, "Precio", &s_parada_currency_dd);
     /* El importe vive dentro de una sub-fila de make_money_field (numero y
@@ -1289,6 +1326,14 @@ static void build_servicios(lv_obj_t *form)
      * (ver el tope de add_header). No hace falta el "del area": aqui se llega
      * desde el boton Servicios de la parada, que solo sale al marcar Area. */
     add_header(form, "SERVICIOS", lv_color_hex(COL_VIAJE), CAT_PARADA);
+
+    /* El texto lo pone servicios_open_cb segun sea area o camping. */
+    s_serv_hint = lv_label_create(form);
+    lv_label_set_text(s_serv_hint, "");
+    lv_obj_set_style_text_color(s_serv_hint, lv_color_hex(COL_LABEL), 0);
+    lv_obj_set_style_text_font(s_serv_hint, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(s_serv_hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(s_serv_hint, lv_pct(100));
 
     /* Sin boton de guardar: lo marcado aqui se guarda con la parada. El Volver
      * de la cabecera devuelve a ella con las casillas puestas. */
