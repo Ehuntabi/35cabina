@@ -30,11 +30,11 @@
  * (strapping: los pull-ups del I2C alterarian el arranque) y los que ya usa
  * la pantalla/tactil (1, 4, 8, 21, 38, 39, 40, 45, 47, 48).
  *
- * OJO mapeo de ejes: pitch/roll asumen una orientacion de montaje concreta
- * del sensor respecto al chasis. Falta verificar en la placa real que
- * "pitch" = cabeceo delante-atras y "roll" = balanceo izda-dcha segun como
- * quede fisicamente pegado el ADXL345 -- si sale cruzado, intercambiar
- * ax/ay en las formulas de abajo.
+ * MAPEO DE EJES: VERIFICADO en placa real el 21-ago-2026 con el sensor montado
+ * como esta. "pitch" sale como cabeceo delante-atras y "roll" como balanceo
+ * izda-dcha, en el sentido correcto. Si algun dia se cambia la orientacion
+ * fisica del ADXL345 hay que volver a comprobarlo: la correccion seria
+ * intercambiar ax/ay en las formulas de abajo.
  */
 #include "tilt.h"
 #include "config_storage.h"

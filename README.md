@@ -212,18 +212,20 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
   viaje" es el primer candidato cuando se abra (pedido explícito del
   usuario: que el 3.5" mande el comando de viaje, no la P4).
-- **Fase 3** (hecho; sensor ya detectado en placa real el 20-ago-2026, falta
-  validar la lectura): burbuja de nivel clásica (círculo que se desplaza, sin
+- **Fase 3** (hecho y validado en placa real el 21-ago-2026): burbuja de nivel
+  clásica (círculo que se desplaza, sin
   assets de imagen) leyendo el ADXL345 por I2C a 5Hz. Botón "Calibrar nivel"
   en la propia pantalla: promedia ~20 lecturas y guarda el offset en NVS
   (`config_storage.c`, namespace `"tilt"`). Si el sensor no responde al
   arrancar, la pantalla lo indica ("Sensor ADXL345 no detectado") en vez de
   fallar.
 
-  Estado real: con el ADXL345 cableado a IO17/IO18 el arranque ya dice
-  `tilt: ADXL345 OK`. **Pendiente**: calibrar con la autocaravana nivelada y
-  comprobar que pitch/roll no salen cruzados según la orientación de montaje
-  (ver `tilt.c`).
+  Estado real: con el ADXL345 cableado a IO17/IO18 el arranque dice
+  `tilt: ADXL345 OK` y **el mapeo de ejes está comprobado** — cabeceo y
+  balanceo salen en el sentido correcto con el sensor montado como está, así
+  que no hay que intercambiar `ax`/`ay` en `tilt.c`. **Pendiente**: calibrar
+  con la autocaravana nivelada (botón "Calibrar nivel", guarda el offset en
+  NVS y solo hay que hacerlo una vez).
 - **Fase 4** (fuera de este repo, requiere luz verde aparte): canal de
   vuelta hacia la P4 (`~/joint/victron`) para que los repostajes/bombona
   lleguen al "viaje" (`trip_manager.c`).
