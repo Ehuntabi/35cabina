@@ -16,20 +16,30 @@
 #include <stdio.h>
 #include <math.h>
 
-/* El borde son 10 grados y no 15: nivelando una autocaravana todo lo que
- * importa pasa entre 0 y 5, y con 15 ese recorrido se quedaba en el primer
- * cuarto del circulo, donde no se aprecia. */
+/* El borde son 6 grados, que es lo que aguanta un frigo de absorcion de morro a
+ * cola segun la especificacion de Dometic (3 de lado a lado). Empezo en 15, con
+ * lo que todo lo util quedaba en el primer cuarto del circulo y la bola apenas
+ * se movia. */
 /* 120 de radio = 240 px de dial, el maximo que entra a lo ancho: 240 del dial
  * + 200 de la columna de lecturas + los 10 de margen a cada lado suman 460 de
  * los 480. De alto sobra (240 de 300). */
 #define LEVEL_RADIUS    120  /* px, circulo exterior */
 #define BUBBLE_RADIUS   14   /* px, burbuja */
-#define MAX_DEG_SHOWN   10.0f /* a partir de esto la burbuja se pega al borde */
+#define MAX_DEG_SHOWN   6.0f  /* a partir de esto la burbuja se pega al borde */
 
-/* Por debajo de esto se da por nivelada: es lo que se suele dar por bueno para
- * dormir sin notar la pendiente y para que el frigorifico de absorcion trabaje
- * bien. Decision del usuario (21-ago-2026). */
-#define NIVELADO_DEG    0.5f
+/* Por debajo de esto se da por nivelada.
+ *
+ * Empezo en 0,5 y era irreal: medio centimetro por metro, mas fino que la
+ * precision del propio montaje del sensor, y no lo pide ni el frigo ni la
+ * espalda. Los numeros de verdad (Dometic, referencia del sector): un frigo de
+ * absorcion aguanta 3 grados de lado a lado y 6 de morro a cola, y avisan de no
+ * dejarlo desnivelado mas de 1-2 horas funcionando, porque el amoniaco
+ * cristaliza y taponaria el circuito. Para dormir, la pendiente se empieza a
+ * notar sobre 1-2 grados.
+ *
+ * Asi que 1 grado para el verde: comodo para dormir y de sobra para el frigo.
+ * Decision del usuario (21-ago-2026). */
+#define NIVELADO_DEG    1.0f
 
 /* Anillos de referencia rotulados. Sin ellos la bola te dice hacia donde, pero
  * no CUANTO: habia que bajar la vista al texto para enterarse.
@@ -37,13 +47,17 @@
  * Van en SEMAFORO, de dentro afuera, y la bola toma el color del anillo en el
  * que esta: asi el color solo ya dice si vas bien, sin comparar posiciones ni
  * leer los numeros. */
-#define ANILLO_1_DEG    2.0f
-#define ANILLO_2_DEG    5.0f
+/* Lo que aguanta un frigo de absorcion NO es igual en los dos ejes (Dometic):
+ * 3 grados de lado a lado y 6 de morro a cola, porque va montado de costado.
+ * Asi que la zona aceptable es un OVALO, no un circulo: estrecho en balanceo y
+ * alto en cabeceo. Dibujarla redonda seria mentir por los dos lados a la vez --
+ * te asustaria de mas cabeceando y de menos balanceando. */
+#define AMBAR_ROLL_DEG    3.0f   /* lado a lado */
+#define AMBAR_PITCH_DEG   6.0f   /* morro a cola */
 
-#define COL_NIVEL   0x4CD964   /* verde   - nivelada, hasta 0,5 */
-#define COL_CASI    0xFFD54F   /* ambar   - hasta 2 */
-#define COL_REGULAR 0xFF9800   /* naranja - hasta 5 */
-#define COL_MAL     0xFF4444   /* rojo    - mas de 5 */
+#define COL_NIVEL   0x4CD964   /* verde - nivelada, hasta 1 grado */
+#define COL_CASI    0xFFD54F   /* ambar - hasta 3, el limite del frigo */
+#define COL_MAL     0xFF4444   /* rojo  - mas de 3 */
 
 /* Radio en pixeles de una inclinacion dada. */
 #define RADIO_DE(grados) ((int)(((grados) / MAX_DEG_SHOWN) * LEVEL_RADIUS))
@@ -55,12 +69,32 @@ static lv_obj_t *s_label_status;
 static lv_obj_t *s_label_nivel;   /* "NIVELADA", aparte del estado */
 static lv_timer_t *s_timer;
 
-static lv_color_t color_for_level(float mag_deg)
+/* El color mira cada eje con SU vara, igual que el ovalo que se dibuja. */
+static lv_color_t color_for_level(float pitch, float roll)
 {
-    if (mag_deg <= NIVELADO_DEG) return lv_color_hex(COL_NIVEL);
-    if (mag_deg <= ANILLO_1_DEG) return lv_color_hex(COL_CASI);
-    if (mag_deg <= ANILLO_2_DEG) return lv_color_hex(COL_REGULAR);
+    float ap = fabsf(pitch), ar = fabsf(roll);
+    if (ap <= NIVELADO_DEG && ar <= NIVELADO_DEG) return lv_color_hex(COL_NIVEL);
+    if (ap <= AMBAR_PITCH_DEG && ar <= AMBAR_ROLL_DEG) return lv_color_hex(COL_CASI);
     return lv_color_hex(COL_MAL);
+}
+
+/* Zona aceptable, en forma de ovalo. LVGL no dibuja elipses, pero un rectangulo
+ * con el radio al maximo da una "pastilla" -- semicirculos arriba y abajo con
+ * los lados rectos -- que a estas proporciones se lee igual de bien. Se mete 4
+ * px para dentro porque a 6 grados el alto coincide justo con el borde del dial
+ * y se saldria por encima de su propio marco. */
+static void make_ovalo(lv_obj_t *padre)
+{
+    lv_obj_t *o = lv_obj_create(padre);
+    lv_obj_set_size(o, RADIO_DE(AMBAR_ROLL_DEG) * 2,
+                       RADIO_DE(AMBAR_PITCH_DEG) * 2 - 4);
+    lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(o, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(o, 2, 0);
+    lv_obj_set_style_border_color(o, lv_color_hex(COL_CASI), 0);
+    lv_obj_set_style_pad_all(o, 0, 0);
+    lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_center(o);
 }
 
 /* Un anillo de referencia: circulo hueco con el borde fino. Se crean ANTES que
@@ -133,15 +167,16 @@ static void refresh_cb(lv_timer_t *t)
     int off_y = -(int)((cp / MAX_DEG_SHOWN) * (LEVEL_RADIUS - BUBBLE_RADIUS));
     lv_obj_align(s_bubble, LV_ALIGN_CENTER, off_x, off_y);
 
-    float mag = fabsf(pitch) > fabsf(roll) ? fabsf(pitch) : fabsf(roll);
-    lv_color_t col = color_for_level(mag);
+    lv_color_t col = color_for_level(pitch, roll);
     lv_obj_set_style_bg_color(s_bubble, col, 0);
 
     /* Que este nivelada se dice ADEMAS con palabras: el color solo no vale si
      * lo miras de reojo desde fuera del vehiculo, colocando las rampas. */
     /* En su propia linea y no en la de estado: esa la usa el boton de calibrar
      * ("Calibrando...", "Calibrado") y el refresco de 200 ms se la comeria. */
-    lv_label_set_text(s_label_nivel, mag <= NIVELADO_DEG ? "NIVELADA" : "");
+    lv_label_set_text(s_label_nivel,
+                      (fabsf(pitch) <= NIVELADO_DEG && fabsf(roll) <= NIVELADO_DEG)
+                      ? "NIVELADA" : "");
 
     char buf[48];
     snprintf(buf, sizeof(buf), "Cabeceo %+.1f\xC2\xB0\nBalanceo %+.1f\xC2\xB0", pitch, roll);
@@ -183,8 +218,7 @@ void view_inclinacion_create(lv_obj_t *parent)
      * NIVELADO y va en verde: cuando la bola entra ahi, ya puedes parar. Es
      * pequeno (0,5 grados a esta escala son 5 px) y la propia bola lo tapa --
      * a proposito: taparlo ES la senal. */
-    make_anillo(s_circle, RADIO_DE(ANILLO_2_DEG), COL_REGULAR, 2);
-    make_anillo(s_circle, RADIO_DE(ANILLO_1_DEG), COL_CASI, 2);
+    make_ovalo(s_circle);
     make_anillo(s_circle, RADIO_DE(NIVELADO_DEG), COL_NIVEL, 2);
 
     /* Cruz central de referencia (nivel = 0,0), de lado a lado */
@@ -208,9 +242,9 @@ void view_inclinacion_create(lv_obj_t *parent)
 
     /* Cuanto vale cada anillo, escrito. Sin esto los anillos decoran pero no
      * miden. */
-    make_rotulo_anillo(s_circle, RADIO_DE(ANILLO_1_DEG), "2", COL_CASI);
-    make_rotulo_anillo(s_circle, RADIO_DE(ANILLO_2_DEG), "5", COL_REGULAR);
-    make_rotulo_anillo(s_circle, LEVEL_RADIUS, "10\xC2\xB0", COL_MAL);
+    make_rotulo_anillo(s_circle, RADIO_DE(NIVELADO_DEG), "1", COL_NIVEL);
+    make_rotulo_anillo(s_circle, RADIO_DE(AMBAR_ROLL_DEG), "3", COL_CASI);
+    make_rotulo_anillo(s_circle, LEVEL_RADIUS, "6\xC2\xB0", COL_MAL);
 
     s_bubble = lv_obj_create(s_circle);
     lv_obj_set_size(s_bubble, BUBBLE_RADIUS * 2, BUBBLE_RADIUS * 2);

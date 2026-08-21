@@ -404,7 +404,15 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   viaje" es el primer candidato cuando se abra (pedido explícito del
   usuario: que el 3.5" mande el comando de viaje, no la P4). La parada
   entera va detrás, por el mismo canal.
-- **Fase 3** (hecho y validado en placa real el 21-ago-2026): **la bola rueda
+- **Fase 3** (hecho y validado en placa real el 21-ago-2026): **la zona
+  aceptable es un ÓVALO, no un círculo**, porque un frigorífico de absorción no
+  aguanta lo mismo en los dos ejes — **3° de lado a lado y 6° de morro a cola**
+  (especificación de Dometic; avisan además de no dejarlo desnivelado más de
+  1-2 h funcionando, que el amoniaco cristaliza y taponaría el circuito).
+  Dibujarla redonda mentiría por los dos lados: asustaría de más cabeceando y
+  de menos balanceando. Dentro, un círculo verde de **1°** = *NIVELADA*
+  (cómodo para dormir y de sobra para el frigo; el 0,5° inicial era más fino
+  que la precisión del propio montaje del sensor). Y **la bola rueda
   al lado BAJO**, como una canica — donde esté la bola, ahí va la rampa, sin
   traducir nada mentalmente. El balanceo ya salía así; el cabeceo iba al revés
   (las dos fórmulas de `tilt.c` no llevan el mismo signo) y se corrige en el
