@@ -30,8 +30,12 @@ void confirm_screen_init(lv_obj_t *parent);
 /* 'body' puede ser NULL o "" si no hay nada que resumir (p.ej. iniciar viaje).
  * 'title', 'body' y 'ok_text' deben seguir vivos mientras el dialogo este
  * abierto: se pasan literales o buffers estaticos. */
+/* 'no_text' es el boton de la izquierda; NULL deja "No, corregir", que es lo
+ * que toca al repasar un formulario antes de guardarlo. En otras preguntas
+ * decir "corregir" no significa nada -- al preguntar si una parada ha
+ * terminado, el "no" quiere decir "sigo aqui" -- asi que se puede cambiar. */
 void confirm_screen_open(const char *title, const char *body,
-                         uint32_t color, const char *ok_text,
+                         uint32_t color, const char *ok_text, const char *no_text,
                          confirm_cb_t cb, void *user_data);
 
 /* Cierra sin confirmar. Lo llama view_registro_reset() cuando el usuario se va

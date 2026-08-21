@@ -29,6 +29,7 @@ static lv_obj_t *s_root;
 static lv_obj_t *s_title;
 static lv_obj_t *s_body;
 static lv_obj_t *s_no_btn;
+static lv_obj_t *s_no_lbl;
 static lv_obj_t *s_ok_btn;
 static lv_obj_t *s_ok_lbl;
 
@@ -90,6 +91,13 @@ void confirm_screen_init(lv_obj_t *parent)
     lv_obj_set_style_radius(s_root, 0, 0);
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_root, LV_OBJ_FLAG_HIDDEN);
+    /* FUERA del layout del padre. Este panel se muda a la pantalla activa al
+     * abrirse, y la de Ajustes es una COLUMNA FLEX: sin esto se colocaria como
+     * un elemento mas de la columna -- detras de todo y fuera de la pantalla,
+     * que es exactamente el fallo que tenia el teclado incrustado que este
+     * panel vino a sustituir. Con IGNORE_LAYOUT manda su propia posicion. */
+    lv_obj_add_flag(s_root, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_align(s_root, LV_ALIGN_TOP_LEFT, 0, 0);
 
     s_title = lv_label_create(s_root);
     lv_obj_set_width(s_title, lv_pct(94));
@@ -109,16 +117,14 @@ void confirm_screen_init(lv_obj_t *parent)
 
     /* "No" a la izquierda y "Si" a la derecha: el destructivo lejos del pulgar
      * que viene de confirmar, y el orden habitual de lectura. */
-    lv_obj_t *no_lbl;
-    s_no_btn = make_btn(s_root, COL_NO, no_cb, LV_ALIGN_BOTTOM_LEFT, &no_lbl);
-    lv_label_set_text(no_lbl, "No, corregir");
+    s_no_btn = make_btn(s_root, COL_NO, no_cb, LV_ALIGN_BOTTOM_LEFT, &s_no_lbl);
 
     s_ok_btn = make_btn(s_root, COL_OK, ok_cb, LV_ALIGN_BOTTOM_RIGHT, &s_ok_lbl);
     lv_label_set_text(s_ok_lbl, "Si");
 }
 
 void confirm_screen_open(const char *title, const char *body,
-                         uint32_t color, const char *ok_text,
+                         uint32_t color, const char *ok_text, const char *no_text,
                          confirm_cb_t cb, void *user_data)
 {
     if (!s_root) return;
@@ -148,6 +154,7 @@ void confirm_screen_open(const char *title, const char *body,
     lv_obj_set_style_text_font(s_body, fuente, 0);
     lv_label_set_text(s_body, texto);
     lv_label_set_text(s_ok_lbl, ok_text ? ok_text : "Si");
+    lv_label_set_text(s_no_lbl, no_text ? no_text : "No, corregir");
 
     /* El dialogo se muda a la pantalla que este activa. Nace colgado de la de
      * registros (confirm_screen_init), pero Ajustes vive en OTRA pantalla del
@@ -167,7 +174,7 @@ void confirm_screen_aviso(const char *title, const char *body,
     /* Se apoya en el dialogo normal y luego esconde el "No": no hay dos
      * caminos, solo enterarse. Con callback nulo, aceptar solo cierra. */
     confirm_screen_open(title, body, color, ok_text ? ok_text : "Entendido",
-                        NULL, NULL);
+                        NULL, NULL, NULL);
     if (s_no_btn) lv_obj_add_flag(s_no_btn, LV_OBJ_FLAG_HIDDEN);
 }
 

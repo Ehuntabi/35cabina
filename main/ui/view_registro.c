@@ -1344,8 +1344,10 @@ static bool parada_pregunta_fin(void)
         snprintf(s_fin_resumen, sizeof(s_fin_resumen), "%s\n%s", sitio, cuanto);
     }
 
+    /* El "no" aqui no es corregir nada: es que sigues en el sitio otro dia
+     * mas. La parada se queda abierta y se volvera a preguntar. */
     confirm_screen_open("Fin de la parada?", s_fin_resumen, COL_VIAJE,
-                        "Si, terminar", parada_do_cerrar, NULL);
+                        "Si, terminar", "No, continuar", parada_do_cerrar, NULL);
     return true;
 }
 
@@ -1385,7 +1387,7 @@ static void save_generic_cb(lv_event_t *e)
     categoria_t cat = (categoria_t)(uintptr_t)lv_event_get_user_data(e);
     build_resumen(cat);
     confirm_screen_open("Es correcto?", s_resumen, cat_color(cat), "Si, guardar",
-                        do_save, (void *)(uintptr_t)cat);
+                        NULL, do_save, (void *)(uintptr_t)cat);
 }
 
 /* Pone al dia las dos caras de la pantalla de viaje y el texto de su casilla
@@ -1482,14 +1484,14 @@ static void viaje_iniciar_cb(lv_event_t *e)
 {
     (void)e;
     confirm_screen_open("Iniciar el viaje?", NULL, COL_ACCION_OK,
-                        "Si, iniciar", viaje_do_iniciar, NULL);
+                        "Si, iniciar", "Cancelar", viaje_do_iniciar, NULL);
 }
 
 static void viaje_finalizar_cb(lv_event_t *e)
 {
     (void)e;
     confirm_screen_open("Finalizar el viaje?", NULL, COL_ACCION_STOP,
-                        "Si, finalizar", viaje_do_finalizar, NULL);
+                        "Si, finalizar", "Cancelar", viaje_do_finalizar, NULL);
 }
 
 static lv_obj_t *make_save_button(lv_obj_t *parent, const char *text, lv_event_cb_t cb, void *user_data)

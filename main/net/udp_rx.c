@@ -68,12 +68,70 @@ static void load_or_init_credentials(void)
     }
 }
 
+/* Lista las redes que ve la radio. Solo para diagnostico: cuando la P4 no
+ * aparece, esto dice si el problema es que no esta emitiendo, que se llama de
+ * otra forma o que su cifrado no pasa el filtro de wifi_configure_sta(). */
+static void log_redes_visibles(void)
+{
+    /* Como mucho una vez por minuto: cada escaneo deja la radio ocupada un par
+     * de segundos y aqui se entra cada 0.5 s mientras no haya red. */
+    static int64_t ultimo_us = 0;
+    int64_t ahora = esp_timer_get_time();
+    if (ultimo_us != 0 && (ahora - ultimo_us) < 60LL * 1000000LL) return;
+    ultimo_us = ahora;
+
+    wifi_scan_config_t cfg = { .show_hidden = true };
+    if (esp_wifi_scan_start(&cfg, true) != ESP_OK) return;
+
+    uint16_t n = 0;
+    esp_wifi_scan_get_ap_num(&n);
+    if (n == 0) {
+        ESP_LOGW(TAG, "Escaneo: NO se ve ninguna red. La P4 no esta emitiendo "
+                      "o esta fuera de alcance.");
+        return;
+    }
+    if (n > 12) n = 12;
+
+    wifi_ap_record_t *aps = calloc(n, sizeof(*aps));
+    if (!aps) return;
+    if (esp_wifi_scan_get_ap_records(&n, aps) == ESP_OK) {
+        ESP_LOGW(TAG, "Escaneo: %u redes visibles (busco '%s')", n, s_ssid);
+        for (uint16_t i = 0; i < n; i++) {
+            ESP_LOGW(TAG, "  '%s'  canal=%d  rssi=%d  authmode=%d%s",
+                     (const char *)aps[i].ssid, aps[i].primary, aps[i].rssi,
+                     aps[i].authmode,
+                     strcmp((const char *)aps[i].ssid, s_ssid) == 0 ? "   <-- ES ESTA" : "");
+        }
+    }
+    free(aps);
+}
+
 static void wifi_configure_sta(void)
 {
     wifi_config_t wc = {0};
     strncpy((char *)wc.sta.ssid, s_ssid, sizeof(wc.sta.ssid));
     strncpy((char *)wc.sta.password, s_pass, sizeof(wc.sta.password));
-    wc.sta.threshold.authmode = WIFI_AUTH_WPA_WPA2_PSK;
+    /* Se aceptan redes ABIERTAS, y no es un descuido.
+     *
+     * El AP del 7" NO se llama como el 7" cree ni va cifrado: esp_hosted (el
+     * C6 que le hace de radio) le pone SU nombre automatico, "ESP_<3 ultimos
+     * bytes de la MAC>", y lo levanta abierto. La configuracion que manda el 7"
+     * (SSID propio + WPA2) devuelve ESP_OK y se queda en el camino: verificado
+     * el 21-ago-2026 leyendo la config de vuelta con esp_wifi_get_config y
+     * escaneando desde aqui -- en el aire solo hay 'ESP_DC078D' con
+     * authmode=0. Y asi lleva desde julio: el satelite viejo (victron_mini) ya
+     * se asociaba a ese mismo nombre y abierto.
+     *
+     * 'threshold' es el cifrado MINIMO aceptado y va por el valor del enum, asi
+     * que cualquier cosa por encima de OPEN descarta ese AP en el escaneo y el
+     * sintoma es un enganoso "reason=201 (NO_AP_FOUND)": parece que la red no
+     * esta, cuando esta delante. Mientras el AP siga abierto, esto tiene que
+     * quedarse en OPEN.
+     *
+     * La red es local, aislada y solo lleva telemetria del vehiculo, pero que
+     * conste que va SIN CIFRAR: si algun dia se arregla el AP en el 7", subir
+     * esto a WPA2_PSK. */
+    wc.sta.threshold.authmode = WIFI_AUTH_OPEN;
     wc.sta.pmf_cfg.required = false;
     esp_wifi_set_config(WIFI_IF_STA, &wc);
     ESP_LOGI(TAG, "AP SSID='%s'", s_ssid);
@@ -131,6 +189,12 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
                 wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;
                 ESP_LOGW(TAG, "Desconectado reason=%d, siguiente intento en 0.5s",
                          d ? d->reason : -1);
+                /* Con NO_AP_FOUND (201) el mensaje solo no basta: dice que no
+                 * la encuentra, pero no si es que no esta, si esta con otro
+                 * nombre o si la esta descartando por el cifrado. Se lista lo
+                 * que ve, de vez en cuando para no llenar el log ni pasarse el
+                 * dia escaneando (un escaneo bloquea la radio ~2 s). */
+                if (d && d->reason == WIFI_REASON_NO_AP_FOUND) log_redes_visibles();
                 xEventGroupClearBits(s_wifi_events, WIFI_BIT_CONNECTED | WIFI_BIT_GOT_IP);
                 esp_timer_stop(s_reconnect_timer);   /* no-op si no estaba armado */
                 esp_timer_start_once(s_reconnect_timer, RECONNECT_DELAY_US);
@@ -205,6 +269,34 @@ static void rx_task(void *arg)
         }
         data_model_update_from_msg(msg);
         s_msgs_ok++;
+
+        /* El reloj de la P4 es lo unico que permite contar lo que dura una
+         * parada (esta pantalla no tiene RTC). Se avisa UNA vez cuando llega y
+         * otra si se pierde, para que no haya que adivinar por que una parada
+         * no se abre: sin fecha valida no se abre, y punto. */
+        {
+            static bool tenia_fecha = false;
+            bool hay = (msg->epoch_local != 0);
+            if (hay != tenia_fecha) {
+                if (hay) {
+                    /* epoch_local ya viene en hora local de la P4, asi que se
+                     * desmonta a mano en vez de con localtime(), que aqui
+                     * aplicaria un huso que esta pantalla no tiene puesto. */
+                    uint32_t t = msg->epoch_local;
+                    uint32_t seg = t % 86400u;
+                    uint32_t dias = t / 86400u;
+                    ESP_LOGI(TAG, "Reloj de la P4 recibido: dia %lu, hora %02lu:%02lu "
+                                  "-> las paradas ya se pueden contar",
+                             (unsigned long)dias,
+                             (unsigned long)(seg / 3600), (unsigned long)((seg / 60) % 60));
+                } else {
+                    ESP_LOGW(TAG, "La P4 ha dejado de dar la hora: las paradas "
+                                  "no se podran abrir ni cerrar");
+                }
+                tenia_fecha = hay;
+            }
+        }
+
         if ((s_msgs_ok % 10) == 1) {
             ESP_LOGI(TAG, "RX OK #%lu (bad=%lu) from %s soc=%d.%d V=%d.%02d I=%ld mA",
                      (unsigned long)s_msgs_ok, (unsigned long)s_msgs_bad,

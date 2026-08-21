@@ -6,6 +6,7 @@
 #include "view_ajustes.h"
 #include "../net/udp_rx.h"
 #include "confirm_screen.h"
+#include "entry_screen.h"
 #include "nav.h"
 #include "esp_log.h"
 #include <stdio.h>
@@ -13,7 +14,6 @@
 
 static const char *TAG = "view_ajustes";
 
-static lv_obj_t *s_keyboard;
 static lv_obj_t *s_ssid_ta;
 static lv_obj_t *s_pass_ta;
 static lv_obj_t *s_status_lbl;
@@ -23,25 +23,19 @@ static lv_obj_t *s_status_lbl;
 static char s_ssid_orig[33];
 static char s_pass_orig[65];
 
-static void ta_focus_cb(lv_event_t *e)
+/* Tocar un campo abre el editor a PANTALLA COMPLETA (entry_screen.c), el mismo
+ * que usan los formularios de registros.
+ *
+ * Antes el teclado se creaba aqui dentro, y estaba mal: esta pantalla es una
+ * columna flex, asi que el teclado entraba en el flujo como un elemento mas y
+ * lo colocaban DEBAJO de todo lo demas -- se salia por el borde inferior y no
+ * se veian las teclas de abajo. Con 320 px de alto no hay sitio para cabecera,
+ * dos campos, boton y un teclado usable a la vez; el editor grande resuelve las
+ * dos cosas, y de paso enseña el valor en letra 40 mientras lo tecleas. */
+static void ta_click_cb(lv_event_t *e)
 {
     lv_obj_t *ta = lv_event_get_target(e);
-    lv_keyboard_set_textarea(s_keyboard, ta);
-    lv_keyboard_set_mode(s_keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
-    lv_obj_clear_flag(s_keyboard, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_move_foreground(s_keyboard);
-}
-
-static void ta_defocus_cb(lv_event_t *e)
-{
-    (void)e;
-    lv_obj_add_flag(s_keyboard, LV_OBJ_FLAG_HIDDEN);
-}
-
-static void kb_close_cb(lv_event_t *e)
-{
-    (void)e;
-    lv_obj_add_flag(s_keyboard, LV_OBJ_FLAG_HIDDEN);
+    entry_screen_open(ta, (const char *)lv_obj_get_user_data(ta), false);
 }
 
 static lv_obj_t *make_field(lv_obj_t *parent, const char *label_text)
@@ -63,8 +57,11 @@ static lv_obj_t *make_field(lv_obj_t *parent, const char *label_text)
     lv_textarea_set_one_line(ta, true);
     lv_obj_set_size(ta, lv_pct(100), 34);
     lv_obj_align(ta, LV_ALIGN_TOP_LEFT, 0, 18);
-    lv_obj_add_event_cb(ta, ta_focus_cb, LV_EVENT_FOCUSED, NULL);
-    lv_obj_add_event_cb(ta, ta_defocus_cb, LV_EVENT_DEFOCUSED, NULL);
+    /* En CLICKED y no en FOCUSED: al volver del editor el campo conserva el
+     * foco, asi que con FOCUSED el segundo toque no volveria a abrirlo. El
+     * rotulo viaja en el user_data y es el titulo que saca el editor. */
+    lv_obj_set_user_data(ta, (void *)label_text);
+    lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, NULL);
 
     return ta;
 }
@@ -108,15 +105,11 @@ static void guardar_cb(lv_event_t *e)
         return;
     }
 
-    /* Con el teclado abierto el dialogo saldria por encima de el y al cerrarse
-     * quedaria medio tapado; se recoge antes. */
-    lv_obj_add_flag(s_keyboard, LV_OBJ_FLAG_HIDDEN);
-
     static char body[64];   /* estatico: el dialogo lo sigue leyendo despues */
     snprintf(body, sizeof(body), "Red:  %s", ssid);
     /* Naranja, el mismo color del titulo de esta pantalla. */
     confirm_screen_open("Cambiar de red?", body, 0xFF9800,
-                        "Si, cambiar", do_guardar, NULL);
+                        "Si, cambiar", "Cancelar", do_guardar, NULL);
 }
 
 void view_ajustes_refresh(void)
@@ -182,8 +175,4 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_style_text_color(s_status_lbl, lv_color_hex(0x4CD964), 0);
     lv_obj_set_style_text_font(s_status_lbl, &lv_font_montserrat_14, 0);
 
-    s_keyboard = lv_keyboard_create(parent);
-    lv_obj_add_flag(s_keyboard, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_event_cb(s_keyboard, kb_close_cb, LV_EVENT_READY, NULL);
-    lv_obj_add_event_cb(s_keyboard, kb_close_cb, LV_EVENT_CANCEL, NULL);
 }

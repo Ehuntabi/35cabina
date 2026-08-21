@@ -55,6 +55,13 @@ void entry_screen_init(lv_obj_t *parent)
     lv_obj_set_style_radius(s_root, 0, 0);
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_root, LV_OBJ_FLAG_HIDDEN);
+    /* FUERA del layout del padre. Este panel se muda a la pantalla activa al
+     * abrirse, y la de Ajustes es una COLUMNA FLEX: sin esto se colocaria como
+     * un elemento mas de la columna -- detras de todo y fuera de la pantalla,
+     * que es exactamente el fallo que tenia el teclado incrustado que este
+     * panel vino a sustituir. Con IGNORE_LAYOUT manda su propia posicion. */
+    lv_obj_add_flag(s_root, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_align(s_root, LV_ALIGN_TOP_LEFT, 0, 0);
 
     s_label = lv_label_create(s_root);
     lv_obj_set_style_text_color(s_label, lv_color_hex(0xDDDDDD), 0);
@@ -94,6 +101,12 @@ void entry_screen_open(lv_obj_t *target, const char *label, bool numeric)
     lv_textarea_set_text(s_value, lv_textarea_get_text(target));
     lv_keyboard_set_mode(s_kb, numeric ? LV_KEYBOARD_MODE_NUMBER
                                        : LV_KEYBOARD_MODE_TEXT_LOWER);
+
+    /* Se muda a la pantalla que este activa. Nace colgado de la de registros
+     * (entry_screen_init), pero Ajustes vive en OTRA pantalla del carrusel y
+     * alli no se veria. Mismo apano que confirm_screen. */
+    lv_obj_t *scr = lv_scr_act();
+    if (scr && lv_obj_get_parent(s_root) != scr) lv_obj_set_parent(s_root, scr);
 
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(s_root);
