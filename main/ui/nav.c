@@ -56,8 +56,8 @@ static void gesture_cb(lv_event_t *e)
     }
     /* Al abandonar la pagina de registros se vuelve a su menu de iconos: si no,
      * al regresar te encontrabas el formulario abierto donde lo dejaste, en vez
-     * del menu. Solo se CIERRA (formulario, editor de campo y confirmacion): lo
-     * ya tecleado se queda en los campos y sigue ahi si reabres la categoria. */
+     * del menu. Cierra tambien el editor de campo y la confirmacion, y deja los
+     * formularios en blanco (clear_forms(), dentro de show_grid()). */
     if (s_current == NAV_REGISTRO) view_registro_reset();
 
     s_current = (uint8_t)next;

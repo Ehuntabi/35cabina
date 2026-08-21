@@ -56,12 +56,20 @@ Se reutiliza:
   por matriz GPIO — pero obligan a llevar la alimentación aparte.
 
   **Cableado del módulo ADXL345**: `SDA`→IO17, `SCL`→IO18, `VCC`→3V3,
-  `GND`→GND, y además **`CS`→3V3** (si queda al aire el chip arranca en modo
-  SPI y no responde por I2C) y **`SDO`→GND** (es lo que fija la dirección
-  `0x53`; a 3V3 sería `0x1D` y el firmware no lo encontraría). `INT1`/`INT2`
-  sin conectar. No hacen falta pull-ups externos: `tilt.c` activa los
-  internos. **El orden físico de pines de los JST no está verificado** —
-  comprobarlo con el esquemático oficial o un polímetro antes de enchufar.
+  `GND`→GND. `CS`, `SDO`, `INT1` e `INT2` **sin conectar**, que es lo que
+  hacen todos los ejemplos: en las placas tipo **GY-291** el `CS` ya lleva un
+  pull-up de 10k a VCC (4k7 en algunas) y el `SDO`/`ADDR` un pull-down de
+  4k7, así que el chip arranca solo en modo I2C y en la dirección `0x53`, que
+  es la que usa `tilt.c`. Esa placa trae además sus propios pull-ups de 4k7
+  en SDA/SCL; los internos que activa `tilt.c` son solo una red de seguridad.
+
+  Solo hay que cablearlos con el **chip pelado** o con un módulo que no
+  traiga esas resistencias: entonces `CS`→3V3 es **obligatorio** (al aire no
+  hay modo por defecto: no responde ni por I2C ni por SPI) y `SDO`→GND fija
+  la dirección `0x53` — a 3V3 sería `0x1D` y el firmware no lo encontraría.
+
+  **El orden físico de pines de los JST no está verificado** — comprobarlo
+  con el esquemático oficial o un polímetro antes de enchufar.
 
   Sin verificar aún en placa real el mapeo de ejes pitch/roll según cómo
   quede montado el sensor (ver comentario en `tilt.c`).
@@ -184,8 +192,16 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   **Salir de la página con un gesto vuelve al menú de iconos**
   (`view_registro_reset()`, la llama `nav.c`). Antes el formulario seguía
   abierto por detrás y al regresar te lo encontrabas tal cual, en vez del
-  menú. Se cierran también el editor de campo y la confirmación, pero **lo
-  ya tecleado se conserva** en los campos: si reabres la categoría sigue ahí.
+  menú. Se cierran también el editor de campo y la confirmación.
+
+  **Cada formulario se abre siempre en blanco** (`clear_forms()`, la llama
+  `show_grid()`): al volver al menú —por el botón Volver, por haber guardado
+  o por un gesto— se vacían campos, casillas y contadores, y la moneda vuelve
+  a `EUR`. Antes los datos se quedaban dentro y al reabrir la categoría
+  seguía ahí el importe anterior; el riesgo no era teclear de más, era
+  **guardar sin mirar el dato de la vez pasada**. Fuera de la zona euro
+  obliga a elegir la moneda en cada apunte, que es el precio de no anotar
+  euros con la moneda del país anterior aún puesta.
 
   Y **un deslizamiento no cuenta como toque** (`lv_indev_wait_release()` en
   `nav.c`): LVGL manda el `CLICKED` al objeto donde se apoyó el dedo aunque

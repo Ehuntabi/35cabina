@@ -141,8 +141,15 @@ static const char *const CURRENCY_CODES[] = {
 
 /* === Navegacion grid <-> formulario ===================================== */
 
+static void clear_forms(void);   /* definido abajo, junto a los widgets que toca */
+
+/* Volver al menu deja los formularios EN BLANCO: se vacian sus campos, casillas
+ * y selectores. Como es el unico camino de vuelta (boton Volver, guardado
+ * confirmado y salida por gesto pasan todos por aqui), basta con hacerlo en un
+ * sitio. */
 static void show_grid(void)
 {
+    clear_forms();
     lv_obj_clear_flag(s_grid, LV_OBJ_FLAG_HIDDEN);
     for (int i = 0; i < CAT_COUNT; i++) {
         lv_obj_add_flag(s_forms[i], LV_OBJ_FLAG_HIDDEN);
@@ -501,6 +508,56 @@ static void ruedas_actualiza_texto(bool marcado)
     snprintf(buf, sizeof(buf), "%s: %u", MANT_OPCIONES[MANT_IDX_RUEDAS],
              ruedas_elegidas());
     lv_checkbox_set_text(cb, buf);   /* set_text copia la cadena */
+}
+
+/* Deja marcado el primer boton de una botonera de opcion unica.
+ * lv_btnmatrix_set_btn_ctrl() por si solo NO desmarca los demas: el reparto lo
+ * hace el manejador interno del widget al pulsar (make_one_button_checked en
+ * lv_btnmatrix.c), no la API. Por eso se limpian todos primero. */
+static void btnmatrix_reset(lv_obj_t *bm)
+{
+    lv_btnmatrix_clear_btn_ctrl_all(bm, LV_BTNMATRIX_CTRL_CHECKED);
+    lv_btnmatrix_set_btn_ctrl(bm, 0, LV_BTNMATRIX_CTRL_CHECKED);
+}
+
+/* Vacia TODOS los formularios. Lo llama show_grid(), o sea cada vez que se
+ * vuelve al menu de iconos, venga de donde venga.
+ *
+ * Antes solo se ocultaba el formulario y los datos seguian dentro: al reabrir
+ * la categoria te encontrabas el importe del peaje anterior. El riesgo no era
+ * teclear de mas, era GUARDAR sin mirar el dato de la vez pasada.
+ *
+ * La moneda vuelve tambien a EUR (indice 0), decision del usuario del
+ * 21-ago-2026: fuera de la zona euro obliga a elegirla en cada apunte, pero
+ * evita anotar euros con la moneda del pais anterior aun puesta. */
+static void clear_forms(void)
+{
+    lv_textarea_set_text(s_peaje_importe_ta, "");
+    lv_dropdown_set_selected(s_peaje_currency_dd, 0);
+
+    lv_textarea_set_text(s_repo_importe_ta, "");
+    lv_textarea_set_text(s_repo_litros_ta, "");
+    lv_dropdown_set_selected(s_repo_currency_dd, 0);
+    /* Despues de vaciar los dos numeros: set_text avisa a repo_recalc_cb, que
+     * ya lo deja en "--", pero no depender de ese orden sale mas barato que
+     * razonarlo cada vez que se toque el formulario. */
+    lv_label_set_text(s_repo_preciolitro_lbl, "--");
+
+    lv_textarea_set_text(s_bombona_precio_ta, "");
+    lv_dropdown_set_selected(s_bombona_currency_dd, 0);
+    btnmatrix_reset(s_bombona_cuantas_bm);
+
+    lv_textarea_set_text(s_mant_km_ta, "");
+    lv_textarea_set_text(s_mant_coste_ta, "");
+    for (uint8_t i = 0; i < MANT_COUNT; i++) {
+        lv_obj_clear_state(s_mant_chk[i], LV_STATE_CHECKED);
+    }
+    btnmatrix_reset(s_mant_ruedas_bm);
+    /* Quitar el estado a mano NO dispara VALUE_CHANGED, asi que el texto de la
+     * casilla ("Ruedas: 4") y el ocultado de la fila del contador hay que
+     * rehacerlos aqui; si no, ruedas_toggle_cb no se entera. */
+    ruedas_actualiza_texto(false);
+    lv_obj_add_flag(lv_obj_get_parent(s_mant_ruedas_bm), LV_OBJ_FLAG_HIDDEN);
 }
 
 /* Al marcar/desmarcar Ruedas aparece o se esconde el contador de cuantas.
