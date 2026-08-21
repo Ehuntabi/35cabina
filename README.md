@@ -237,8 +237,10 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   **Parada** (`build_parada`) cuelga de Viaje y su Volver regresa allí, no al
   menú. Cinco casillas de dos clases distintas:
 
-  - **Lo que haces** — Vaciado · Llenado. Se marcan libremente y a la vez: en
-    un área sueles vaciar Y llenar en la misma parada.
+  - **Lo que haces** — Vaciado · Llenado · Agua potable. Se marcan libremente
+    y a la vez: en un área sueles vaciar Y llenar en la misma parada. **Agua
+    potable va aparte de Llenado** porque se puede parar solo por eso: una
+    fuente al borde de la carretera no es ni un vaciado ni un área.
   - **Dónde has parado** — Pernocta gratis · Área · Camping. Los tres son
     **excluyentes**: al marcar uno se **desmarcan solos** los otros dos. Se
     hace desmarcando y no poniéndolos en gris para que cambiar de idea sea un
@@ -248,6 +250,13 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   **precio** (con moneda) y el botón de **Servicios**; una pernocta gratis no
   tiene ni lo uno ni lo otro. Aparecen y desaparecen igual que el contador de
   ruedas del mantenimiento.
+
+  En un camping el campo pasa a llamarse **"Precio por noche"** (en el
+  resumen, "Precio/noche", que la línea entera tiene que caber en ~25
+  caracteres): es lo que ves anunciado en la entrada y lo único comparable
+  entre campings. **Al cambiar de sitio se borran precio y servicios**, que
+  eran del anterior — el mismo problema que tenía el peaje guardándose el
+  importe de la vez pasada.
 
   Los **servicios** (Agua potable · Vaciado grises · Vaciado WC ·
   Electricidad · Duchas/WC · Basura) son el mismo dato con dos lecturas, así
@@ -259,6 +268,11 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   casillas más no caben de ninguna manera. No llevan botón de guardar: se
   guardan con la parada. El botón "Servicios" comparte fila con "Guardar" en
   vez de llevar la suya, así no cuesta ni un píxel de alto.
+
+  Esa pantalla sí va sobrada de alto (cabecera + rótulo + seis casillas), así
+  que sus casillas van **más separadas** (`SERV_CHK_GAP`, 26 px frente a los 6
+  de mantenimiento y parada) y el bloque **centrado** en lo que sobra en vez
+  de pegado arriba: más separación es menos fallo al tocar en marcha.
 
   Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
   viaje" es el primer candidato cuando se abra (pedido explícito del

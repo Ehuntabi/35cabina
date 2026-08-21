@@ -130,10 +130,10 @@ static lv_obj_t *s_tile_viaje_lbl;       /* texto de su casilla en el menu */
 
 /* --- Parada: donde has parado y que has hecho ------------------------------
  * Varias a la vez: en un area sueles vaciar Y llenar en la misma parada. */
-#define PARADA_COUNT         5
-#define PARADA_IDX_PERNOCTA  2
-#define PARADA_IDX_AREA      3
-#define PARADA_IDX_CAMPING   4
+#define PARADA_COUNT         6
+#define PARADA_IDX_PERNOCTA  3
+#define PARADA_IDX_AREA      4
+#define PARADA_IDX_CAMPING   5
 
 /* Los tres SITIOS son excluyentes entre si: has parado en un sitio de un tipo,
  * no en dos a la vez. Vaciado y llenado quedan fuera de esta lista a proposito
@@ -141,11 +141,19 @@ static lv_obj_t *s_tile_viaje_lbl;       /* texto de su casilla en el menu */
 static const uint8_t PARADA_LUGARES[] = {
     PARADA_IDX_PERNOCTA, PARADA_IDX_AREA, PARADA_IDX_CAMPING
 };
+/* "Agua potable" va aparte de "Llenado" porque se puede parar SOLO por eso:
+ * una fuente al borde de la carretera no es un vaciado ni un area. */
 static const char *const PARADA_OPCIONES[PARADA_COUNT] = {
-    "Vaciado", "Llenado", "Pernocta gratis", "Area", "Camping"
+    "Vaciado", "Llenado", "Agua potable", "Pernocta gratis", "Area", "Camping"
+};
+/* Nombres cortos para el resumen de la confirmacion, por el mismo motivo que
+ * SERV_CORTOS: alli caben ~25 caracteres por linea. */
+static const char *const PARADA_CORTOS[PARADA_COUNT] = {
+    "Vaciado", "Llenado", "Agua", "Pernocta", "Area", "Camping"
 };
 static lv_obj_t *s_parada_chk[PARADA_COUNT];
 static lv_obj_t *s_parada_precio_row;    /* oculto salvo area o camping */
+static lv_obj_t *s_parada_precio_lbl;    /* "Precio" / "Precio por noche" */
 static lv_obj_t *s_parada_precio_ta;
 static lv_obj_t *s_parada_currency_dd;
 static lv_obj_t *s_parada_servicios_btn; /* oculto salvo area */
@@ -519,9 +527,18 @@ static lv_obj_t *make_choice_row(lv_obj_t *parent, const char *label_text,
  * grandes; en una sola columna las cuatro no caben sin encoger. */
 #define CHK_H      32   /* alto de cada casilla con su texto */
 #define CHK_GAP     6
+/* Hueco de la pantalla de servicios, que va sobrada de alto: tres filas a 32 px
+ * con 26 de separacion son 148, y con cabecera y rotulo se queda en ~216 de los
+ * 304 utiles. Ver build_servicios(). */
+#define SERV_CHK_GAP  26
 
+/* 'gap' es el hueco vertical entre filas de casillas. Mantenimiento y parada
+ * van con CHK_GAP (6): ahi cada pixel esta comprometido. La pantalla de
+ * servicios, en cambio, solo lleva cabecera y casillas, asi que puede
+ * permitirse separarlas y ganar puntería. */
 static lv_obj_t *make_check_grid(lv_obj_t *parent, const char *const *options,
-                                  uint8_t n, lv_obj_t **out, uint32_t color)
+                                  uint8_t n, lv_obj_t **out, uint32_t color,
+                                  lv_coord_t gap)
 {
     lv_obj_t *cont = make_field_row(parent);
     /* Sin rotulo: las cuatro opciones se explican solas y el texto de arriba
@@ -531,14 +548,14 @@ static lv_obj_t *make_check_grid(lv_obj_t *parent, const char *const *options,
      * falta: con LV_SIZE_CONTENT dentro de una fila elastica, si la fila se
      * queda corta el contenido se recorta en silencio (no hay scroll). */
     uint8_t filas = (uint8_t)((n + 1) / 2);
-    lv_obj_set_style_min_height(cont, filas * CHK_H + (filas - 1) * CHK_GAP + 8, 0);
+    lv_obj_set_style_min_height(cont, filas * CHK_H + (filas - 1) * gap + 8, 0);
 
     lv_obj_t *grid = lv_obj_create(cont);
     lv_obj_set_size(grid, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(grid, 0, 0);
     lv_obj_set_style_pad_all(grid, 0, 0);
-    lv_obj_set_style_pad_row(grid, CHK_GAP, 0);
+    lv_obj_set_style_pad_row(grid, gap, 0);
     lv_obj_set_style_pad_column(grid, CHK_GAP, 0);
     lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
@@ -620,11 +637,35 @@ static bool parada_es_de_pago(void)
            lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
 }
 
+/* En un camping lo que se apunta es el precio DE LA NOCHE, no el total de la
+ * estancia: es lo que ves anunciado en la entrada y lo unico comparable entre
+ * campings. En un area es el precio de la parada y punto.
+ *
+ * El rotulo se cambia en los dos sitios: el de la fila y el user_data del
+ * campo, que es el titulo que saca el editor a pantalla completa. Los dos son
+ * literales, asi que viven toda la ejecucion y se pueden guardar tal cual. */
 static void parada_refresh_extras(void)
 {
     bool pago = parada_es_de_pago();
     set_hidden(s_parada_precio_row, !pago);
     set_hidden(s_parada_servicios_btn, !pago);
+
+    bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
+    const char *rotulo = camping ? "Precio por noche" : "Precio";
+    lv_label_set_text(s_parada_precio_lbl, rotulo);
+    lv_obj_set_user_data(s_parada_precio_ta, (void *)rotulo);
+}
+
+/* Vacia lo que depende del SITIO: el precio y los servicios. Al pasar de area a
+ * camping (o a pernocta gratis) lo tecleado era de la otra, y arrastrarlo es
+ * como acabo el peaje guardandose el importe del anterior. */
+static void parada_clear_extras(void)
+{
+    lv_textarea_set_text(s_parada_precio_ta, "");
+    lv_dropdown_set_selected(s_parada_currency_dd, 0);
+    for (uint8_t i = 0; i < SERV_COUNT; i++) {
+        lv_obj_clear_state(s_serv_chk[i], LV_STATE_CHECKED);
+    }
 }
 
 /* Vacia TODOS los formularios. Lo llama show_grid(), o sea cada vez que se
@@ -669,11 +710,7 @@ static void clear_forms(void)
     for (uint8_t i = 0; i < PARADA_COUNT; i++) {
         lv_obj_clear_state(s_parada_chk[i], LV_STATE_CHECKED);
     }
-    lv_textarea_set_text(s_parada_precio_ta, "");
-    lv_dropdown_set_selected(s_parada_currency_dd, 0);
-    for (uint8_t i = 0; i < SERV_COUNT; i++) {
-        lv_obj_clear_state(s_serv_chk[i], LV_STATE_CHECKED);
-    }
+    parada_clear_extras();
     /* Vuelve a esconder el precio y el boton de servicios. NO se limpia el
      * viaje en curso: eso no es un dato del formulario, es el estado del
      * aparato y solo lo cambian Iniciar/Finalizar. */
@@ -918,16 +955,19 @@ static void build_resumen(categoria_t cat)
             break;
         }
         case CAT_PARADA: {
-            /* Tres lineas como mucho: el cuerpo del dialogo va en letra 32 y
-             * por debajo estan los botones, asi que a partir de la cuarta
-             * linea se pisarian (ver el reparto en confirm_screen.c). De ahi
-             * los nombres cortos de los servicios. */
+            /* CUATRO lineas como mucho: el cuerpo va en letra 32 (unos 46 px
+             * por linea con el interlineado) y entre el titulo y los botones
+             * quedan ~184 px (ver el reparto en confirm_screen.c). De ahi los
+             * nombres cortos, aqui y en los servicios.
+             *
+             * Peor caso con los cortos: "Vaciado, Llenado, Agua, Pernocta" son
+             * 32 caracteres, o sea 2 lineas, mas precio (1) y servicios (1). */
             tipo[0] = '\0';
             size_t used = 0;
             for (uint8_t i = 0; i < PARADA_COUNT; i++) {
                 if (!lv_obj_has_state(s_parada_chk[i], LV_STATE_CHECKED)) continue;
                 int w = snprintf(tipo + used, sizeof(tipo) - used, "%s%s",
-                                 used ? ", " : "", PARADA_OPCIONES[i]);
+                                 used ? ", " : "", PARADA_CORTOS[i]);
                 if (w < 0 || (size_t)w >= sizeof(tipo) - used) break;
                 used += (size_t)w;
             }
@@ -939,24 +979,39 @@ static void build_resumen(categoria_t cat)
              * que se pagan (area o camping) y en una pernocta gratis no se
              * pintan ni el uno ni los otros. */
             if (parada_es_de_pago()) {
-                int w = snprintf(extra, sizeof(extra), "\nPrecio:  %s %s",
+                bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING],
+                                                LV_STATE_CHECKED);
+                /* "Precio/noche" y no "Precio por noche": la linea entera tiene
+                 * que caber en ~25 caracteres y "Precio por noche:  25.00 EUR"
+                 * son 28. En la pantalla, donde hay sitio, si va entero. */
+                int w = snprintf(extra, sizeof(extra), "\n%s:  %s %s",
+                                 camping ? "Precio/noche" : "Precio",
                                  val_or_dash(s_parada_precio_ta),
                                  currency_of(s_parada_currency_dd));
                 if (w > 0) e = (size_t)w;
 
-                w = snprintf(extra + e, sizeof(extra) - e, "\nServicios:  ");
-                if (w > 0 && (size_t)w < sizeof(extra) - e) {
-                    e += (size_t)w;
-                    bool alguno = false;
-                    for (uint8_t i = 0; i < SERV_COUNT; i++) {
-                        if (!lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED)) continue;
-                        int n = snprintf(extra + e, sizeof(extra) - e, "%s%s",
-                                         alguno ? ", " : "", SERV_CORTOS[i]);
-                        if (n < 0 || (size_t)n >= sizeof(extra) - e) break;
-                        e += (size_t)n;
-                        alguno = true;
-                    }
-                    if (!alguno) snprintf(extra + e, sizeof(extra) - e, "--");
+                /* Los servicios marcados, o su cuenta si la lista no cabe en
+                 * una linea: mas vale un "4 de 6" exacto que una linea partida
+                 * en dos que empuje los botones fuera de la pantalla. */
+                char serv[64];
+                serv[0] = '\0';
+                size_t s_used = 0;
+                uint8_t marcados = 0;
+                for (uint8_t i = 0; i < SERV_COUNT; i++) {
+                    if (!lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED)) continue;
+                    marcados++;
+                    int n = snprintf(serv + s_used, sizeof(serv) - s_used, "%s%s",
+                                     s_used ? ", " : "", SERV_CORTOS[i]);
+                    if (n < 0 || (size_t)n >= sizeof(serv) - s_used) break;
+                    s_used += (size_t)n;
+                }
+                if (marcados == 0) {
+                    snprintf(extra + e, sizeof(extra) - e, "\nServicios:  --");
+                } else if (s_used <= 24) {
+                    snprintf(extra + e, sizeof(extra) - e, "\nServicios:  %s", serv);
+                } else {
+                    snprintf(extra + e, sizeof(extra) - e, "\nServicios:  %u de %u",
+                             marcados, (unsigned)SERV_COUNT);
                 }
             }
             snprintf(s_resumen, sizeof(s_resumen), "%s%s", used ? tipo : "--", extra);
@@ -1067,6 +1122,8 @@ static void parada_lugar_cb(lv_event_t *e)
             if (otro != target) lv_obj_clear_state(otro, LV_STATE_CHECKED);
         }
     }
+    /* Cambiar de sitio borra precio y servicios: eran del sitio anterior. */
+    parada_clear_extras();
     parada_refresh_extras();
 }
 
@@ -1244,7 +1301,8 @@ static void build_mantenimiento(lv_obj_t *form)
     /* Sin coordenada GPS, igual que repostaje, peaje y bombona: la posicion y
      * la fecha las pone la P4 al recibir el evento (Fase 4). Aqui solo va lo
      * que el aparato no puede deducir. */
-    make_check_grid(form, MANT_OPCIONES, MANT_COUNT, s_mant_chk, COL_MANTENIMIENTO);
+    make_check_grid(form, MANT_OPCIONES, MANT_COUNT, s_mant_chk, COL_MANTENIMIENTO,
+                    CHK_GAP);
 
     /* Cuantas ruedas. Oculto salvo que se marque Ruedas: la mayoria de los
      * mantenimientos no las tocan y no tiene sentido ocupar sitio siempre. */
@@ -1280,7 +1338,8 @@ static void build_parada(lv_obj_t *form)
 {
     add_header(form, "PARADA", lv_color_hex(COL_VIAJE), CAT_VIAJE);
 
-    make_check_grid(form, PARADA_OPCIONES, PARADA_COUNT, s_parada_chk, COL_VIAJE);
+    make_check_grid(form, PARADA_OPCIONES, PARADA_COUNT, s_parada_chk, COL_VIAJE,
+                    CHK_GAP);
     for (uint8_t i = 0; i < sizeof(PARADA_LUGARES); i++) {
         lv_obj_add_event_cb(s_parada_chk[PARADA_LUGARES[i]], parada_lugar_cb,
                             LV_EVENT_VALUE_CHANGED, NULL);
@@ -1291,6 +1350,10 @@ static void build_parada(lv_obj_t *form)
      * moneda uno al lado del otro), de ahi los DOS saltos hasta la fila que hay
      * que ocultar entera: con solo uno se quedaria el rotulo "Precio" colgado. */
     s_parada_precio_row = lv_obj_get_parent(lv_obj_get_parent(s_parada_precio_ta));
+    /* Hijo 0 de esa fila = el rotulo (el 1 es la sub-fila con numero y moneda).
+     * Se guarda porque cambia con el sitio: en un camping pasa a "Precio por
+     * noche". El texto de partida lo pone parada_refresh_extras(). */
+    s_parada_precio_lbl = lv_obj_get_child(s_parada_precio_row, 0);
 
     lv_obj_t *acciones = lv_obj_create(form);
     lv_obj_set_size(acciones, lv_pct(100), 54);
@@ -1336,8 +1399,17 @@ static void build_servicios(lv_obj_t *form)
     lv_obj_set_width(s_serv_hint, lv_pct(100));
 
     /* Sin boton de guardar: lo marcado aqui se guarda con la parada. El Volver
-     * de la cabecera devuelve a ella con las casillas puestas. */
-    make_check_grid(form, SERV_OPCIONES, SERV_COUNT, s_serv_chk, COL_VIAJE);
+     * de la cabecera devuelve a ella con las casillas puestas.
+     *
+     * Con hueco ancho entre filas: esta pantalla solo lleva cabecera, rotulo y
+     * seis casillas, o sea 48+20+~150 de los 304 utiles. Sobraban casi 90 px
+     * en negro al final, asi que se reparten entre las filas -- mas separacion
+     * es menos fallo al tocar con la autocaravana en marcha. */
+    lv_obj_t *grid = make_check_grid(form, SERV_OPCIONES, SERV_COUNT, s_serv_chk,
+                                     COL_VIAJE, SERV_CHK_GAP);
+    /* Y el bloque, centrado en lo que sobre en vez de pegado arriba. */
+    lv_obj_set_flex_align(lv_obj_get_parent(grid), LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
 }
 
 /* === Grid principal ======================================================= */
