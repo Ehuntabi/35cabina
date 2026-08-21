@@ -5,8 +5,10 @@
  */
 #include "view_ajustes.h"
 #include "../net/udp_rx.h"
+#include "confirm_screen.h"
 #include "nav.h"
 #include "esp_log.h"
+#include <stdio.h>
 #include <string.h>
 
 static const char *TAG = "view_ajustes";
@@ -15,6 +17,11 @@ static lv_obj_t *s_keyboard;
 static lv_obj_t *s_ssid_ta;
 static lv_obj_t *s_pass_ta;
 static lv_obj_t *s_status_lbl;
+
+/* Lo que habia al abrir la pantalla, para saber si de verdad se ha cambiado
+ * algo. Mismos tamanos que en udp_rx_get_credentials(). */
+static char s_ssid_orig[33];
+static char s_pass_orig[65];
 
 static void ta_focus_cb(lv_event_t *e)
 {
@@ -68,22 +75,56 @@ static void back_cb(lv_event_t *e)
     nav_close_ajustes();
 }
 
+/* El cambio de verdad, ya confirmado. */
+static void do_guardar(void *ud)
+{
+    (void)ud;
+    const char *ssid = lv_textarea_get_text(s_ssid_ta);
+    const char *pass = lv_textarea_get_text(s_pass_ta);
+    udp_rx_set_credentials(ssid, pass);
+
+    /* La referencia pasa a ser lo recien guardado: un segundo toque seguido ya
+     * no es un cambio y no volvera a preguntar. */
+    snprintf(s_ssid_orig, sizeof(s_ssid_orig), "%s", ssid);
+    snprintf(s_pass_orig, sizeof(s_pass_orig), "%s", pass);
+
+    lv_label_set_text(s_status_lbl, "Guardado, reconectando...");
+    ESP_LOGI(TAG, "Nuevas credenciales guardadas desde Ajustes");
+}
+
+/* Cambiar la red no es un ajuste cualquiera: si te equivocas de SSID o de
+ * contrasena la pantalla se queda sin la P4 y sin datos, y para volver atras
+ * hay que teclear a mano lo de antes con el vehiculo en marcha. Por eso pide
+ * confirmacion -- pero solo si de verdad has tocado algo, para no meter un
+ * dialogo en el camino de quien solo estaba mirando. */
 static void guardar_cb(lv_event_t *e)
 {
     (void)e;
     const char *ssid = lv_textarea_get_text(s_ssid_ta);
     const char *pass = lv_textarea_get_text(s_pass_ta);
-    udp_rx_set_credentials(ssid, pass);
-    lv_label_set_text(s_status_lbl, "Guardado, reconectando...");
-    ESP_LOGI(TAG, "Nuevas credenciales guardadas desde Ajustes");
+
+    if (strcmp(ssid, s_ssid_orig) == 0 && strcmp(pass, s_pass_orig) == 0) {
+        lv_label_set_text(s_status_lbl, "No has cambiado nada.");
+        return;
+    }
+
+    /* Con el teclado abierto el dialogo saldria por encima de el y al cerrarse
+     * quedaria medio tapado; se recoge antes. */
+    lv_obj_add_flag(s_keyboard, LV_OBJ_FLAG_HIDDEN);
+
+    static char body[64];   /* estatico: el dialogo lo sigue leyendo despues */
+    snprintf(body, sizeof(body), "Red:  %s", ssid);
+    /* Naranja, el mismo color del titulo de esta pantalla. */
+    confirm_screen_open("Cambiar de red?", body, 0xFF9800,
+                        "Si, cambiar", do_guardar, NULL);
 }
 
 void view_ajustes_refresh(void)
 {
-    char ssid[33], pass[65];
-    udp_rx_get_credentials(ssid, sizeof(ssid), pass, sizeof(pass));
-    lv_textarea_set_text(s_ssid_ta, ssid);
-    lv_textarea_set_text(s_pass_ta, pass);
+    udp_rx_get_credentials(s_ssid_orig, sizeof(s_ssid_orig),
+                           s_pass_orig, sizeof(s_pass_orig));
+    lv_textarea_set_text(s_ssid_ta, s_ssid_orig);
+    lv_textarea_set_text(s_pass_ta, s_pass_orig);
     lv_label_set_text(s_status_lbl, "");
 }
 

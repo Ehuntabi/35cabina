@@ -126,6 +126,14 @@ void confirm_screen_open(const char *title, const char *body,
     lv_label_set_text(s_body, (body && body[0]) ? body : "");
     lv_label_set_text(s_ok_lbl, ok_text ? ok_text : "Si");
 
+    /* El dialogo se muda a la pantalla que este activa. Nace colgado de la de
+     * registros (confirm_screen_init), pero Ajustes vive en OTRA pantalla del
+     * carrusel y alli no se veria nada. Reparentar en cada apertura sale mas
+     * barato que tener un dialogo por pantalla, y deja el widget siempre donde
+     * el usuario esta mirando. */
+    lv_obj_t *scr = lv_scr_act();
+    if (scr && lv_obj_get_parent(s_root) != scr) lv_obj_set_parent(s_root, scr);
+
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(s_root);
 }

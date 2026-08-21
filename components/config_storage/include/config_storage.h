@@ -37,6 +37,16 @@ esp_err_t load_wifi_config(char *ssid_out, size_t *ssid_len,
                            char *pass_out, size_t *pass_len);
 esp_err_t save_wifi_config(const char *ssid, const char *pass);
 
+// Viaje en curso (NVS namespace: "viaje").
+// Lo lleva la propia pantalla: se enciende al confirmar "Iniciar viaje" y se
+// apaga al confirmar "Finalizar viaje". Se guarda para que un corte de
+// corriente en mitad de un viaje no devuelva el menu a "sin viaje".
+// La P4 sigue siendo la duena del viaje de verdad; esto es solo lo que la
+// 35cabina cree, hasta que la Fase 4 abra el canal de vuelta.
+// Si no hay nada guardado devuelve false (sin error).
+esp_err_t load_trip_active(bool *active_out);
+esp_err_t save_trip_active(bool active);
+
 // Calibracion de nivel del ADXL345 (NVS namespace: "tilt").
 // Offsets en centesimas de grado (deg*100), se restan de cada lectura.
 // Si no hay calibracion guardada devuelve 0/0 (sin error).

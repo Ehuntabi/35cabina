@@ -9,6 +9,12 @@
  * Tocar un campo NO saca el teclado aqui: abre el editor a pantalla completa
  * de entry_screen.c (valor en letra 40 + teclado de 240 px).
  *
+ * VIAJE es contextual: sin viaje solo ofrece "Iniciar viaje" (finalizar lo que
+ * no ha empezado no significa nada); con viaje en marcha ofrece "Anotar
+ * parada" en grande y "Finalizar viaje" pequeno abajo. De ahi cuelgan dos
+ * pantallas mas que no tienen casilla propia en el menu: PARADA (donde has
+ * parado y que has hecho) y, dentro de ella, SERVICIOS del area.
+ *
  * Nada de esto envia datos todavia -- todos los "Guardar" (y los botones
  * de Iniciar/Finalizar viaje) solo loguean. El envio real a la P4
  * (mini_cmd_t nuevo + receptor en ~/joint/victron) es la Fase 4,
@@ -20,20 +26,31 @@
 #include "nav.h"
 #include "entry_screen.h"
 #include "confirm_screen.h"
+#include "config_storage.h"
 #include "esp_log.h"
 #include <stdlib.h>
 #include <stdio.h>
 
 static const char *TAG = "view_registro";
 
+/* Las cinco primeras son las casillas del menu. Las dos ultimas NO tienen
+ * casilla: son pantallas que cuelgan de Viaje (parada) y de parada
+ * (servicios). Van en la misma lista porque comparten todo el andamiaje --
+ * contenedor oculto, cabecera con Volver, limpieza al salir. */
 typedef enum {
     CAT_VIAJE = 0,
     CAT_REPOSTAJE,
     CAT_PEAJE,
     CAT_BOMBONA,
     CAT_MANTENIMIENTO,
+    CAT_PARADA,
+    CAT_SERVICIOS,
     CAT_COUNT
 } categoria_t;
+
+/* Destino del boton Volver de una cabecera: al menu de iconos o a otra
+ * pantalla (parada vuelve a viaje, servicios vuelve a parada). */
+#define BACK_TO_GRID  (-1)
 
 
 static lv_obj_t *s_grid;
@@ -97,6 +114,48 @@ static lv_obj_t *s_forms[CAT_COUNT];
 static lv_obj_t *s_peaje_importe_ta;
 static lv_obj_t *s_peaje_currency_dd;
 
+/* --- Viaje: la pantalla cambia segun haya viaje en marcha o no ------------
+ *
+ * El estado lo lleva la PROPIA pantalla y se guarda en NVS, asi que un corte
+ * de corriente no devuelve el menu a "sin viaje". La P4 sigue siendo la duena
+ * del viaje de verdad; esto es solo lo que cree la 35cabina hasta que la
+ * Fase 4 abra el canal de vuelta y pueda preguntarselo. */
+static bool      s_viaje_activo;
+static lv_obj_t *s_viaje_title_lbl;      /* "VIAJE" / "VIAJE EN CURSO" */
+static lv_obj_t *s_viaje_msg;
+static lv_obj_t *s_viaje_btn_iniciar;
+static lv_obj_t *s_viaje_btn_parada;
+static lv_obj_t *s_viaje_btn_finalizar;
+static lv_obj_t *s_tile_viaje_lbl;       /* texto de su casilla en el menu */
+
+/* --- Parada: donde has parado y que has hecho ------------------------------
+ * Varias a la vez: en un area sueles vaciar Y llenar en la misma parada. */
+#define PARADA_COUNT        5
+#define PARADA_IDX_AREA     3
+#define PARADA_IDX_CAMPING  4
+static const char *const PARADA_OPCIONES[PARADA_COUNT] = {
+    "Vaciado", "Llenado", "Pernocta gratis", "Area", "Camping"
+};
+static lv_obj_t *s_parada_chk[PARADA_COUNT];
+static lv_obj_t *s_parada_precio_row;    /* oculto salvo area o camping */
+static lv_obj_t *s_parada_precio_ta;
+static lv_obj_t *s_parada_currency_dd;
+static lv_obj_t *s_parada_servicios_btn; /* oculto salvo area */
+
+/* Servicios que ofrece el area, en su propia pantalla: las cinco casillas de
+ * parada + el precio + estas seis no caben juntas en 320 px de alto. */
+#define SERV_COUNT 6
+static const char *const SERV_OPCIONES[SERV_COUNT] = {
+    "Agua potable", "Vaciado grises", "Vaciado WC",
+    "Electricidad", "Duchas/WC", "Basura"
+};
+/* Nombres cortos para el resumen de la confirmacion: alli el cuerpo va en
+ * letra 32 y solo caben ~25 caracteres por linea (ver confirm_screen.c). */
+static const char *const SERV_CORTOS[SERV_COUNT] = {
+    "Agua", "Grises", "WC", "Luz", "Duchas", "Basura"
+};
+static lv_obj_t *s_serv_chk[SERV_COUNT];
+
 /* Mantenimiento: varias casillas a la vez, no una opcion. Con el mismo
  * kilometraje puedes haber hecho el aceite Y su filtro. */
 #define MANT_COUNT 6
@@ -156,8 +215,14 @@ static void show_grid(void)
     }
 }
 
+static void viaje_refresh(void);
+
 static void show_form(int idx)
 {
+    /* La pantalla de viaje tiene dos caras (con viaje y sin el); se pone al dia
+     * aqui para que valga igual venga del menu o de cerrar una parada. */
+    if (idx == CAT_VIAJE) viaje_refresh();
+
     lv_obj_add_flag(s_grid, LV_OBJ_FLAG_HIDDEN);
     for (int i = 0; i < CAT_COUNT; i++) {
         if (i == idx) {
@@ -174,6 +239,12 @@ static void icon_click_cb(lv_event_t *e)
     show_form(idx);
 }
 
+static void set_hidden(lv_obj_t *obj, bool hidden)
+{
+    if (hidden) lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    else        lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+}
+
 /* La tarjeta de Wi-Fi no abre un formulario: salta a la pantalla de ajustes,
  * que vive fuera del carrusel. Antes era el engranaje pequeno de la esquina de
  * la vista principal. */
@@ -183,10 +254,13 @@ static void ajustes_click_cb(lv_event_t *e)
     nav_open_ajustes();
 }
 
+/* El destino viaja +1 en el user_data para que el 0 (CAT_VIAJE) no se
+ * confunda con "sin dato". BACK_TO_GRID llega aqui como 0. */
 static void back_click_cb(lv_event_t *e)
 {
-    (void)e;
-    show_grid();
+    int dest = (int)(intptr_t)lv_event_get_user_data(e) - 1;
+    if (dest < 0) show_grid();
+    else          show_form(dest);
 }
 
 void view_registro_reset(void)
@@ -435,7 +509,7 @@ static lv_obj_t *make_choice_row(lv_obj_t *parent, const char *label_text,
 #define CHK_GAP     6
 
 static lv_obj_t *make_check_grid(lv_obj_t *parent, const char *const *options,
-                                  uint8_t n, lv_obj_t **out)
+                                  uint8_t n, lv_obj_t **out, uint32_t color)
 {
     lv_obj_t *cont = make_field_row(parent);
     /* Sin rotulo: las cuatro opciones se explican solas y el texto de arriba
@@ -470,7 +544,7 @@ static lv_obj_t *make_check_grid(lv_obj_t *parent, const char *const *options,
         /* Casilla grande: la de serie es diminuta para un dedo en marcha. */
         lv_obj_set_style_width(cb, 28, LV_PART_INDICATOR);
         lv_obj_set_style_height(cb, 28, LV_PART_INDICATOR);
-        lv_obj_set_style_bg_color(cb, lv_color_hex(COL_MANTENIMIENTO),
+        lv_obj_set_style_bg_color(cb, lv_color_hex(color),
                                   LV_PART_INDICATOR | LV_STATE_CHECKED);
         lv_obj_set_style_border_color(cb, lv_color_hex(COL_LABEL),
                                       LV_PART_INDICATOR);
@@ -520,6 +594,17 @@ static void btnmatrix_reset(lv_obj_t *bm)
     lv_btnmatrix_set_btn_ctrl(bm, 0, LV_BTNMATRIX_CTRL_CHECKED);
 }
 
+/* El precio solo tiene sentido en un area o un camping (una pernocta gratis no
+ * se paga), y los servicios solo en un area. Aparecen y desaparecen segun las
+ * casillas marcadas, igual que el contador de ruedas del mantenimiento. */
+static void parada_refresh_extras(void)
+{
+    bool area    = lv_obj_has_state(s_parada_chk[PARADA_IDX_AREA], LV_STATE_CHECKED);
+    bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
+    set_hidden(s_parada_precio_row, !(area || camping));
+    set_hidden(s_parada_servicios_btn, !area);
+}
+
 /* Vacia TODOS los formularios. Lo llama show_grid(), o sea cada vez que se
  * vuelve al menu de iconos, venga de donde venga.
  *
@@ -558,6 +643,19 @@ static void clear_forms(void)
      * rehacerlos aqui; si no, ruedas_toggle_cb no se entera. */
     ruedas_actualiza_texto(false);
     lv_obj_add_flag(lv_obj_get_parent(s_mant_ruedas_bm), LV_OBJ_FLAG_HIDDEN);
+
+    for (uint8_t i = 0; i < PARADA_COUNT; i++) {
+        lv_obj_clear_state(s_parada_chk[i], LV_STATE_CHECKED);
+    }
+    lv_textarea_set_text(s_parada_precio_ta, "");
+    lv_dropdown_set_selected(s_parada_currency_dd, 0);
+    for (uint8_t i = 0; i < SERV_COUNT; i++) {
+        lv_obj_clear_state(s_serv_chk[i], LV_STATE_CHECKED);
+    }
+    /* Vuelve a esconder el precio y el boton de servicios. NO se limpia el
+     * viaje en curso: eso no es un dato del formulario, es el estado del
+     * aparato y solo lo cambian Iniciar/Finalizar. */
+    parada_refresh_extras();
 }
 
 /* Al marcar/desmarcar Ruedas aparece o se esconde el contador de cuantas.
@@ -644,7 +742,11 @@ static lv_obj_t *make_form_container(lv_obj_t *parent)
     return form;
 }
 
-static void add_header(lv_obj_t *form, const char *title, lv_color_t color)
+/* Devuelve el rotulo del titulo: la pantalla de viaje lo reescribe segun haya
+ * viaje en marcha o no. 'back_to' es a donde lleva el Volver (BACK_TO_GRID al
+ * menu de iconos, o el indice de otra pantalla). */
+static lv_obj_t *add_header(lv_obj_t *form, const char *title, lv_color_t color,
+                             int back_to)
 {
     lv_obj_t *row = lv_obj_create(form);
     lv_obj_set_size(row, lv_pct(100), HEADER_H);
@@ -665,7 +767,8 @@ static void add_header(lv_obj_t *form, const char *title, lv_color_t color)
     lv_obj_set_style_bg_color(back, color, LV_STATE_PRESSED);
     lv_obj_set_style_border_color(back, color, LV_STATE_PRESSED);
     lv_obj_align(back, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_add_event_cb(back, back_click_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(back, back_click_cb, LV_EVENT_CLICKED,
+                        (void *)(intptr_t)(back_to + 1));
     lv_obj_t *back_lbl = lv_label_create(back);
     lv_label_set_text(back_lbl, LV_SYMBOL_LEFT "  Volver");
     lv_obj_set_style_text_font(back_lbl, &lv_font_montserrat_20, 0);
@@ -684,6 +787,7 @@ static void add_header(lv_obj_t *form, const char *title, lv_color_t color)
     lv_obj_set_style_text_color(t, color, 0);
     lv_obj_set_style_text_font(t, &lv_font_montserrat_22, 0);
     lv_obj_align(t, LV_ALIGN_CENTER, 0, 0);
+    return t;
 }
 
 /* === Callbacks de guardado (solo log, ver Fase 4) ======================= */
@@ -691,7 +795,8 @@ static void add_header(lv_obj_t *form, const char *title, lv_color_t color)
 /* === Confirmacion antes de guardar ====================================== */
 
 static const char *CAT_NOMBRE[CAT_COUNT] = {
-    "viaje", "repostaje", "peaje", "bombona", "mantenimiento"
+    "viaje", "repostaje", "peaje", "bombona", "mantenimiento",
+    "parada", "servicios"
 };
 
 static uint32_t cat_color(categoria_t c)
@@ -701,6 +806,10 @@ static uint32_t cat_color(categoria_t c)
         case CAT_REPOSTAJE:     return COL_REPOSTAJE;
         case CAT_PEAJE:         return COL_PEAJE;
         case CAT_BOMBONA:       return COL_BOMBONA;
+        /* Parada y servicios cuelgan de Viaje: van con su azul para que se vea
+         * que son la misma rama. */
+        case CAT_PARADA:
+        case CAT_SERVICIOS:     return COL_VIAJE;
         default:                return COL_MANTENIMIENTO;
     }
 }
@@ -777,6 +886,51 @@ static void build_resumen(categoria_t cat)
                      val_or_dash(s_mant_coste_ta));
             break;
         }
+        case CAT_PARADA: {
+            /* Tres lineas como mucho: el cuerpo del dialogo va en letra 32 y
+             * por debajo estan los botones, asi que a partir de la cuarta
+             * linea se pisarian (ver el reparto en confirm_screen.c). De ahi
+             * los nombres cortos de los servicios. */
+            tipo[0] = '\0';
+            size_t used = 0;
+            for (uint8_t i = 0; i < PARADA_COUNT; i++) {
+                if (!lv_obj_has_state(s_parada_chk[i], LV_STATE_CHECKED)) continue;
+                int w = snprintf(tipo + used, sizeof(tipo) - used, "%s%s",
+                                 used ? ", " : "", PARADA_OPCIONES[i]);
+                if (w < 0 || (size_t)w >= sizeof(tipo) - used) break;
+                used += (size_t)w;
+            }
+
+            char extra[96];
+            extra[0] = '\0';
+            size_t e = 0;
+            bool area    = lv_obj_has_state(s_parada_chk[PARADA_IDX_AREA], LV_STATE_CHECKED);
+            bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
+            if (area || camping) {
+                int w = snprintf(extra, sizeof(extra), "\nPrecio:  %s %s",
+                                 val_or_dash(s_parada_precio_ta),
+                                 currency_of(s_parada_currency_dd));
+                if (w > 0) e = (size_t)w;
+            }
+            if (area) {
+                int w = snprintf(extra + e, sizeof(extra) - e, "\nServicios:  ");
+                if (w > 0 && (size_t)w < sizeof(extra) - e) {
+                    e += (size_t)w;
+                    bool alguno = false;
+                    for (uint8_t i = 0; i < SERV_COUNT; i++) {
+                        if (!lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED)) continue;
+                        int n = snprintf(extra + e, sizeof(extra) - e, "%s%s",
+                                         alguno ? ", " : "", SERV_CORTOS[i]);
+                        if (n < 0 || (size_t)n >= sizeof(extra) - e) break;
+                        e += (size_t)n;
+                        alguno = true;
+                    }
+                    if (!alguno) snprintf(extra + e, sizeof(extra) - e, "--");
+                }
+            }
+            snprintf(s_resumen, sizeof(s_resumen), "%s%s", used ? tipo : "--", extra);
+            break;
+        }
         default:
             s_resumen[0] = '\0';
             break;
@@ -801,6 +955,33 @@ static void save_generic_cb(lv_event_t *e)
                         do_save, (void *)(uintptr_t)cat);
 }
 
+/* Pone al dia las dos caras de la pantalla de viaje y el texto de su casilla
+ * en el menu. Sin viaje: mensaje + "Iniciar viaje" grande, y NADA de
+ * finalizar -- no se puede terminar lo que no ha empezado. Con viaje:
+ * "Anotar parada" grande y "Finalizar viaje" pequeno abajo, lejos del pulgar
+ * que viene de anotar. */
+static void viaje_refresh(void)
+{
+    lv_label_set_text(s_viaje_title_lbl, s_viaje_activo ? "VIAJE EN CURSO" : "VIAJE");
+    set_hidden(s_viaje_msg,           s_viaje_activo);
+    set_hidden(s_viaje_btn_iniciar,   s_viaje_activo);
+    set_hidden(s_viaje_btn_parada,   !s_viaje_activo);
+    set_hidden(s_viaje_btn_finalizar, !s_viaje_activo);
+    lv_label_set_text(s_tile_viaje_lbl, s_viaje_activo ? "Viaje en curso" : "Viaje");
+}
+
+static void viaje_set_activo(bool activo)
+{
+    s_viaje_activo = activo;
+    esp_err_t err = save_trip_active(activo);
+    if (err != ESP_OK) {
+        /* Se sigue adelante: el viaje vale para esta sesion, solo se pierde si
+         * se va la luz. Peor seria no dejar iniciarlo por un fallo de NVS. */
+        ESP_LOGW(TAG, "No se pudo guardar el estado del viaje: %s", esp_err_to_name(err));
+    }
+    viaje_refresh();
+}
+
 /* Viaje no lleva resumen: no hay nada tecleado que repasar. Solo el segundo
  * toque, que aqui importa mas que en ningun sitio -- finalizar un viaje por un
  * roce cierra el registro en curso de la P4. */
@@ -808,6 +989,7 @@ static void viaje_do_iniciar(void *ud)
 {
     (void)ud;
     ESP_LOGI(TAG, "CONFIRMADO iniciar viaje -- TODO Fase 4: comando a trip_manager.c de la P4");
+    viaje_set_activo(true);
     show_grid();
 }
 
@@ -815,7 +997,28 @@ static void viaje_do_finalizar(void *ud)
 {
     (void)ud;
     ESP_LOGI(TAG, "CONFIRMADO finalizar viaje -- TODO Fase 4: comando a trip_manager.c de la P4");
+    viaje_set_activo(false);
     show_grid();
+}
+
+/* "Anotar parada" y "Servicios del area" son navegacion, no guardado: van
+ * directas a su pantalla, sin confirmacion. */
+static void parada_open_cb(lv_event_t *e)
+{
+    (void)e;
+    show_form(CAT_PARADA);
+}
+
+static void servicios_open_cb(lv_event_t *e)
+{
+    (void)e;
+    show_form(CAT_SERVICIOS);
+}
+
+static void parada_toggle_cb(lv_event_t *e)
+{
+    (void)e;
+    parada_refresh_extras();
 }
 
 static void viaje_iniciar_cb(lv_event_t *e)
@@ -872,14 +1075,24 @@ static void repo_recalc_cb(lv_event_t *e)
 /* Boton grande de la pantalla de viaje: se estira para llenar el formulario.
  * Al fijar bg_color propio se pierde el realce de pulsado de LVGL, asi que se
  * oscurece a mano (mismo criterio que los iconos del menu). */
-static void make_viaje_button(lv_obj_t *form, const char *text, uint32_t color,
-                               lv_event_cb_t cb)
+/* 'grande' reparte el hueco sobrante del formulario; sin el, el boton se queda
+ * en una pastilla baja al final. "Finalizar viaje" va asi a peticion del
+ * usuario: pequeno y abajo, para que la accion habitual (anotar parada) se
+ * lleve la pantalla y la destructiva no se toque de un roce. */
+#define VIAJE_BTN_PEQ_H  46
+
+static lv_obj_t *make_viaje_button(lv_obj_t *form, const char *text, uint32_t color,
+                                    lv_event_cb_t cb, bool grande)
 {
     lv_obj_t *btn = lv_btn_create(form);
     lv_obj_set_width(btn, lv_pct(100));
-    lv_obj_set_height(btn, LV_SIZE_CONTENT);
-    lv_obj_set_style_min_height(btn, 70, 0);
-    lv_obj_set_flex_grow(btn, 1);
+    if (grande) {
+        lv_obj_set_height(btn, LV_SIZE_CONTENT);
+        lv_obj_set_style_min_height(btn, 70, 0);
+        lv_obj_set_flex_grow(btn, 1);
+    } else {
+        lv_obj_set_height(btn, VIAJE_BTN_PEQ_H);
+    }
     lv_obj_set_style_radius(btn, 12, 0);
     lv_obj_set_style_bg_color(btn, lv_color_hex(color), 0);
     lv_obj_set_style_bg_color(btn, lv_color_darken(lv_color_hex(color), LV_OPA_30),
@@ -888,39 +1101,44 @@ static void make_viaje_button(lv_obj_t *form, const char *text, uint32_t color,
 
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, text);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl, grande ? &lv_font_montserrat_24
+                                           : &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(lbl, lv_color_hex(COL_TILE_FG), 0);
     lv_obj_center(lbl);
+    return btn;
 }
 
 static void build_viaje(lv_obj_t *form)
 {
-    add_header(form, "VIAJE", lv_color_hex(COL_VIAJE));
+    s_viaje_title_lbl = add_header(form, "VIAJE", lv_color_hex(COL_VIAJE),
+                                   BACK_TO_GRID);
 
     /* Sin campo de coordenada GPS manual aqui a proposito: cuando exista
      * el GPS real (Fase 4 + modulo GPS de la P4) la posicion de
      * inicio/fin se capturaria sola en el instante del toque, no tiene
      * sentido pedirla a mano para una accion pensada como "un solo toque". */
-    lv_obj_t *msg = lv_label_create(form);
-    lv_label_set_text(msg, "Inicio y fin de viaje de la P4, desde aqui.");
-    lv_obj_set_style_text_color(msg, lv_color_hex(COL_LABEL), 0);
-    lv_obj_set_style_text_font(msg, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(msg, lv_pct(100));
+    s_viaje_msg = lv_label_create(form);
+    lv_label_set_text(s_viaje_msg, "Inicio y fin de viaje de la P4, desde aqui.");
+    lv_obj_set_style_text_color(s_viaje_msg, lv_color_hex(COL_LABEL), 0);
+    lv_obj_set_style_text_font(s_viaje_msg, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_align(s_viaje_msg, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(s_viaje_msg, lv_pct(100));
 
-    /* Los dos botones se reparten TODO lo que sobra (flex_grow), en vez de
-     * quedarse en la altura por defecto y dejar medio formulario en negro.
-     * Salen de ~95 px cada uno: son las dos acciones mas usadas de la pantalla
-     * y las que hay que acertar de un toque con el vehiculo parando. */
-    make_viaje_button(form, LV_SYMBOL_PLAY "  Iniciar viaje", COL_ACCION_OK,
-                      viaje_iniciar_cb);
-    make_viaje_button(form, LV_SYMBOL_STOP "  Finalizar viaje", COL_ACCION_STOP,
-                      viaje_finalizar_cb);
+    /* Los tres botones existen desde el arranque y se ocultan segun haya viaje
+     * o no (viaje_refresh): crearlos y destruirlos a cada entrada seria mas
+     * codigo y mas ocasiones de dejarse un puntero colgando. Solo se ve uno
+     * grande cada vez, asi que flex_grow le da toda la pantalla. */
+    s_viaje_btn_iniciar = make_viaje_button(form, LV_SYMBOL_PLAY "  Iniciar viaje",
+                                            COL_ACCION_OK, viaje_iniciar_cb, true);
+    s_viaje_btn_parada  = make_viaje_button(form, LV_SYMBOL_PLUS "  Anotar parada",
+                                            COL_VIAJE, parada_open_cb, true);
+    s_viaje_btn_finalizar = make_viaje_button(form, LV_SYMBOL_STOP "  Finalizar viaje",
+                                              COL_ACCION_STOP, viaje_finalizar_cb, false);
 }
 
 static void build_repostaje(lv_obj_t *form)
 {
-    add_header(form, "REPOSTAJE", lv_color_hex(COL_REPOSTAJE));
+    add_header(form, "REPOSTAJE", lv_color_hex(COL_REPOSTAJE), BACK_TO_GRID);
 
     /* Sin coordenada GPS ni hora a peticion del usuario (20-ago-2026): tecleadas
      * a mano no aportan nada y estorban en el surtidor. Cuando se abra la Fase 4
@@ -941,7 +1159,7 @@ static void build_repostaje(lv_obj_t *form)
 
 static void build_peaje(lv_obj_t *form)
 {
-    add_header(form, "PEAJE", lv_color_hex(COL_PEAJE));
+    add_header(form, "PEAJE", lv_color_hex(COL_PEAJE), BACK_TO_GRID);
 
     /* Sin coordenada GPS ni hora, igual que repostaje: ver comentario alli.
      * Al ser el unico campo, va en la variante apilada y grande. */
@@ -953,7 +1171,7 @@ static void build_peaje(lv_obj_t *form)
 
 static void build_bombona(lv_obj_t *form)
 {
-    add_header(form, "BOMBONA", lv_color_hex(COL_BOMBONA));
+    add_header(form, "BOMBONA", lv_color_hex(COL_BOMBONA), BACK_TO_GRID);
 
     /* Solo lo que el aparato no puede saber: cuantas se han comprado y lo que
      * han costado. Coordenada, dia, hora y lugar los rellena la P4 al recibir
@@ -972,12 +1190,12 @@ static void build_bombona(lv_obj_t *form)
 
 static void build_mantenimiento(lv_obj_t *form)
 {
-    add_header(form, "MANTENIMIENTO", lv_color_hex(COL_MANTENIMIENTO));
+    add_header(form, "MANTENIMIENTO", lv_color_hex(COL_MANTENIMIENTO), BACK_TO_GRID);
 
     /* Sin coordenada GPS, igual que repostaje, peaje y bombona: la posicion y
      * la fecha las pone la P4 al recibir el evento (Fase 4). Aqui solo va lo
      * que el aparato no puede deducir. */
-    make_check_grid(form, MANT_OPCIONES, MANT_COUNT, s_mant_chk);
+    make_check_grid(form, MANT_OPCIONES, MANT_COUNT, s_mant_chk, COL_MANTENIMIENTO);
 
     /* Cuantas ruedas. Oculto salvo que se marque Ruedas: la mayoria de los
      * mantenimientos no las tocan y no tiene sentido ocupar sitio siempre. */
@@ -996,6 +1214,70 @@ static void build_mantenimiento(lv_obj_t *form)
     make_dual_number_row(form, "Km", &s_mant_km_ta, "Coste", &s_mant_coste_ta);
 
     make_save_button(form, "Guardar mantenimiento", save_generic_cb, (void *)(uintptr_t)CAT_MANTENIMIENTO);
+}
+
+/* Pantalla de parada. Se llega desde Viaje y su Volver regresa alli, no al
+ * menu: es la vuelta natural de donde has venido.
+ *
+ * Reparto de los 320 px, que van justos: cabecera 48 + cinco casillas en tres
+ * filas 116 + precio ~62 + la fila de acciones 54 = 280, mas 12 de huecos,
+ * dentro de los 304 utiles. Por eso los servicios del area viven en OTRA
+ * pantalla: seis casillas mas (otros 116) no caben de ninguna manera.
+ *
+ * "Servicios del area" comparte fila con Guardar en vez de llevar la suya: asi
+ * no cuesta ni un pixel de alto, y cuando no hay area marcada Guardar se queda
+ * con toda la fila. */
+static void build_parada(lv_obj_t *form)
+{
+    add_header(form, "PARADA", lv_color_hex(COL_VIAJE), CAT_VIAJE);
+
+    make_check_grid(form, PARADA_OPCIONES, PARADA_COUNT, s_parada_chk, COL_VIAJE);
+    lv_obj_add_event_cb(s_parada_chk[PARADA_IDX_AREA], parada_toggle_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_parada_chk[PARADA_IDX_CAMPING], parada_toggle_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+
+    s_parada_precio_ta = make_money_field(form, "Precio", &s_parada_currency_dd);
+    /* El importe vive dentro de una sub-fila de make_money_field (numero y
+     * moneda uno al lado del otro), de ahi los DOS saltos hasta la fila que hay
+     * que ocultar entera: con solo uno se quedaria el rotulo "Precio" colgado. */
+    s_parada_precio_row = lv_obj_get_parent(lv_obj_get_parent(s_parada_precio_ta));
+
+    lv_obj_t *acciones = lv_obj_create(form);
+    lv_obj_set_size(acciones, lv_pct(100), 54);
+    lv_obj_set_style_bg_opa(acciones, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(acciones, 0, 0);
+    lv_obj_set_style_pad_all(acciones, 0, 0);
+    lv_obj_set_style_pad_column(acciones, 8, 0);
+    lv_obj_clear_flag(acciones, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(acciones, LV_FLEX_FLOW_ROW);
+
+    s_parada_servicios_btn = lv_btn_create(acciones);
+    lv_obj_set_height(s_parada_servicios_btn, 50);
+    lv_obj_set_flex_grow(s_parada_servicios_btn, 1);
+    lv_obj_set_style_bg_color(s_parada_servicios_btn, lv_color_hex(COL_VIAJE), 0);
+    lv_obj_set_style_bg_color(s_parada_servicios_btn,
+                              lv_color_darken(lv_color_hex(COL_VIAJE), LV_OPA_30),
+                              LV_STATE_PRESSED);
+    lv_obj_add_event_cb(s_parada_servicios_btn, servicios_open_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *serv_lbl = lv_label_create(s_parada_servicios_btn);
+    lv_label_set_text(serv_lbl, "Servicios " LV_SYMBOL_RIGHT);
+    lv_obj_set_style_text_font(serv_lbl, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(serv_lbl, lv_color_hex(COL_TILE_FG), 0);
+    lv_obj_center(serv_lbl);
+
+    lv_obj_t *guardar = make_save_button(acciones, "Guardar parada",
+                                         save_generic_cb, (void *)(uintptr_t)CAT_PARADA);
+    lv_obj_set_flex_grow(guardar, 2);
+}
+
+static void build_servicios(lv_obj_t *form)
+{
+    add_header(form, "SERVICIOS DEL AREA", lv_color_hex(COL_VIAJE), CAT_PARADA);
+
+    /* Sin boton de guardar: lo marcado aqui se guarda con la parada. El Volver
+     * de la cabecera devuelve a ella con las casillas puestas. */
+    make_check_grid(form, SERV_OPCIONES, SERV_COUNT, s_serv_chk, COL_VIAJE);
 }
 
 /* === Grid principal ======================================================= */
@@ -1060,8 +1342,12 @@ void view_registro_create(lv_obj_t *parent)
 
     /* 3 + 3. El salto de fila lo hace solo el ROW_WRAP: 3*146 + 2*10 = 458
      * cabe en los 460 utiles y la cuarta ya no. */
-    make_icon_button(s_grid, LV_SYMBOL_GPS,      "Viaje",         COL_VIAJE,
-                     icon_click_cb, (void *)(uintptr_t)CAT_VIAJE);
+    lv_obj_t *tile_viaje =
+        make_icon_button(s_grid, LV_SYMBOL_GPS,  "Viaje",         COL_VIAJE,
+                         icon_click_cb, (void *)(uintptr_t)CAT_VIAJE);
+    /* Hijo 1 = el rotulo (el 0 es el icono, ver make_icon_button). Pasa a decir
+     * "Viaje en curso" mientras haya viaje, para verlo sin entrar. */
+    s_tile_viaje_lbl = lv_obj_get_child(tile_viaje, 1);
     make_icon_button(s_grid, LV_SYMBOL_TINT,     "Repostaje",     COL_REPOSTAJE,
                      icon_click_cb, (void *)(uintptr_t)CAT_REPOSTAJE);
     make_icon_button(s_grid, LV_SYMBOL_LIST,     "Peaje",         COL_PEAJE,
@@ -1088,6 +1374,20 @@ void view_registro_create(lv_obj_t *parent)
 
     s_forms[CAT_MANTENIMIENTO] = make_form_container(parent);
     build_mantenimiento(s_forms[CAT_MANTENIMIENTO]);
+
+    s_forms[CAT_PARADA] = make_form_container(parent);
+    build_parada(s_forms[CAT_PARADA]);
+
+    s_forms[CAT_SERVICIOS] = make_form_container(parent);
+    build_servicios(s_forms[CAT_SERVICIOS]);
+
+    /* Estado de partida: si se fue la luz en mitad de un viaje, sigue habiendo
+     * viaje. viaje_refresh() deja la pantalla de Viaje y el rotulo de su
+     * casilla acordes; parada_refresh_extras() esconde el precio y el boton de
+     * servicios, que solo salen al marcar area o camping. */
+    load_trip_active(&s_viaje_activo);
+    viaje_refresh();
+    parada_refresh_extras();
 
     /* --- Editor de campo --- */
     /* Editor de campo a pantalla completa. Se crea el ULTIMO a proposito: asi

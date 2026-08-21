@@ -100,7 +100,7 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
    │  ├─ ui_theme.c/h, ui_format.c/h  # genericos, sin Victron
    │  ├─ nav.c/h                      # carrusel de 3 pantallas por gesto (Fase 2)
    │  ├─ view_info.c/h                # centro: info agrupada (Fase 1)
-   │  ├─ view_registro.c/h            # derecha: menu de 5 registros (Fase 2)
+   │  ├─ view_registro.c/h            # derecha: menu de registros + viaje/parada (Fase 2)
    │  ├─ view_inclinacion.c/h         # izquierda: burbuja de nivel (Fase 3)
    │  └─ view_ajustes.c/h             # SSID/password de la P4, editable sin reflashear
    └─ net/
@@ -130,11 +130,19 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   para cambiar de P4 (ej. la de repuesto para pruebas) sin ordenador de por
   medio. Antes era un engranaje (⚙) en la esquina de esta pantalla, que se
   retiró para no tener dos puertas a lo mismo.
+
+  **"Guardar y reconectar" pide confirmación si has cambiado algo** (y solo
+  entonces: si no has tocado el SSID ni la contraseña, avisa con un "No has
+  cambiado nada" y no hace nada). Equivocarse aquí deja la pantalla sin P4 y
+  sin datos, y para volver atrás hay que teclear a mano lo de antes con el
+  vehículo en marcha. El diálogo es el mismo `confirm_screen.c` de los
+  registros: **se muda a la pantalla activa** en cada apertura, porque nace
+  colgado de la de registros y Ajustes vive en otra pantalla del carrusel.
   `main/wifi_credentials.h` (ignorado por git, copiar desde
   `wifi_credentials.h.example`) solo se usa como valor de fábrica la
   primera vez que arranca con NVS vacía.
 - **Fase 2** (hecho): carrusel de 3 pantallas por gesto horizontal (centro:
-  info · derecha: menú de 5 iconos — **Viaje** (iniciar/finalizar),
+  info · derecha: menú de 5 iconos — **Viaje** (contextual, ver abajo),
   **Repostaje** (moneda arriba; importe y litros en la misma línea;
   precio/litro calculado), **Peaje** (moneda arriba, importe debajo en
   letra 40), **Bombona** (cuántas: 1 o 2, precio total),
@@ -209,9 +217,42 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   campo se cambiaba de pantalla y acto seguido el clic reabría el formulario
   por detrás — al volver te lo encontrabas abierto, de forma intermitente
   (solo si el dedo arrancaba encima de un widget).
+
+  **La pantalla de Viaje es contextual** (`viaje_refresh()`), porque
+  "Finalizar viaje" no tiene sentido si no has iniciado ninguno:
+
+  - **Sin viaje**: el mensaje y un único botón grande, **Iniciar viaje**.
+  - **Con viaje en marcha**: el título pasa a `VIAJE EN CURSO`, el botón
+    grande es **Anotar parada** y **Finalizar viaje** queda **pequeño y
+    abajo** — la acción habitual se lleva la pantalla y la destructiva no se
+    toca de un roce. La celda del menú pasa a decir "Viaje en curso".
+
+  El estado lo lleva **la propia pantalla** y se guarda en NVS (namespace
+  `viaje`, `load_trip_active()`/`save_trip_active()`), así que un corte de
+  corriente en mitad de un viaje no devuelve el menú a "sin viaje". Ojo: la
+  P4 sigue siendo la dueña del viaje de verdad; esto es solo **lo que cree la
+  35cabina** hasta que la Fase 4 abra el canal de vuelta y pueda
+  preguntárselo. Si las dos se descoordinan, hoy no se enteran.
+
+  **Parada** (`build_parada`) cuelga de Viaje y su Volver regresa allí, no al
+  menú. Casillas de marcar **varias a la vez** — en un área sueles vaciar Y
+  llenar en la misma parada: Vaciado · Llenado · Pernocta gratis · Área ·
+  Camping. El **precio** (con moneda) solo aparece si marcas Área o Camping,
+  y el botón **Servicios** solo si marcas Área, igual que el contador de
+  ruedas del mantenimiento.
+
+  Los **servicios del área** (Agua potable · Vaciado grises · Vaciado WC ·
+  Electricidad · Duchas/WC · Basura) viven en **otra pantalla**: los 320 px
+  de alto ya van justos (48 de cabecera + 116 de las cinco casillas + 62 del
+  precio + 54 de la fila de acciones = 280 de los 304 útiles), y seis
+  casillas más no caben de ninguna manera. No llevan botón de guardar: se
+  guardan con la parada. El botón "Servicios" comparte fila con "Guardar" en
+  vez de llevar la suya, así no cuesta ni un píxel de alto.
+
   Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
   viaje" es el primer candidato cuando se abra (pedido explícito del
-  usuario: que el 3.5" mande el comando de viaje, no la P4).
+  usuario: que el 3.5" mande el comando de viaje, no la P4). La parada
+  entera va detrás, por el mismo canal.
 - **Fase 3** (hecho y validado en placa real el 21-ago-2026): burbuja de nivel
   clásica (círculo que se desplaza, sin
   assets de imagen) leyendo el ADXL345 por I2C a 5Hz. Botón "Calibrar nivel"

@@ -21,6 +21,8 @@
 #define WIFI_NAMESPACE        "wifi"
 #define WIFI_SSID_KEY         "ssid"
 #define WIFI_PASS_KEY         "password"
+#define TRIP_NAMESPACE        "viaje"
+#define TRIP_ACTIVE_KEY       "activo"
 
 esp_err_t load_brightness(uint8_t *brightness_out) {
     nvs_handle_t h;
@@ -253,6 +255,38 @@ esp_err_t save_tilt_calibration(int16_t pitch_offset_centi, int16_t roll_offset_
     if (err != ESP_OK) return err;
     err = nvs_set_i16(h, TILT_PITCH_KEY, pitch_offset_centi);
     if (err == ESP_OK) err = nvs_set_i16(h, TILT_ROLL_KEY, roll_offset_centi);
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t load_trip_active(bool *active_out)
+{
+    if (!active_out) return ESP_ERR_INVALID_ARG;
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(TRIP_NAMESPACE, NVS_READONLY, &h);
+    if (err != ESP_OK) {
+        /* Namespace aun no existe -> nunca se ha iniciado un viaje. No es un
+         * error: el estado de partida es "sin viaje". */
+        *active_out = false;
+        return ESP_OK;
+    }
+
+    uint8_t v = 0;
+    nvs_get_u8(h, TRIP_ACTIVE_KEY, &v);
+    nvs_close(h);
+
+    *active_out = (v != 0);
+    return ESP_OK;
+}
+
+esp_err_t save_trip_active(bool active)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(TRIP_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_u8(h, TRIP_ACTIVE_KEY, active ? 1 : 0);
     if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
     return err;
