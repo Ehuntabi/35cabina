@@ -307,6 +307,9 @@ static void ta_click_cb(lv_event_t *e)
  * Los 14 px extra los ceden las filas de campo, que son elasticas. */
 #define HEADER_H     48
 
+/* Ancho maximo del titulo para no pisar el boton de Volver. Ver add_header(). */
+#define HEADER_TITLE_MAX_W  200
+
 static lv_obj_t *make_field_row(lv_obj_t *parent)
 {
     lv_obj_t *cont = lv_obj_create(parent);
@@ -779,13 +782,22 @@ static lv_obj_t *add_header(lv_obj_t *form, const char *title, lv_color_t color,
     lv_obj_center(back_lbl);
 
     /* Centrado en la fila, no respecto al hueco que deja el boton: asi el
-     * titulo cae en el eje de la pantalla. Cabe sin pisar el boton -- el mas
-     * largo, "MANTENIMIENTO", ocupa ~180 px centrados en 464, o sea empieza
-     * en el 142, y el boton acaba en el 128. */
+     * titulo cae en el eje de la pantalla.
+     *
+     * Con ANCHO TOPE, y no es un adorno: el boton ocupa de 0 a 128, asi que un
+     * titulo centrado solo puede medir 2*(232-128) = 208 px antes de metersele
+     * encima. "SERVICIOS DEL AREA" media ~219 y lo pisaba. Fijando el ancho, un
+     * titulo demasiado largo sale con puntos suspensivos -- feo, pero visible y
+     * sin tapar el boton, en vez de solaparse en silencio.
+     * En letra 22 caben ~14 caracteres: "VIAJE EN CURSO" (~175 px) y
+     * "MANTENIMIENTO" (~163 px) entran holgados. */
     lv_obj_t *t = lv_label_create(row);
     lv_label_set_text(t, title);
     lv_obj_set_style_text_color(t, color, 0);
     lv_obj_set_style_text_font(t, &lv_font_montserrat_22, 0);
+    lv_obj_set_width(t, HEADER_TITLE_MAX_W);
+    lv_label_set_long_mode(t, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(t, LV_ALIGN_CENTER, 0, 0);
     return t;
 }
@@ -1273,7 +1285,10 @@ static void build_parada(lv_obj_t *form)
 
 static void build_servicios(lv_obj_t *form)
 {
-    add_header(form, "SERVICIOS DEL AREA", lv_color_hex(COL_VIAJE), CAT_PARADA);
+    /* "SERVICIOS" a secas: "SERVICIOS DEL AREA" no cabe sin pisar el Volver
+     * (ver el tope de add_header). No hace falta el "del area": aqui se llega
+     * desde el boton Servicios de la parada, que solo sale al marcar Area. */
+    add_header(form, "SERVICIOS", lv_color_hex(COL_VIAJE), CAT_PARADA);
 
     /* Sin boton de guardar: lo marcado aqui se guarda con la parada. El Volver
      * de la cabecera devuelve a ella con las casillas puestas. */
