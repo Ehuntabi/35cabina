@@ -31,7 +31,7 @@ dónde escribe la P4.
 | Dónde se guarda | En la **SD de la P4** |
 | Qué va en la carpeta | Registros del usuario + telemetría + resumen. **No** el log del sistema |
 | Nombre de la carpeta | `2026-08-22_Galicia` (fecha delante, para que ordene sola) |
-| Empezar sin la P4 | Se permite; se sincroniza cuando aparezca |
+| Empezar sin la P4 | **No se deja**: la P4 arranca siempre antes, así que se exige y se avisa |
 | Canal | **HTTP** contra el portal de la P4 (TCP: no se pierde nada) |
 | Telemetría | **En los dos sitios**: por días como siempre y copia en la carpeta |
 | Parada abierta al finalizar | **Avisar y preguntar** antes de cerrar el viaje |
@@ -70,12 +70,28 @@ Cuerpo, según la operación:
 
 - `id` es un contador que lleva la 3.5", **creciente y sin huecos**.
 - `fecha_dias` es el día de la P4 tal y como lo recibió la 3.5" (ver
-  `mini_proto.h`). Si la 3.5" nunca tuvo reloj, se omite y **la P4 pone la fecha
-  del momento en que lo recibe**.
+  `mini_proto.h`). **Siempre va**: un viaje no puede empezar sin reloj (ver
+  abajo).
 
 **Idempotencia:** con reintentos, la P4 puede recibir lo mismo dos veces. Guarda
 el último `id` aplicado y **descarta lo que ya haya aplicado**, respondiendo OK
 igualmente para que la 3.5" lo dé por entregado y no se atasque.
+
+### La P4 arranca siempre antes que la 3.5"
+
+Dato del usuario (2026-08-22), y simplifica el diseño: la 3.5" tendrá el reloj de
+la P4 a los pocos segundos de encenderse, así que **lo raro deja de ser lo
+normal**.
+
+Consecuencia directa: **iniciar un viaje EXIGE la P4**. Si al pulsar todavía no
+hay reloj, se esperan unos segundos y, si no aparece, se avisa ("Enciende la P4
+primero") en vez de empezar a medias. Eso elimina de raíz tres casos límite que
+en la práctica no se iban a dar nunca: el viaje sin fecha, la carpeta creada a
+posteriori y la hora aproximada del propio inicio.
+
+Lo que **NO** se quita es la cola: la P4 puede apagarse, colgarse o quedarse sin
+cobertura a mitad de viaje, y sin cola un repostaje apuntado en ese hueco se
+perdería sin avisar. Pasa de ser el camino habitual a ser una red de seguridad.
 
 ### El "cuándo": cada cosa se sella al ocurrir, no al entregarse
 
@@ -162,8 +178,8 @@ mucha pendiente, conviene saberlo antes de volver.
 
 | Situación | Qué hace |
 |---|---|
-| Iniciar viaje sin la P4 | Se acepta. Queda en cola; la carpeta se crea cuando aparezca |
-| Sin reloj al iniciar | Se manda sin fecha y la P4 pone la del momento de recibirlo |
+| Iniciar viaje sin la P4 | **No se deja.** Espera unos segundos y avisa: "Enciende la P4 primero" |
+| La P4 se cae a mitad de viaje | Lo apuntado se queda en cola y sale cuando vuelva |
 | Finalizar con parada abierta | Avisa: "Tienes una parada sin cerrar en X. ¿La cierro y termino?" |
 | La P4 no aparece nunca | La cola aguanta 64 entradas y avisa al llenarse |
 | Reenvío duplicado | La P4 lo descarta por `id` y responde OK |
