@@ -364,6 +364,17 @@ void trip_eventos_reset(void)
     nvs_close(h);
 }
 
+uint32_t trip_eventos_get(void)
+{
+    nvs_handle_t h;
+    uint32_t v = 0;
+    if (nvs_open(TRIP_NAMESPACE, NVS_READONLY, &h) == ESP_OK) {
+        nvs_get_u32(h, TRIP_NEVENTOS_KEY, &v);
+        nvs_close(h);
+    }
+    return v;
+}
+
 uint32_t trip_eventos_inc(void)
 {
     nvs_handle_t h;

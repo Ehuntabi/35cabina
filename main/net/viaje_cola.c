@@ -35,9 +35,11 @@ static const char *TAG = "viaje_cola";
  * nada en silencio, que es el fallo que esta cola existe para evitar. */
 #define CAPACIDAD   64
 
-/* Un envio completo cabe de sobra: el mas largo previsto (una parada con todos
- * sus servicios) ronda los 300 bytes. */
-#define CUERPO_MAX  384
+/* El mas largo es la parada con todo marcado: 505 bytes MEDIDOS, no estimados
+ * -- la estimacion anterior decia "ronda los 300" y se quedaba corta, con lo que
+ * el apunte se cortaba a medias y acababa descartado por la P4. 640 deja margen
+ * para los dos campos de posicion que traera el GPS. */
+#define CUERPO_MAX  640
 
 /* Cada cuanto se reintenta la cabeza cuando hay algo pendiente. 15 s: lo
  * bastante seguido para que al encender la P4 se vacie enseguida, y lo bastante

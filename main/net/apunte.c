@@ -14,6 +14,14 @@
  * recepcion. Va marcado a proposito, para que al leer el fichero se sepa que
  * ese dato no es exacto en vez de creerselo.
  *
+ * SI NO CABE, SE DICE. Los helpers devuelven 0 en cuanto algo no entra, y ese 0
+ * se arrastra hasta el final. Antes se dejaba 'used' como estaba y se seguia:
+ * el buffer acababa con un JSON cortado a medias que SI pasaba el filtro de
+ * longitud, la P4 lo rechazaba con un 400 y la cola lo descartaba por invalido.
+ * Resultado: la pantalla decia "guardado" y el apunte no existia en ningun
+ * sitio. Paso con la parada completa (505 bytes en un buffer de 384), que es
+ * justo el apunte que mas cuesta rellenar. Detectado auditando el 22-ago-2026.
+ *
  * Las claves de "datos" van SIEMPRE en el mismo orden para un tipo dado: la P4
  * hace la cabecera del CSV con ellas, y si cambiaran de orden las columnas se
  * desalinearian. Si algun dia se añade un campo, la P4 lo detecta al comparar
@@ -49,25 +57,28 @@ size_t apunte_cabecera(char *out, size_t n, uint32_t id, const char *tipo)
 size_t apunte_campo_txt(char *out, size_t n, size_t used,
                         const char *clave, const char *valor)
 {
+    if (used == 0) return 0;               /* ya se desbordo antes */
     char v[64];
     json_str(v, sizeof(v), valor);
     int w = snprintf(out + used, n - used, "%s\"%s\":\"%s\"",
-                     used && out[used - 1] != '{' ? "," : "", clave, v);
-    return (w > 0 && (size_t)w < n - used) ? used + (size_t)w : used;
+                     out[used - 1] != '{' ? "," : "", clave, v);
+    return (w > 0 && (size_t)w < n - used) ? used + (size_t)w : 0;
 }
 
 size_t apunte_campo_num(char *out, size_t n, size_t used,
                         const char *clave, long valor)
 {
+    if (used == 0) return 0;
     int w = snprintf(out + used, n - used, "%s\"%s\":%ld",
-                     used && out[used - 1] != '{' ? "," : "", clave, valor);
-    return (w > 0 && (size_t)w < n - used) ? used + (size_t)w : used;
+                     out[used - 1] != '{' ? "," : "", clave, valor);
+    return (w > 0 && (size_t)w < n - used) ? used + (size_t)w : 0;
 }
 
 size_t apunte_cerrar(char *out, size_t n, size_t used, const char *resumen)
 {
+    if (used == 0) return 0;
     char r[96];
     json_str(r, sizeof(r), resumen ? resumen : "");
     int w = snprintf(out + used, n - used, "},\"resumen\":\"%s\"}", r);
-    return (w > 0 && (size_t)w < n - used) ? used + (size_t)w : used;
+    return (w > 0 && (size_t)w < n - used) ? used + (size_t)w : 0;
 }

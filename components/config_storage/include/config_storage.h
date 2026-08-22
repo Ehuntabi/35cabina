@@ -60,6 +60,7 @@ uint32_t next_trip_seq(void);
  * y no lo entregado: ver el porque en el .c. */
 void     trip_eventos_reset(void);
 uint32_t trip_eventos_inc(void);
+uint32_t trip_eventos_get(void);   /* sin incrementar: para el mensaje de fin */
 
 /* Usuario y clave del PORTAL de la P4 (no del Wi-Fi). Se ven en la P4, en
  * Ajustes -> Wi-Fi. */

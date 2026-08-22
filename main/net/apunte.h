@@ -23,8 +23,9 @@ extern "C" {
 /* Abre el objeto y sella la hora. Devuelve los bytes usados. */
 size_t apunte_cabecera(char *out, size_t n, uint32_t id, const char *tipo);
 
-/* Añaden un campo a "datos". Devuelven los bytes usados; si no cabe, dejan el
- * buffer como estaba (el apunte saldra incompleto pero JSON valido). */
+/* Añaden un campo a "datos". Devuelven los bytes usados, o **0 si no cabe** --
+ * y ese 0 se arrastra hasta apunte_cerrar(). QUIEN LLAMA TIENE QUE MIRARLO: un
+ * apunte que no cabe no se puede encolar, hay que avisar al usuario. */
 size_t apunte_campo_txt(char *out, size_t n, size_t used,
                         const char *clave, const char *valor);
 size_t apunte_campo_num(char *out, size_t n, size_t used,
@@ -32,7 +33,8 @@ size_t apunte_campo_num(char *out, size_t n, size_t used,
 
 /* Cierra "datos" y añade el resumen de una linea que ira al diario del viaje
  * (eventos.csv). Lo monta la 3.5" y no la P4 porque es aqui donde se sabe que
- * significa cada casilla. */
+ * significa cada casilla. Devuelve 0 si el apunte NO cabe: en ese caso el
+ * buffer contiene un JSON cortado y NO se debe mandar. */
 size_t apunte_cerrar(char *out, size_t n, size_t used, const char *resumen);
 
 #ifdef __cplusplus

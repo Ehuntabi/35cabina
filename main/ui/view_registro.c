@@ -1330,7 +1330,10 @@ static void parada_abrir_si_procede(void)
  * los saltos de linea, que ahi eran para leerlo y en un CSV sobran. */
 static void apunte_encolar(categoria_t cat)
 {
-    char b[384];
+    /* 640 y no 384: la parada completa son 505 bytes y con 384 se cortaba a
+     * medias (ver la cabecera de apunte.c). Queda margen para los dos campos de
+     * posicion que traera el GPS de la P4. */
+    char b[640];
     size_t u = apunte_cabecera(b, sizeof(b), next_trip_seq(), CAT_CLAVE[cat]);
 
     switch (cat) {
@@ -1406,6 +1409,17 @@ static void apunte_encolar(categoria_t cat)
     /* Se cuenta ANTES de encolar y pase lo que pase: si el apunte se pierde,
      * la P4 tiene que enterarse de que le falta uno. */
     trip_eventos_inc();
+
+    if (u == 0) {
+        /* No cabe. No deberia pasar nunca -- el buffer se dimensiono para el
+         * apunte mas grande con margen -- pero si alguien añade campos y se
+         * pasa, mas vale un cartel que un dato perdido en silencio. */
+        ESP_LOGE(TAG, "el apunte '%s' NO CABE en el buffer, no se manda", CAT_NOMBRE[cat]);
+        confirm_screen_aviso("No he podido apuntarlo",
+                             "Este apunte es demasiado largo\ny no se ha guardado. Avisa de\nesto, es un fallo del programa.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
 
     if (!viaje_cola_push(b)) {
         confirm_screen_aviso("No he podido apuntarlo",
@@ -1636,8 +1650,12 @@ static void viaje_do_iniciar(void *ud)
 static void viaje_do_finalizar(void *ud)
 {
     (void)ud;
+    /* trip_eventos_GET y no _inc: el fin es el ultimo evento, no hay nada
+     * despues que contar, y con _inc cada reintento fallido subia el contador.
+     * Tres intentos con la cola llena y la P4 daba el viaje por incompleto sin
+     * faltarle nada. El +1 es este mismo mensaje. */
     char cuerpo[80];
-    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), trip_eventos_inc());
+    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), trip_eventos_get() + 1);
 
     if (!viaje_cola_push(cuerpo)) {
         confirm_screen_aviso("No he podido apuntarlo",
