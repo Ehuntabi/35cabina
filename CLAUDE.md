@@ -16,9 +16,9 @@ descartado como producto) y la arquitectura de red del satélite
 - **LVGL 8.4.0** — misma versión que `victron_mini` y que el fork anterior;
   permite portar patrones de UI (`view_quad.c`) sin migración de API.
 - **Sin lógica Victron/BLE/AES/portal Wi-Fi propia** — todo eso lo hace la
-  P4; este dispositivo solo recibe (`net/udp_rx.c`, protocolo
-  `mini_proto.h`, MANTENER SINCRONIZADO con `~/joint/victron`) y, más
-  el 22-ago-2026 **ya envía de vuelta** el inicio y el fin de viaje: `POST
+  P4; este dispositivo solo **recibe** telemetría (`net/udp_rx.c`, protocolo
+  `mini_proto.h`, MANTENER SINCRONIZADO con `~/joint/victron`).
+  Desde el 22-ago-2026 **ya envía de vuelta** el inicio y el fin de viaje: `POST
   /api/viaje` contra el portal de la P4 (`main/net/p4_api.c`), que crea la
   carpeta del viaje en su SD. Los registros sueltos siguen sin enviarse —
   fase 3 del diseño, en `docs/superpowers/specs/`.
