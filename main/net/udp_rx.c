@@ -294,12 +294,18 @@ static void rx_task(void *arg)
         }
 
         if ((s_msgs_ok % 10) == 1) {
-            ESP_LOGI(TAG, "RX OK #%lu (bad=%lu) from %s soc=%d.%d V=%d.%02d I=%ld mA",
+            ESP_LOGI(TAG, "RX OK #%lu (bad=%lu) from %s soc=%d.%d V=%d.%02d I=%ld mA "
+                          "agua limpia=%u grises=%u",
                      (unsigned long)s_msgs_ok, (unsigned long)s_msgs_bad,
                      inet_ntoa(src.sin_addr),
                      msg->shunt_soc_deci / 10, msg->shunt_soc_deci % 10,
                      msg->shunt_voltage_centi / 100, msg->shunt_voltage_centi % 100,
-                     (long)msg->shunt_current_milli);
+                     (long)msg->shunt_current_milli,
+                     msg->water_clean, msg->water_gray);
+            /* Las aguas se dejan en el log a proposito: salio de depurar por que
+             * el aviso de grises no se veia, y resulto util para distinguir "no
+             * llega el dato" de "llega y no se pinta". Cuesta una linea cada 10
+             * paquetes. */
         }
     }
 }
