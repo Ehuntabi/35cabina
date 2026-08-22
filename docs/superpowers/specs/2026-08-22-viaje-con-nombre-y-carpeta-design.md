@@ -127,6 +127,29 @@ cola como uno más, así que **nunca adelanta** a los registros pendientes.
 **Límite:** 64 entradas. Al llenarse se avisa en pantalla en vez de tirar nada en
 silencio.
 
+### Aviso de pendientes en la 3.5"
+
+Las paradas y los repostajes se apuntan **antes de apagar**, así que hay que
+poder ver de un vistazo si queda algo sin enviar antes de quitar el contacto.
+
+**Matiz importante:** apagar con pendientes **no pierde nada** — la cola está en
+NVS y sobrevive. El riesgo real es irse a casa creyendo que el viaje está entero
+y bajarlo antes de que se sincronice, y eso ya lo corta el bloqueo de los
+incompletos. El aviso sirve para no llegar a esa situación.
+
+**Limitación física:** la 3.5" **no puede saber que vas a quitar el contacto**;
+se queda sin corriente y ya. Así que el aviso no puede saltar "al apagar": tiene
+que estar visible **todo el rato** mientras quede algo pendiente.
+
+Dos sitios:
+
+1. **Pastilla en la pantalla principal**, abajo, solo cuando hay algo: *"2 sin
+   enviar"*. Es la pantalla que está puesta cuando vas a quitar el contacto, así
+   que es donde de verdad se ve. Desaparece sola al vaciarse la cola.
+2. **En la confirmación al guardar**, si no se pudo entregar en el momento:
+   *"Guardado. Pendiente de enviar: la P4 no responde"*. Te enteras en el acto,
+   sin un cartel aparte que haya que cerrar en mitad del surtidor.
+
 ### En la P4
 
 1. `op=inicio` → crea `/sdcard/viajes/AAAA-MM-DD_Nombre/` y lo marca como viaje
