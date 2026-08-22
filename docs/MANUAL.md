@@ -85,25 +85,14 @@ Colores:
 El límite de 3° de lado a lado **no es un capricho: es el del frigorífico**. Por
 encima de eso el frigo de absorción trabaja mal.
 
-### Los dos ajustes, en este orden
-
-**1. "Sensor girado" (0 / 90 / 180 / 270).** Según cómo quede montada la
-pantalla en su soporte, el sensor puede estar girado respecto a la autocaravana.
-Si al inclinarla hacia un lado la bola se mueve **hacia delante o hacia atrás**
-en vez de a los lados, es esto.
-
-Pruébalo con el aparato en la mano: inclínalo y mira si la bola va donde debe.
-Si con **90** se va justo al lado contrario, pon **270** — son los dos sentidos
-del mismo giro y acertar a la primera es difícil.
-
-**2. "Calibrar nivel".** Pon el cero cuando la autocaravana esté realmente
+**Botón "Calibrar nivel":** pon el cero cuando la autocaravana esté realmente
 nivelada (comprobado con un nivel de burbuja de verdad). Corrige que la pantalla
 no esté montada perfectamente recta.
 
-> **El orden importa.** Cambiar la orientación **borra la calibración** y te lo
-> dice en pantalla. Es a propósito: los desvíos guardados estaban medidos con
-> los ejes de antes, y aplicarlos sobre los nuevos dejaría el nivel torcido sin
-> que se notara. Primero aciertas el giro, luego calibras.
+> El sensor va montado **girado** en su soporte, y el programa ya lo tiene en
+> cuenta. No hay nada que tocar. Si algún día se cambia el soporte y el nivel
+> empieza a marcar el balanceo donde debería marcar el cabeceo, es eso — hay que
+> avisar para corregirlo en el programa.
 
 ---
 

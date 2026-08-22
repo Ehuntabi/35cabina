@@ -100,10 +100,6 @@ esp_err_t clear_parada_abierta(void);
 // Calibracion de nivel del ADXL345 (NVS namespace: "tilt").
 // Offsets en centesimas de grado (deg*100), se restan de cada lectura.
 // Si no hay calibracion guardada devuelve 0/0 (sin error).
-/* Orientacion del sensor respecto al vehiculo: 0, 90, 180 o 270 grados. */
-uint16_t  load_tilt_orientacion(void);
-esp_err_t save_tilt_orientacion(uint16_t grados);
-
 esp_err_t load_tilt_calibration(int16_t *pitch_offset_centi,
                                  int16_t *roll_offset_centi);
 esp_err_t save_tilt_calibration(int16_t pitch_offset_centi,

@@ -66,23 +66,6 @@ static lv_obj_t *s_circle;
 static lv_obj_t *s_bubble;
 static lv_obj_t *s_label_deg;
 static lv_obj_t *s_label_status;
-static lv_obj_t *s_ori_bm;          /* 0 / 90 / 180 / 270 */
-
-static uint16_t indice_a_grados(uint16_t i) { return (uint16_t)(i * 90); }
-static uint16_t grados_a_indice(uint16_t g) { return (uint16_t)(g / 90); }
-
-static void ori_cb(lv_event_t *e)
-{
-    (void)e;
-    uint16_t i = lv_btnmatrix_get_selected_btn(s_ori_bm);
-    if (i > 3) return;
-    uint16_t g = indice_a_grados(i);
-    if (g == tilt_get_orientacion()) return;
-    tilt_set_orientacion(g);
-    /* Cambiar la orientacion borra la calibracion, y callarselo dejaria el
-     * nivel torcido sin que nadie sepa por que. */
-    lv_label_set_text(s_label_status, "Orientacion cambiada.\nVuelve a calibrar.");
-}
 static lv_obj_t *s_label_nivel;   /* "NIVELADA", aparte del estado */
 static lv_timer_t *s_timer;
 
@@ -280,10 +263,7 @@ void view_inclinacion_create(lv_obj_t *parent)
     lv_obj_set_style_pad_all(right, 0, 0);
     lv_obj_set_flex_flow(right, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(right, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    /* 8 y no 12: con el selector de orientacion son siete elementos apilados y
-     * a 12 la columna sumaba 311 de los 320 disponibles -- cabia por nueve
-     * pixeles, y el aviso de "vuelve a calibrar" ocupa dos lineas. */
-    lv_obj_set_style_pad_row(right, 8, 0);
+    lv_obj_set_style_pad_row(right, 12, 0);
     lv_obj_clear_flag(right, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *title = lv_label_create(right);
@@ -308,37 +288,6 @@ void view_inclinacion_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_label_status, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_align(s_label_status, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(s_label_status, lv_pct(100));
-
-    /* Orientacion del sensor. Va AQUI y no en Ajustes a proposito: es el unico
-     * sitio donde ves el efecto de tocarlo -- pones 90, inclinas el aparato y
-     * compruebas si la bola va a donde debe. En Ajustes habria que ir y volver
-     * a ciegas.
-     *
-     * Debajo del titulo y por encima del boton de calibrar, que es el orden en
-     * que hay que usarlos: primero aciertas la orientacion, luego calibras. */
-    lv_obj_t *ori_lbl = lv_label_create(right);
-    lv_label_set_text(ori_lbl, "Sensor girado");
-    lv_obj_set_style_text_color(ori_lbl, lv_color_hex(0x888888), 0);
-    lv_obj_set_style_text_font(ori_lbl, &lv_font_montserrat_14, 0);
-
-    static const char *ori_map[] = { "0", "90", "180", "270", "" };
-    s_ori_bm = lv_btnmatrix_create(right);
-    lv_btnmatrix_set_map(s_ori_bm, ori_map);
-    lv_btnmatrix_set_one_checked(s_ori_bm, true);
-    lv_obj_set_size(s_ori_bm, 170, 40);
-    lv_obj_set_style_pad_all(s_ori_bm, 2, 0);
-    lv_obj_set_style_border_width(s_ori_bm, 0, 0);
-    lv_obj_set_style_bg_opa(s_ori_bm, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_text_font(s_ori_bm, &lv_font_montserrat_16, 0);
-    for (uint16_t i = 0; i < 4; i++) {
-        lv_btnmatrix_set_btn_ctrl(s_ori_bm, i, LV_BTNMATRIX_CTRL_CHECKABLE);
-    }
-    lv_btnmatrix_set_btn_ctrl(s_ori_bm, grados_a_indice(tilt_get_orientacion()),
-                              LV_BTNMATRIX_CTRL_CHECKED);
-    /* En RELEASED y no en VALUE_CHANGED: la marca del btnmatrix no se aplica
-     * hasta soltar, y actuar al presionar deja el boton marcado en el sitio
-     * viejo. Mismo motivo que en los registros. */
-    lv_obj_add_event_cb(s_ori_bm, ori_cb, LV_EVENT_RELEASED, NULL);
 
     lv_obj_t *calib_btn = lv_btn_create(right);
     lv_obj_set_size(calib_btn, 170, 42);

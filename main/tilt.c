@@ -34,16 +34,17 @@
  * en su orientacion original. "pitch" sale como cabeceo delante-atras y "roll"
  * como balanceo izda-dcha, en el sentido correcto.
  *
- * El 22-ago-2026 el diseño del soporte obliga a montarlo GIRADO, asi que la
- * orientacion pasa a ser un AJUSTE (0/90/180/270) en vez de estar cableada
- * aqui. Se gira el vector medido antes de calcular los angulos, con lo que todo
- * lo de abajo sigue trabajando siempre en los ejes del VEHICULO y no hay que
- * tocar ni el nivel ni lo que se guarda en las paradas.
+ * El 22-ago-2026 el diseño del soporte obliga a montarlo GIRADO. Se gira el
+ * vector medido antes de calcular los angulos, con lo que todo lo de abajo
+ * sigue trabajando siempre en los ejes del VEHICULO y no hay que tocar ni el
+ * nivel ni lo que se guarda en las paradas.
  *
- * Ajuste y no constante por dos motivos: el soporte puede volver a cambiar, y
- * acertar el SENTIDO a la primera es dificil -- depende de como quede soldado el
- * ADXL345 respecto a la pantalla. Si con 90 la bola se va al lado contrario, se
- * pone 270 desde la propia pantalla y listo.
+ * 270 y no 90: COMPROBADO en la placa. Se llego a poner un selector en pantalla
+ * para probar los cuatro giros, y se quito en cuanto se supo cual era -- en un
+ * tactil dentro de un vehiculo en marcha, un roce habria girado los ejes Y
+ * borrado la calibracion de paso, sin que nadie se enterara hasta ir a nivelar.
+ * Un ajuste que solo se toca una vez en la vida no merece estar al alcance del
+ * pulgar. Si el soporte vuelve a cambiar, se cambia esta linea.
  */
 #include "tilt.h"
 #include "config_storage.h"
@@ -105,26 +106,18 @@ static bool read_raw_g(float *ax, float *ay, float *az)
     return true;
 }
 
-/* Grados que hay girado el sensor respecto al vehiculo. Se lee de NVS al
- * arrancar y cuando se cambia el ajuste. */
-static uint16_t s_orientacion;
-
 /* Lleva el vector medido a los ejes del VEHICULO.
  *
- * Girando el aparato 90 grados en sentido horario (mirando la pantalla de
- * frente), el eje X del sensor -- el que apuntaba hacia arriba en la pantalla --
- * pasa a apuntar a la derecha del vehiculo, y el eje Y pasa a apuntar hacia
- * abajo. De ahi el intercambio con el cambio de signo. Z no se toca: el giro es
- * sobre el plano de la pantalla y la gravedad sigue entrando igual por ahi. */
+ * El sensor va montado girado 270 grados (o sea, 90 en sentido antihorario
+ * mirando la pantalla de frente): su eje X pasa a apuntar a la izquierda del
+ * vehiculo y su eje Y hacia delante. De ahi el intercambio con el cambio de
+ * signo. Z no se toca: el giro es sobre el plano de la pantalla y la gravedad
+ * sigue entrando igual por ahi. */
 static void a_ejes_vehiculo(float *ax, float *ay)
 {
     float x = *ax, y = *ay;
-    switch (s_orientacion) {
-        case 90:  *ax = -y; *ay =  x; break;
-        case 180: *ax = -x; *ay = -y; break;
-        case 270: *ax =  y; *ay = -x; break;
-        default:  break;                    /* 0: como se monto originalmente */
-    }
+    *ax =  y;
+    *ay = -x;
 }
 
 static bool compute_angles(float *pitch_deg, float *roll_deg)
@@ -183,10 +176,9 @@ esp_err_t tilt_init(void)
     load_tilt_calibration(&p_centi, &r_centi);
     s_pitch_offset_deg = p_centi / 100.0f;
     s_roll_offset_deg  = r_centi / 100.0f;
-    s_orientacion      = load_tilt_orientacion();
 
-    ESP_LOGI(TAG, "ADXL345 OK. Orientacion %u grados. Calibracion: pitch_off=%.2f roll_off=%.2f",
-             (unsigned)s_orientacion, s_pitch_offset_deg, s_roll_offset_deg);
+    ESP_LOGI(TAG, "ADXL345 OK (montado a 270 grados). Calibracion: pitch_off=%.2f roll_off=%.2f",
+             s_pitch_offset_deg, s_roll_offset_deg);
     return ESP_OK;
 }
 
@@ -232,24 +224,3 @@ void tilt_calibrate(void)
     ESP_LOGI(TAG, "Calibrado (N=%d): pitch_off=%.2f roll_off=%.2f",
              ok, s_pitch_offset_deg, s_roll_offset_deg);
 }
-
-/* Cambiar la orientacion INVALIDA la calibracion: los desvios guardados estan
- * medidos en los ejes de antes, y aplicarlos sobre los nuevos meteria un error
- * silencioso -- el nivel seguiria pintando, pero torcido. Se ponen a cero y se
- * avisa de que hay que volver a calibrar. */
-void tilt_set_orientacion(uint16_t grados)
-{
-    if (grados != 0 && grados != 90 && grados != 180 && grados != 270) return;
-    if (grados == s_orientacion) return;
-
-    s_orientacion = grados;
-    save_tilt_orientacion(grados);
-
-    s_pitch_offset_deg = 0.0f;
-    s_roll_offset_deg  = 0.0f;
-    save_tilt_calibration(0, 0);
-    ESP_LOGW(TAG, "Orientacion a %u grados. Calibracion BORRADA: hay que "
-                  "volver a calibrar con la autocaravana nivelada", (unsigned)grados);
-}
-
-uint16_t tilt_get_orientacion(void) { return s_orientacion; }

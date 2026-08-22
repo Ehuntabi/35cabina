@@ -240,34 +240,6 @@ esp_err_t save_relay_config(bool enabled,
     return err;
 }
 
-/* Como va MONTADO el sensor respecto al vehiculo: 0, 90, 180 o 270 grados.
- *
- * Ajustable y no fijo en el codigo porque el soporte puede cambiar (y cambio),
- * y porque acertar el SENTIDO a la primera es dificil: depende de como quede
- * soldado el ADXL345 respecto a la pantalla. Poder probar 90 y, si la bola va al
- * reves, poner 270 desde la propia pantalla ahorra dos ciclos de grabar. */
-uint16_t load_tilt_orientacion(void)
-{
-    nvs_handle_t h;
-    uint16_t v = 0;
-    if (nvs_open(TILT_NAMESPACE, NVS_READONLY, &h) == ESP_OK) {
-        nvs_get_u16(h, "orient", &v);
-        nvs_close(h);
-    }
-    return (v == 90 || v == 180 || v == 270) ? v : 0;
-}
-
-esp_err_t save_tilt_orientacion(uint16_t grados)
-{
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(TILT_NAMESPACE, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-    err = nvs_set_u16(h, "orient", grados);
-    if (err == ESP_OK) err = nvs_commit(h);
-    nvs_close(h);
-    return err;
-}
-
 esp_err_t load_tilt_calibration(int16_t *pitch_offset_centi, int16_t *roll_offset_centi)
 {
     if (!pitch_offset_centi || !roll_offset_centi) return ESP_ERR_INVALID_ARG;
