@@ -66,6 +66,7 @@ static lv_obj_t   *s_led_clean[4];
 static lv_obj_t   *s_led_gray;
 static lv_obj_t   *s_lbl_gray;     /* el rotulo, que tambien avisa */
 static lv_obj_t   *s_frigo_val;
+static lv_obj_t   *s_frigo_trend;  /* flecha de tendencia */
 static lv_obj_t   *s_frigo_fan;
 static lv_obj_t   *s_ext_val;
 static lv_timer_t *s_refresh_timer;
@@ -106,6 +107,9 @@ static lv_color_t color_for_frigo(int16_t centi) {
  * el porque en view_info_create. */
 #define BAT_NUM_W     104
 #define BAT_NUM_X      12
+
+/* Hueco fijo de las temperaturas, con la flecha de tendencia detras. */
+#define TEMP_NUM_W    120
 
 static lv_obj_t *s_bat_relleno;
 
@@ -450,6 +454,53 @@ static void refresh_aux(const mini_data_t *d)
     }
 }
 
+/* Tendencia del frigo: flecha ARRIBA naranja si la temperatura esta subiendo,
+ * ABAJO azul si baja o se mantiene.
+ *
+ * No se compara con la lectura anterior: el dato llega cada segundo y oscila
+ * unas decimas, asi que la flecha estaria todo el rato cambiando y no diria
+ * nada. Se compara con una media lenta (el 2% de cada muestra, o sea unos 50 s
+ * de memoria) y ademas hay HISTERESIS: para pasar a "sube" hace falta estar
+ * 0,3 grados por encima de la media, y para volver a "baja" hay que caer por
+ * debajo de 0,05. Entre medias se queda como estaba, que es lo que evita el
+ * parpadeo justo en el umbral.
+ *
+ * "Se mantiene" cuenta como bajar a proposito (peticion del usuario): en un
+ * congelador lo que preocupa es que suba. */
+#define TREND_SUBE_CENTI   30   /* +0,30 C sobre la media para decir que sube */
+#define TREND_BAJA_CENTI    5   /* +0,05 C para volver a decir que baja */
+
+static void refresh_tendencia_frigo(bool has, int16_t centi)
+{
+    static bool  media_lista = false;
+    static float media = 0.0f;
+    static bool  subiendo = false;
+
+    if (!has) {
+        media_lista = false;
+        subiendo = false;
+        lv_label_set_text(s_frigo_trend, "");
+        return;
+    }
+
+    if (!media_lista) {            /* primera lectura: la media ES el dato */
+        media = (float)centi;
+        media_lista = true;
+    } else {
+        media += ((float)centi - media) * 0.02f;
+    }
+
+    float diff = (float)centi - media;
+    if (diff > TREND_SUBE_CENTI)       subiendo = true;
+    else if (diff < TREND_BAJA_CENTI)  subiendo = false;
+
+    lv_label_set_text(s_frigo_trend, subiendo ? LV_SYMBOL_UP : LV_SYMBOL_DOWN);
+    lv_obj_set_style_text_color(s_frigo_trend,
+                                subiendo ? lv_color_hex(0xFF9800)    /* naranja */
+                                         : lv_color_hex(0x4FC3F7),   /* azul */
+                                0);
+}
+
 /* Una de las dos temperaturas que comparten tarjeta. */
 static void refresh_temp(lv_obj_t *val, bool has, int16_t centi, bool is_frigo)
 {
@@ -522,6 +573,7 @@ static void refresh_cb(lv_timer_t *t)
     refresh_bat(&d);
     refresh_aux(&d);
     refresh_temp(s_frigo_val, d.frigo_has_data, d.frigo_temp_centi, true);
+    refresh_tendencia_frigo(d.frigo_has_data, d.frigo_temp_centi);
     refresh_temp(s_ext_val, d.exterior_has_data, d.exterior_temp_centi, false);
     lv_label_set_text(s_frigo_fan, frigo_secondary);
     refresh_aguas(&d);
@@ -691,8 +743,23 @@ void view_info_create(lv_obj_t *parent)
     /* --- Abajo derecha: las dos temperaturas juntas ----------------------- */
     lv_obj_t *temp_card = make_card(grid, COL_BORDER_COLD, "TEMPERATURAS", 1, 1, 1, NULL, true,
                                        &lv_font_montserrat_20);
+    /* El valor del frigo va en un hueco fijo y la flecha al borde: asi la
+     * flecha no se mueve cuando el numero cambia de ancho ("-5.0" contra
+     * "-18.0"), igual que con la V y la A de la bateria. */
     s_frigo_val = make_fila_dato(temp_card, "Frigo", &lv_font_montserrat_24, 26);
+    lv_obj_set_width(s_frigo_val, TEMP_NUM_W);
+    lv_obj_set_style_text_align(s_frigo_val, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(s_frigo_val, LV_ALIGN_TOP_RIGHT, -26, 26);
+
+    s_frigo_trend = lv_label_create(temp_card);
+    lv_label_set_text(s_frigo_trend, "");
+    lv_obj_set_style_text_font(s_frigo_trend, &lv_font_montserrat_20, 0);
+    lv_obj_align(s_frigo_trend, LV_ALIGN_TOP_RIGHT, 0, 30);
+
     s_ext_val   = make_fila_dato(temp_card, "Exterior", &lv_font_montserrat_24, 62);
+    lv_obj_set_width(s_ext_val, TEMP_NUM_W);
+    lv_obj_set_style_text_align(s_ext_val, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(s_ext_val, LV_ALIGN_TOP_RIGHT, -26, 62);
 
     s_frigo_fan = lv_label_create(temp_card);
     lv_label_set_text(s_frigo_fan, "");
