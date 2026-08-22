@@ -49,9 +49,12 @@ static void avisar_cb(void *arg)
     free(t);
 }
 
-static void envio_task(void *arg)
+/* El POST de verdad. BLOQUEA hasta tener respuesta o agotar el plazo, asi que
+ * NO se llama desde la tarea de LVGL: la usa el repartidor de la cola, que
+ * tiene la suya. */
+bool p4_api_post(const char *cuerpo, int *estado_out)
 {
-    trabajo_t *t = (trabajo_t *)arg;
+    if (estado_out) *estado_out = 0;
 
     /* Las credenciales se leen en cada envio y no se cachean: el usuario puede
      * corregirlas en Ajustes entre un intento y el siguiente, y con una copia
@@ -71,31 +74,34 @@ static void envio_task(void *arg)
     esp_http_client_handle_t c = esp_http_client_init(&cfg);
     if (!c) {
         ESP_LOGE(TAG, "no puedo crear el cliente HTTP");
-        t->ok = false; t->estado = 0;
-        lv_async_call(avisar_cb, t);
-        vTaskDelete(NULL);
-        return;
+        return false;
     }
 
     esp_http_client_set_header(c, "Content-Type", "application/json");
-    esp_http_client_set_post_field(c, t->cuerpo, strlen(t->cuerpo));
+    esp_http_client_set_post_field(c, cuerpo, strlen(cuerpo));
 
+    bool ok = false;
     esp_err_t err = esp_http_client_perform(c);
     if (err == ESP_OK) {
-        t->estado = esp_http_client_get_status_code(c);
+        int estado = esp_http_client_get_status_code(c);
+        if (estado_out) *estado_out = estado;
         /* Solo 2xx cuenta como entregado. Un 401 (credenciales), un 409 (ya
          * habia viaje abierto) o un 501 (todavia no implementado) NO son
          * exito: si se dieran por buenos, el apunte se daria por guardado sin
          * estarlo. */
-        t->ok = (t->estado >= 200 && t->estado < 300);
-        ESP_LOGI(TAG, "%s -> HTTP %d", t->cuerpo, t->estado);
+        ok = (estado >= 200 && estado < 300);
+        ESP_LOGI(TAG, "%s -> HTTP %d", cuerpo, estado);
     } else {
-        t->ok = false;
-        t->estado = 0;
         ESP_LOGW(TAG, "no se pudo entregar: %s", esp_err_to_name(err));
     }
     esp_http_client_cleanup(c);
+    return ok;
+}
 
+static void envio_task(void *arg)
+{
+    trabajo_t *t = (trabajo_t *)arg;
+    t->ok = p4_api_post(t->cuerpo, &t->estado);
     lv_async_call(avisar_cb, t);
     vTaskDelete(NULL);
 }
@@ -116,20 +122,30 @@ static bool lanzar(const char *cuerpo, p4_api_done_cb cb)
     return true;
 }
 
+void p4_api_cuerpo_inicio(char *out, size_t n, uint32_t id,
+                          const char *destino, uint32_t fecha_dias)
+{
+    snprintf(out, n,
+             "{\"op\":\"inicio\",\"id\":%lu,\"destino\":\"%s\",\"fecha_dias\":%lu}",
+             (unsigned long)id, destino, (unsigned long)fecha_dias);
+}
+
+void p4_api_cuerpo_fin(char *out, size_t n, uint32_t id)
+{
+    snprintf(out, n, "{\"op\":\"fin\",\"id\":%lu}", (unsigned long)id);
+}
+
 bool p4_api_viaje_inicio(uint32_t id, const char *destino, uint32_t fecha_dias,
                          p4_api_done_cb cb)
 {
     char cuerpo[192];
-    snprintf(cuerpo, sizeof(cuerpo),
-             "{\"op\":\"inicio\",\"id\":%lu,\"destino\":\"%s\",\"fecha_dias\":%lu}",
-             (unsigned long)id, destino, (unsigned long)fecha_dias);
+    p4_api_cuerpo_inicio(cuerpo, sizeof(cuerpo), id, destino, fecha_dias);
     return lanzar(cuerpo, cb);
 }
 
 bool p4_api_viaje_fin(uint32_t id, p4_api_done_cb cb)
 {
     char cuerpo[64];
-    snprintf(cuerpo, sizeof(cuerpo), "{\"op\":\"fin\",\"id\":%lu}",
-             (unsigned long)id);
+    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), id);
     return lanzar(cuerpo, cb);
 }
