@@ -18,7 +18,10 @@ descartado como producto) y la arquitectura de red del satélite
 - **Sin lógica Victron/BLE/AES/portal Wi-Fi propia** — todo eso lo hace la
   P4; este dispositivo solo recibe (`net/udp_rx.c`, protocolo
   `mini_proto.h`, MANTENER SINCRONIZADO con `~/joint/victron`) y, más
-  adelante, envía comandos de vuelta (Fase 4).
+  el 22-ago-2026 **ya envía de vuelta** el inicio y el fin de viaje: `POST
+  /api/viaje` contra el portal de la P4 (`main/net/p4_api.c`), que crea la
+  carpeta del viaje en su SD. Los registros sueltos siguen sin enviarse —
+  fase 3 del diseño, en `docs/superpowers/specs/`.
 - **El satélite C6 (`victron_mini`) está DESCARTADO** (20-ago-2026): esta
   pantalla lo sustituye. Ya no hay que sincronizar `mini_proto.h` con él ni
   diseñar pensando en sus 32 bytes heredados. Ojo mientras siga enchufado:

@@ -3,13 +3,16 @@
 Guía de las anotaciones del viaje: viaje, paradas, repostajes, peajes, bombonas
 y mantenimiento. Escrita para usarla en la carretera, no para programar.
 
-> **Antes de nada, lo importante:** hoy esta pantalla **todavía no envía nada a
-> la P4**. Lo que anotas se confirma en pantalla y se apunta en el registro
-> interno, pero **no llega al archivo del viaje ni se guarda en la tarjeta SD**.
-> Lo único que sí se conserva de verdad entre encendidos es *si hay un viaje en
-> marcha* y *si hay una parada abierta*. El envío real está diseñado y pendiente
-> de hacer (Fase 4, ver `docs/superpowers/specs/`). Mientras tanto, **si un dato
-> te importa, apúntalo también en otro sitio.**
+> **Antes de nada, lo importante:** de todo lo que anotas aquí, hoy **solo el
+> inicio y el fin de viaje llegan a la P4**. Eso sí funciona: al empezar un viaje
+> se crea su carpeta en la tarjeta de la P4 (probado el 22-ago-2026).
+>
+> **Los repostajes, peajes, bombonas, mantenimientos y paradas TODAVÍA NO se
+> envían.** Se confirman en pantalla y se apuntan en el registro interno, pero
+> **no llegan a la tarjeta**, y al apagar la pantalla lo tecleado desaparece. Lo
+> único que se conserva entre encendidos es *si hay un viaje en marcha* y *si hay
+> una parada abierta*. Así que **si un repostaje te importa, apúntalo también en
+> otro sitio** hasta que esté la fase 3.
 
 ---
 
@@ -122,6 +125,25 @@ vez que se vuelve a abrir el formulario.
 
 Solo un botón: **Iniciar viaje**. No hay "Finalizar": terminar lo que no ha
 empezado no significa nada.
+
+Al pulsarlo te pide **el destino** con el teclado grande: no un nombre para el
+viaje, sino *a dónde vas*, que es mucho más fácil de contestar con el motor en
+marcha. Con eso la P4 crea la carpeta del viaje en su tarjeta, con la fecha
+delante para que se ordenen solas:
+
+```
+/sdcard/viajes/2026-08-22_Zumaia/
+```
+
+- Sin acentos ni ñ, y máximo 20 caracteres. La pantalla no te deja teclear otra
+  cosa.
+- **El nombre no se puede cambiar después.** Te avisa antes de empezar.
+- **Hace falta la P4 encendida.** Si no, avisa ("Enciende la P4 primero") y no
+  empieza: la carpeta lleva la fecha en el nombre y esta pantalla no tiene reloj.
+
+El viaje **no se da por empezado hasta que la P4 lo confirma**. Si algo falla te
+lo dice y todo se queda como estaba, en vez de poner "viaje en curso" mientras en
+la tarjeta no hay nada.
 
 ### Con viaje en marcha
 
@@ -255,8 +277,14 @@ Al marcar **Ruedas** aparece **cuántas** (1 a 4); si no, ese selector ni se ve.
 Abajo, **Km** y **Coste**.
 
 ### Wi-Fi (Ajustes)
-La red de la P4 a la que se conecta esta pantalla. Sirve para **cambiar a otra
-P4 sin reflashear**.
+Cuatro campos, y **la pantalla se desliza hacia abajo** porque no caben todos a
+la vez:
+
+- **SSID** y **Password** — la red de la P4 a la que se conecta esta pantalla.
+  Sirve para **cambiar a otra P4 sin reflashear**.
+- **Usuario del portal** y **Clave del portal** — hacen falta para mandarle los
+  apuntes del viaje. **No son los del Wi-Fi**: se ven en la P4, en Ajustes →
+  Wi-Fi. Sin ellos, al iniciar un viaje sale "La P4 no acepta la clave".
 
 Si tocas Guardar **sin haber cambiado nada**, te lo dice: *"No has cambiado
 nada."* Y si sí lo has cambiado, **pide confirmación** antes de reconectar — es
@@ -271,6 +299,8 @@ fácil dejarse la pantalla incomunicada por un dedazo en la contraseña.
 | **"--"** en todos los datos | No llega nada de la P4. Comprueba que esté encendida y que el Wi-Fi de Ajustes apunte a su red |
 | **"Parada sin contar"** | Guardaste la parada antes de que la P4 diera la hora. Enciende la P4 y vuelve a anotarla |
 | **"Sin la P4"** al finalizar parada | Lo mismo: sin fecha no se puede calcular la estancia |
+| **"La P4 no acepta la clave"** | Falta el usuario o la clave del PORTAL en Ajustes (no son los del Wi-Fi) |
+| **"Ya hay un viaje abierto"** | La P4 tiene uno sin cerrar. Termínalo antes de empezar otro |
 | **"Sensor ADXL345 no detectado"** | El sensor de inclinación no responde. Es un problema de conexión, no de uso |
 | El nivel marca torcido estando recta | Pulsa **Calibrar nivel** con la autocaravana bien nivelada |
 | Volviste a Registros y estaba en blanco | Normal: al salir se limpia. Lo no guardado se pierde |
@@ -281,14 +311,14 @@ fácil dejarse la pantalla incomunicada por un dedazo en la contraseña.
 
 Para no llevarse sorpresas:
 
-1. **No envía nada a la P4.** Ningún repostaje, peaje, bombona, mantenimiento ni
-   parada llega al archivo del viaje. Tampoco el inicio/fin de viaje.
-2. **No guarda el contenido de los formularios.** Solo *si hay viaje* y *si hay
-   parada abierta*.
+1. **Solo se envía el inicio y el fin de viaje.** Ningún repostaje, peaje,
+   bombona, mantenimiento ni parada llega todavía a la carpeta del viaje.
+2. **No guarda el contenido de los formularios.** Solo *si hay viaje*, *cuál es
+   el destino* y *si hay parada abierta*.
 3. **No tiene reloj propio.** Sin la P4 no sabe qué día es.
 4. **No lleva acentos ni ñ en pantalla.** Las letras que trae la fuente son solo
    las básicas; poner acentos sacaría cuadraditos vacíos. Decisión consciente:
    compilar fuentes nuevas era mucho lío para poco.
 
-Cuando se haga la Fase 4, los puntos 1 y 2 desaparecen: todo lo anotado aquí
-viajará a la P4 y acabará en la carpeta del viaje de su tarjeta SD.
+La fase 3 del envío se lleva por delante los puntos 1 y 2: todo lo anotado aquí
+acabará en la carpeta del viaje, cada cosa en su fichero.

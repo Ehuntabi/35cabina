@@ -404,10 +404,10 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   por abajo empujando los botones fuera de la pantalla; con la 20 caben ~45
   caracteres por línea y el peor caso (todo marcado) se queda en cinco.
 
-  Ningún botón envía nada todavía — eso es la Fase 4; "Iniciar/Finalizar
-  viaje" es el primer candidato cuando se abra (pedido explícito del
-  usuario: que el 3.5" mande el comando de viaje, no la P4). La parada
-  entera va detrás, por el mismo canal.
+  **Iniciar y finalizar viaje YA se mandan a la P4** (22-ago-2026, probado de
+  punta a punta: `{"op":"fin","id":3} -> HTTP 200` en la 3.5" y
+  `VIAJE CERRADO: /sdcard/viajes/2026-08-22_zumaia` en la P4). Los demás
+  botones todavía no envían nada — es la fase 3 del plan, por el mismo canal.
 - **Fase 3** (hecho y validado en placa real el 21-ago-2026): **la zona
   aceptable es un ÓVALO, no un círculo**, porque un frigorífico de absorción no
   aguanta lo mismo en los dos ejes — **3° de lado a lado y 6° de morro a cola**
@@ -434,9 +434,12 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   que no hay que intercambiar `ax`/`ay` en `tilt.c`. **Pendiente**: calibrar
   con la autocaravana nivelada (botón "Calibrar nivel", guarda el offset en
   NVS y solo hay que hacerlo una vez).
-- **Fase 4** (fuera de este repo, requiere luz verde aparte): canal de
-  vuelta hacia la P4 (`~/joint/victron`) para que los repostajes/bombona
-  lleguen al "viaje" (`trip_manager.c`).
+- **Fase 4** — canal de vuelta hacia la P4 (`~/joint/victron`). Diseño en
+  `docs/superpowers/specs/2026-08-22-viaje-con-nombre-y-carpeta-design.md`,
+  cinco fases. **Fase 1 HECHA** (22-ago-2026): `POST /api/viaje` con Basic
+  Auth estricta, inicio/fin de viaje, carpeta `AAAA-MM-DD_Destino` en la SD.
+  Quedan: cola persistente con reintentos (2), los registros sueltos (3),
+  telemetría duplicada y resumen (4), y la descarga del `viaje.tar` (5).
 
 ## Trabajo multi-equipo (`./empiezo` / `./termino`)
 
