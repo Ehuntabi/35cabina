@@ -4,9 +4,9 @@
 
 ## Qué se quiere
 
-Al pulsar **Iniciar viaje** en la 3.5", que pida un **nombre**. A partir de ahí,
+Al pulsar **Iniciar viaje** en la 3.5", que pida **a dónde vas**. A partir de ahí,
 todo lo que se apunte durante ese viaje acaba en una carpeta propia de la SD de
-la P4, llamada `AAAA-MM-DD_Nombre`, y **cada cosa que pase en la 3.5" viaja a la
+la P4, llamada `AAAA-MM-DD_Destino`, y **cada cosa que pase en la 3.5" viaja a la
 P4**: no solo el inicio y el fin, también cada repostaje, peaje, bombona,
 mantenimiento y parada, incluida la parada que se cierra días después.
 
@@ -36,7 +36,7 @@ dónde escribe la P4.
 | Telemetría | **En los dos sitios**: por días como siempre y copia en la carpeta |
 | Parada abierta al finalizar | **Avisar y preguntar** antes de cerrar el viaje |
 | Cola de pendientes | **Persistente**, sobrevive al apagado |
-| Renombrar el viaje | **No**. Se avisa al escribirlo |
+| Renombrar el destino | **No**. Se avisa al escribirlo |
 
 ## Arquitectura
 
@@ -63,7 +63,7 @@ POST /api/viaje      Basic Auth (nivel estricto: esto ESCRIBE en la tarjeta)
 Cuerpo, según la operación:
 
 ```json
-{ "op": "inicio", "id": 41, "nombre": "Galicia", "fecha_dias": 20687 }
+{ "op": "inicio", "id": 41, "destino": "Galicia", "fecha_dias": 20687 }
 { "op": "registro", "id": 42, "tipo": "repostaje", "datos": { ... } }
 { "op": "fin", "id": 57 }
 ```
@@ -113,7 +113,7 @@ exacto en vez de creerselo.
 
 En NVS, namespace `viaje` (ya existe con `activo`):
 
-- `nombre` — el del viaje en curso.
+- `destino` — el del viaje en curso.
 - `seq` — el contador de `id`.
 - Cola: entradas `q<n>` como blobs, con índices de cabeza y cola.
 
@@ -152,7 +152,7 @@ Dos sitios:
 
 ### En la P4
 
-1. `op=inicio` → crea `/sdcard/viajes/AAAA-MM-DD_Nombre/` y lo marca como viaje
+1. `op=inicio` → crea `/sdcard/viajes/AAAA-MM-DD_Destino/` y lo marca como viaje
    abierto (en su NVS, para sobrevivir a reinicios).
 2. `op=registro` → añade una línea al fichero del tipo correspondiente dentro de
    la carpeta (`repostajes.csv`, `peajes.csv`, `paradas.csv`...).
@@ -188,10 +188,19 @@ En `paradas.csv` va también **cómo quedó nivelada** la autocaravana (cabeceo 
 balanceo al guardarla): es un dato del sitio, no del momento — si un área tiene
 mucha pendiente, conviene saberlo antes de volver.
 
-### El nombre
+### El destino
+
+La carpeta es **fecha de inicio + destino**: `2026-08-22_Galicia`. La fecha
+delante para que las carpetas se ordenen solas en el ordenador, y el destino
+detrás para reconocer el viaje de un vistazo.
+
+No se pide "un nombre para el viaje" sino **a dónde vas**, que es mucho más
+directo de contestar con el motor en marcha: el rótulo del teclado dice
+**"Destino"**.
 
 - **Solo ASCII**, sin acentos ni eñes: las fuentes Montserrat compiladas no los
-  traen y saldrían cuadrados (ver la cabecera de `view_registro.c`).
+  traen y saldrían cuadrados (ver la cabecera de `view_registro.c`). O sea
+  "Bilbao" y "A Coruna", no "Bilbaó" ni "Logroño".
 - Máximo 20 caracteres.
 - Se filtran `/ \ : *` y demás, que romperían la ruta.
 - Se pide con el editor a pantalla completa que ya existe (`entry_screen.c`).
@@ -206,7 +215,7 @@ mucha pendiente, conviene saberlo antes de volver.
 | Finalizar con parada abierta | Avisa: "Tienes una parada sin cerrar en X. ¿La cierro y termino?" |
 | La P4 no aparece nunca | La cola aguanta 64 entradas y avisa al llenarse |
 | Reenvío duplicado | La P4 lo descarta por `id` y responde OK |
-| Nombre repetido el mismo día | La P4 añade un sufijo `_2` en vez de mezclar dos viajes |
+| Mismo destino el mismo día | La P4 añade un sufijo `_2` en vez de mezclar dos viajes |
 
 ## Descarga del viaje por Wi-Fi
 
@@ -254,7 +263,7 @@ imposible confundirlo con uno entero.
 ## Lo que NO entra
 
 - El log del sistema en la carpeta del viaje (decisión del usuario).
-- Renombrar un viaje ya empezado.
+- Cambiar el destino de un viaje ya empezado.
 - Que la 3.5" guarde nada en su propia microSD: sigue sin usarse.
 
 ## Riesgos
@@ -270,7 +279,7 @@ imposible confundirlo con uno entero.
 
 ## Fases propuestas
 
-1. **Canal + inicio/fin**: nombre, endpoint, carpeta y resumen vacío. Ya se ve
+1. **Canal + inicio/fin**: destino, endpoint, carpeta y resumen vacío. Ya se ve
    la carpeta creándose sola.
 2. **Cola persistente** y reintentos, con el aviso de pendientes en pantalla.
 3. **Registros** (repostaje, peaje, bombona, mantenimiento, parada) al fichero
