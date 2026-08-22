@@ -147,11 +147,12 @@ Se llega desde **Viaje → Anotar parada**. Marca lo que hayas hecho:
 | Vaciado | Se puede combinar con cualquiera |
 | Llenado | Se puede combinar con cualquiera |
 | Agua potable | Va aparte de "Llenado": puedes parar **solo** por una fuente |
-| Pernocta gratis | ⚠️ Los tres sitios son **excluyentes** |
-| Área | ⚠️ entre sí: has parado en un sitio, |
-| Camping | ⚠️ no en dos a la vez |
+| Pernocta gratis | Sitio de parada — **excluyente** con Área y Camping |
+| Área | Sitio de parada — **excluyente**, y pide precio |
+| Camping | Sitio de parada — **excluyente**, y pide precio |
 
-Marcar uno de los tres sitios **desmarca automáticamente** el que hubiera. Y al
+⚠️ **Los tres sitios son excluyentes entre sí**: has parado en un sitio, no en dos
+a la vez. Marcar uno **desmarca automáticamente** el que hubiera. Y al
 cambiar entre área y camping **se borra el precio**, porque no es comparable.
 
 ### Precio (solo Área y Camping)

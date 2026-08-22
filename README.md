@@ -2,8 +2,9 @@
 
 > **ES** | [**EN**](#en)
 
-> 📖 **[Manual de uso](docs/MANUAL.md)** — cómo se usan viaje, paradas,
-> repostajes, peajes, bombonas y mantenimiento, en lenguaje llano.
+> 📖 **[Manual de uso](docs/MANUAL.md)** ([PDF](docs/MANUAL.pdf)) — cómo se usan
+> viaje, paradas, repostajes, peajes, bombonas y mantenimiento, en lenguaje llano.
+> El PDF se regenera con `python3 docs/manual_a_pdf.py docs/MANUAL.md docs/MANUAL.pdf`.
 
 Proyecto **nuevo desde 0** para el módulo Guition JC3248W535 3.5"
 (ESP32-S3 + AXS15231B QSPI + táctil, 320×480, LVGL 8.4.0), reconvertido en
@@ -464,8 +465,9 @@ idf.py build
 <a name="en"></a>
 ## EN
 
-> 📖 **[User manual](docs/MANUAL.md)** (Spanish) — how to use trip, stops,
-> refuelling, tolls, gas bottles and maintenance, in plain language.
+> 📖 **[User manual](docs/MANUAL.md)** ([PDF](docs/MANUAL.pdf), Spanish) — how to use
+> trip, stops, refuelling, tolls, gas bottles and maintenance, in plain language.
+> Rebuild the PDF with `python3 docs/manual_a_pdf.py docs/MANUAL.md docs/MANUAL.pdf`.
 
 **New project from scratch** for the Guition JC3248W535 3.5" module
 (ESP32-S3 + AXS15231B QSPI + touch, 320×480, LVGL 8.4.0), turned into a
