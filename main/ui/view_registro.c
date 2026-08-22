@@ -1403,6 +1403,10 @@ static void apunte_encolar(categoria_t cat)
     resumen[j] = 0;
     u = apunte_cerrar(b, sizeof(b), u, resumen);
 
+    /* Se cuenta ANTES de encolar y pase lo que pase: si el apunte se pierde,
+     * la P4 tiene que enterarse de que le falta uno. */
+    trip_eventos_inc();
+
     if (!viaje_cola_push(b)) {
         confirm_screen_aviso("No he podido apuntarlo",
                              "La cola de pendientes esta\nllena. Enciende la P4 para\nque se vacie.",
@@ -1589,6 +1593,7 @@ static void inicio_resultado_cb(bool ok, int estado)
 {
     if (!ok) { aviso_envio_fallo(estado, "Viaje"); return; }
     save_trip_destino(s_viaje_destino);
+    trip_eventos_reset();
     viaje_set_activo(true);
     ESP_LOGI(TAG, "viaje iniciado en la P4, destino '%s'", s_viaje_destino);
     show_grid();
@@ -1631,8 +1636,8 @@ static void viaje_do_iniciar(void *ud)
 static void viaje_do_finalizar(void *ud)
 {
     (void)ud;
-    char cuerpo[64];
-    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq());
+    char cuerpo[80];
+    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), trip_eventos_inc());
 
     if (!viaje_cola_push(cuerpo)) {
         confirm_screen_aviso("No he podido apuntarlo",

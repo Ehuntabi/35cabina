@@ -130,9 +130,10 @@ void p4_api_cuerpo_inicio(char *out, size_t n, uint32_t id,
              (unsigned long)id, destino, (unsigned long)fecha_dias);
 }
 
-void p4_api_cuerpo_fin(char *out, size_t n, uint32_t id)
+void p4_api_cuerpo_fin(char *out, size_t n, uint32_t id, uint32_t eventos)
 {
-    snprintf(out, n, "{\"op\":\"fin\",\"id\":%lu}", (unsigned long)id);
+    snprintf(out, n, "{\"op\":\"fin\",\"id\":%lu,\"eventos\":%lu}",
+             (unsigned long)id, (unsigned long)eventos);
 }
 
 bool p4_api_viaje_inicio(uint32_t id, const char *destino, uint32_t fecha_dias,
@@ -143,9 +144,4 @@ bool p4_api_viaje_inicio(uint32_t id, const char *destino, uint32_t fecha_dias,
     return lanzar(cuerpo, cb);
 }
 
-bool p4_api_viaje_fin(uint32_t id, p4_api_done_cb cb)
-{
-    char cuerpo[64];
-    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), id);
-    return lanzar(cuerpo, cb);
-}
+

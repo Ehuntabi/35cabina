@@ -25,6 +25,7 @@
 #define TRIP_ACTIVE_KEY       "activo"
 #define TRIP_DESTINO_KEY      "destino"
 #define TRIP_SEQ_KEY          "seq"
+#define TRIP_NEVENTOS_KEY     "n_ev"
 /* Credenciales del PORTAL de la P4 (no del Wi-Fi): desde el 21-ago-2026 el
  * portal exige Basic Auth tambien en el nivel abierto, y el satelite escribe
  * en el. Se tecleaan una vez en Ajustes; se leen en la P4, Ajustes -> Wi-Fi. */
@@ -342,6 +343,35 @@ uint32_t next_trip_seq(void)
     nvs_get_u32(h, TRIP_SEQ_KEY, &v);
     v++;
     nvs_set_u32(h, TRIP_SEQ_KEY, v);
+    nvs_commit(h);
+    nvs_close(h);
+    return v;
+}
+
+/* Cuantos apuntes ha GENERADO este viaje, contando el inicio.
+ *
+ * Se cuenta lo generado y NO lo entregado, y esa es la clave: si un apunte no
+ * llega a encolarse (cola llena, fallo de NVS), el contador sube igual y la P4
+ * vera que le faltan. Si contaramos solo lo encolado, un apunte perdido cuadraria
+ * las cuentas y el viaje se daria por completo sin serlo -- justo lo que este
+ * contador existe para impedir. */
+void trip_eventos_reset(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(TRIP_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_u32(h, TRIP_NEVENTOS_KEY, 1);   /* el inicio ya cuenta */
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+uint32_t trip_eventos_inc(void)
+{
+    nvs_handle_t h;
+    uint32_t v = 0;
+    if (nvs_open(TRIP_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return 0;
+    nvs_get_u32(h, TRIP_NEVENTOS_KEY, &v);
+    v++;
+    nvs_set_u32(h, TRIP_NEVENTOS_KEY, v);
     nvs_commit(h);
     nvs_close(h);
     return v;

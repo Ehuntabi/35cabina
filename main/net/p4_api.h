@@ -22,7 +22,6 @@ typedef void (*p4_api_done_cb)(bool ok, int estado);
  * caso 'cb' NO se llama. */
 bool p4_api_viaje_inicio(uint32_t id, const char *destino, uint32_t fecha_dias,
                          p4_api_done_cb cb);
-bool p4_api_viaje_fin(uint32_t id, p4_api_done_cb cb);
 
 /* El POST crudo, SINCRONO: bloquea hasta la respuesta. Lo usa el repartidor de
  * la cola (viaje_cola.c), que tiene su propia tarea. NO llamar desde LVGL.
@@ -32,7 +31,9 @@ bool p4_api_post(const char *cuerpo, int *estado_out);
 /* Montadores del cuerpo JSON, para encolar sin enviar. */
 void p4_api_cuerpo_inicio(char *out, size_t n, uint32_t id,
                           const char *destino, uint32_t fecha_dias);
-void p4_api_cuerpo_fin(char *out, size_t n, uint32_t id);
+/* 'eventos' es cuantos apuntes ha generado el viaje, el inicio incluido: con
+ * eso la P4 sabe si le falta alguno y marca el viaje como incompleto. */
+void p4_api_cuerpo_fin(char *out, size_t n, uint32_t id, uint32_t eventos);
 
 #ifdef __cplusplus
 }

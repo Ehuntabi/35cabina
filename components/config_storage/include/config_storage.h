@@ -55,6 +55,12 @@ esp_err_t save_trip_destino(const char *destino);
  * descartar duplicados cuando un reintento llega dos veces. */
 uint32_t next_trip_seq(void);
 
+/* Cuenta de apuntes GENERADOS por el viaje en curso (el inicio incluido). Va en
+ * el mensaje de fin para que la P4 sepa si le falta algo. Se cuenta lo generado
+ * y no lo entregado: ver el porque en el .c. */
+void     trip_eventos_reset(void);
+uint32_t trip_eventos_inc(void);
+
 /* Usuario y clave del PORTAL de la P4 (no del Wi-Fi). Se ven en la P4, en
  * Ajustes -> Wi-Fi. */
 esp_err_t load_portal_creds(char *user_out, size_t *user_len,
