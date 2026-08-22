@@ -59,7 +59,7 @@ Lo que manda la P4, una vez por segundo. No se toca nada aquí, solo se mira.
   no cada oscilación del sensor, para que no esté bailando todo el rato.
 
 Si ves **"--"** en vez de números, es que **no está llegando nada de la P4**
-(apagada, fuera de alcance o Wi-Fi mal configurado). Ver el apartado 9.
+(apagada, fuera de alcance o Wi-Fi mal configurado). Ver el apartado 10.
 
 **El aviso naranja "N sin enviar"**, abajo del todo, aparece cuando hay apuntes
 que todavía no han llegado a la P4. No es una avería: se entregan solos en
@@ -320,7 +320,70 @@ fácil dejarse la pantalla incomunicada por un dedazo en la contraseña.
 
 ---
 
-## 9. Cuando algo no va
+## 9. Traerte el viaje al ordenador
+
+Cuando finalizas un viaje, la P4 escribe además un **`resumen.txt`** con lo que
+uno quiere saber al volver, en castellano y no en columnas:
+
+```
+RESUMEN DEL VIAJE
+=================
+Cerrado el 2026-08-22 20:31
+Duracion: 4 dias
+
+GASTOS (EUR)
+  Combustible ...    82.40   (54.2 litros)
+  Peajes ........    23.10
+  Gas ...........    18.00
+  Mantenimiento .     0.00
+  ----------------------
+  TOTAL .........   123.50
+
+  Precio medio del litro: 1.520 EUR
+
+Paradas anotadas: 6
+```
+
+Y mientras dura el viaje, **sin que hagas nada**, va guardando cada 5 minutos la
+batería, el solar, las temperaturas y las aguas, y cada hora un recuento de
+horas y energía. Si el viaje se corta a lo bruto —se queda sin batería, una
+avería— eso ya está escrito y no se pierde.
+
+### Bajártelo por Wi-Fi
+
+Conéctate al Wi-Fi de la P4 desde el móvil o el portátil y entra en:
+
+```
+http://192.168.4.1/data/viajes
+```
+
+Sale la lista de viajes guardados, cada uno con su estado:
+
+| Estado | Qué significa |
+|---|---|
+| 🟢 **Listo** | Cerrado y completo. Se descarga y ya |
+| 🟠 **Incompleto** | Le faltan apuntes. Puedes bajarlo, pero avisando |
+| ⚪ **En curso** | No lo has finalizado. No se puede bajar todavía |
+
+Te bajas un `.tar` con la carpeta entera dentro: los registros, la telemetría y
+el resumen.
+
+> **Por qué se bloquean los incompletos.** Si a un viaje le faltara un
+> repostaje, el archivo se bajaría **con pinta de estar entero** y no habría
+> forma de notarlo: no falta un fichero, falta *una línea*. Así que la P4
+> compara lo que la pantalla dice haber anotado con lo que ella guardó, y si no
+> cuadra lo dice. Si aun así lo necesitas, se puede bajar — pero el archivo sale
+> con **`_INCOMPLETO`** en el nombre para que no se confunda.
+
+### Ojo: `viaje.tar` ya no es lo que era
+
+Antes había un `viaje.tar` que **no era un viaje**: empaquetaba la batería, el
+solar y el frigo de *todos* los días. Ese paquete sigue estando, pero ahora se
+llama por lo que es: **`historico.tar`**.
+
+---
+
+## 10. Cuando algo no va
 
 | Qué ves | Qué pasa |
 |---|---|
@@ -337,20 +400,24 @@ fácil dejarse la pantalla incomunicada por un dedazo en la contraseña.
 
 ---
 
-## 10. Resumen de lo que todavía no hace
+## 11. Resumen de lo que todavía no hace
 
 Para no llevarse sorpresas:
 
 1. **Lo anotado sin viaje en marcha no se guarda.** La pantalla te avisa.
-2. **No hay resumen del viaje todavía** (totales de kilómetros, litros y gasto),
-   ni se puede descargar la carpeta del viaje por Wi-Fi. Son las dos últimas
-   fases pendientes.
-3. **No tiene reloj propio.** Sin haber visto a la P4 desde que arrancó no sabe
+2. **No hay kilómetros.** La P4 no tiene GPS ni cuentakilómetros todavía, así
+   que el resumen no puede decir cuánto recorriste. Lo dice explícitamente en
+   vez de callarlo, para que no parezca un viaje de 0 km. Cuando llegue el GPS,
+   también se guardará **dónde** ocurrió cada cosa.
+3. **Las monedas no se convierten.** Si el viaje cruza a Suiza, sumar euros con
+   francos daría un total que no significa nada. El resumen **avisa** cuando ha
+   habido más de una moneda y te manda a los CSV, que llevan cada uno la suya.
+4. **No tiene reloj propio.** Sin haber visto a la P4 desde que arrancó no sabe
    qué hora es; en ese caso el apunte se marca como de **hora aproximada** y la
    P4 le pone la de recepción.
-4. **No lleva acentos ni ñ en pantalla.** Las letras que trae la fuente son solo
+5. **No lleva acentos ni ñ en pantalla.** Las letras que trae la fuente son solo
    las básicas; poner acentos sacaría cuadraditos vacíos. Decisión consciente:
    compilar fuentes nuevas era mucho lío para poco.
 
-Lo que viene: el resumen del viaje con sus totales, y poder traerte la carpeta
-entera del viaje por Wi-Fi en un solo archivo.
+Lo que viene, cuando llegue el GPS: la posición de cada apunte y los kilómetros
+del viaje.

@@ -434,12 +434,24 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   que no hay que intercambiar `ax`/`ay` en `tilt.c`. **Pendiente**: calibrar
   con la autocaravana nivelada (botón "Calibrar nivel", guarda el offset en
   NVS y solo hay que hacerlo una vez).
-- **Fase 4** — canal de vuelta hacia la P4 (`~/joint/victron`). Diseño en
+- **Fase 4 — COMPLETA** (22-ago-2026). Canal de vuelta hacia la P4
+  (`~/joint/victron`). Diseño en
   `docs/superpowers/specs/2026-08-22-viaje-con-nombre-y-carpeta-design.md`,
-  cinco fases. **Fase 1 HECHA** (22-ago-2026): `POST /api/viaje` con Basic
-  Auth estricta, inicio/fin de viaje, carpeta `AAAA-MM-DD_Destino` en la SD.
-  Quedan: cola persistente con reintentos (2), los registros sueltos (3),
-  telemetría duplicada y resumen (4), y la descarga del `viaje.tar` (5).
+  cinco sub-fases, **las cinco hechas y probadas en la placa**:
+  1. `POST /api/viaje` con Basic Auth estricta, inicio/fin, carpeta
+     `AAAA-MM-DD_Destino` en la SD.
+  2. Cola persistente en NVS con reintentos cada 15 s y pastilla de pendientes.
+  3. Repostajes, peajes, bombonas, mantenimientos y paradas, cada uno a su CSV
+     además del diario `eventos.csv`.
+  4. Telemetría cada 5 min y contadores cada hora en la carpeta del viaje, más
+     `resumen.txt` con totales al cerrar.
+  5. `/data/viajes` con el estado de cada uno; los incompletos se detectan y se
+     bloquean. El antiguo `viaje.tar` (que no era un viaje) pasa a
+     `historico.tar`.
+
+  **Pendiente, a la espera del GPS de la P4**: posición de cada apunte y
+  kilómetros del viaje (ver la nota del diseño: la posición NO se puede sellar
+  al recibir, por el mismo motivo que la hora).
 
 ## Trabajo multi-equipo (`./empiezo` / `./termino`)
 
