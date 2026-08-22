@@ -3,16 +3,16 @@
 Guía de las anotaciones del viaje: viaje, paradas, repostajes, peajes, bombonas
 y mantenimiento. Escrita para usarla en la carretera, no para programar.
 
-> **Antes de nada, lo importante:** de todo lo que anotas aquí, hoy **solo el
-> inicio y el fin de viaje llegan a la P4**. Eso sí funciona: al empezar un viaje
-> se crea su carpeta en la tarjeta de la P4 (probado el 22-ago-2026).
+> **Antes de nada, lo importante:** todo lo que anotas aquí **ya llega a la P4 y
+> se guarda en su tarjeta**, en la carpeta del viaje. Probado el 22-ago-2026.
 >
-> **Los repostajes, peajes, bombonas, mantenimientos y paradas TODAVÍA NO se
-> envían.** Se confirman en pantalla y se apuntan en el registro interno, pero
-> **no llegan a la tarjeta**, y al apagar la pantalla lo tecleado desaparece. Lo
-> único que se conserva entre encendidos es *si hay un viaje en marcha* y *si hay
-> una parada abierta*. Así que **si un repostaje te importa, apúntalo también en
-> otro sitio** hasta que esté la fase 3.
+> **Y no hace falta que la P4 esté encendida.** Si no está, el apunte se queda
+> esperando y sale solo en cuanto vuelve. Mientras haya algo sin entregar verás
+> abajo en la pantalla principal un aviso naranja: **"2 sin enviar"**. No se
+> pierde nada al quitar el contacto.
+>
+> Lo único que **no** se guarda es lo que anotes **sin un viaje en marcha**: no
+> hay carpeta donde escribirlo. La pantalla te avisa cuando pasa.
 
 ---
 
@@ -61,6 +61,12 @@ Lo que manda la P4, una vez por segundo. No se toca nada aquí, solo se mira.
 Si ves **"--"** en vez de números, es que **no está llegando nada de la P4**
 (apagada, fuera de alcance o Wi-Fi mal configurado). Ver el apartado 9.
 
+**El aviso naranja "N sin enviar"**, abajo del todo, aparece cuando hay apuntes
+que todavía no han llegado a la P4. No es una avería: se entregan solos en
+cuanto la P4 vuelva, y **no se pierden al quitar el contacto**. Está siempre a
+la vista mientras quede algo, porque esta pantalla no puede saber que vas a
+apagar — se queda sin corriente y ya.
+
 ---
 
 ## 3. Pantalla de Inclinación (nivelar)
@@ -107,9 +113,26 @@ Seis casillas, cada una de su color:
 4. Sale **"¿Es correcto?"** con el resumen de lo que has metido. Confirmas o
    corriges.
 
-**Lo que NO te piden y por qué:** ni fecha, ni hora, ni coordenadas. Todo eso lo
-sabe la P4 y las pondrá ella cuando se abra el envío. Teclearlas a mano en el
-surtidor no aporta nada.
+**Lo que NO te piden y por qué:** ni fecha ni hora. La pantalla las pone sola,
+**con la hora en que lo anotaste**, no con la de cuando se entregue. Si repostas
+con la P4 apagada y el apunte sale dos días después, sigue figurando el día del
+repostaje. Teclear la fecha a mano en el surtidor no aporta nada.
+
+**Dónde acaba cada cosa.** En la tarjeta de la P4, dentro de la carpeta del
+viaje:
+
+```
+/sdcard/viajes/2026-08-22_Zumaia/
+├─ eventos.csv        ← el diario: todo en orden y con su hora
+├─ repostajes.csv     ← para hacer cuentas
+├─ peajes.csv
+├─ bombonas.csv
+├─ mantenimientos.csv
+└─ paradas.csv
+```
+
+El diario sirve para saber **qué pasó**; los de cada tipo, para **hacer cuentas**
+en una hoja de cálculo. Por eso se guardan las dos cosas.
 
 **Moneda:** por defecto EUR. Hay diez monedas de la Europa continental (GBP,
 CHF, SEK, NOK, DKK, PLN, CZK, HUF, RON). La elegida **se reinicia a EUR** cada
@@ -209,6 +232,11 @@ grandes de color:
 Y debajo, dos pegas sueltas: **Ruidoso** y **Sin sombra**. Son casillas aparte y
 no notas, porque un sitio recomendable puede perfectamente no tener sombra.
 
+**Sin que tengas que hacer nada**, la parada guarda también **cómo quedó
+nivelada** la autocaravana (el cabeceo y el balanceo del momento). Es un dato del
+sitio, no del momento: si un área tiene mucha pendiente, conviene saberlo antes
+de volver.
+
 ---
 
 ## 7. Paradas de varios días
@@ -304,6 +332,8 @@ fácil dejarse la pantalla incomunicada por un dedazo en la contraseña.
 | **"Sensor ADXL345 no detectado"** | El sensor de inclinación no responde. Es un problema de conexión, no de uso |
 | El nivel marca torcido estando recta | Pulsa **Calibrar nivel** con la autocaravana bien nivelada |
 | Volviste a Registros y estaba en blanco | Normal: al salir se limpia. Lo no guardado se pierde |
+| **"N sin enviar"** en naranja | No es avería: hay apuntes esperando a la P4. Se van solos cuando aparezca |
+| **"Guardado solo aquí"** | Lo anotaste sin viaje en marcha, así que no va a la tarjeta. Inicia un viaje antes |
 
 ---
 
@@ -311,14 +341,16 @@ fácil dejarse la pantalla incomunicada por un dedazo en la contraseña.
 
 Para no llevarse sorpresas:
 
-1. **Solo se envía el inicio y el fin de viaje.** Ningún repostaje, peaje,
-   bombona, mantenimiento ni parada llega todavía a la carpeta del viaje.
-2. **No guarda el contenido de los formularios.** Solo *si hay viaje*, *cuál es
-   el destino* y *si hay parada abierta*.
-3. **No tiene reloj propio.** Sin la P4 no sabe qué día es.
+1. **Lo anotado sin viaje en marcha no se guarda.** La pantalla te avisa.
+2. **No hay resumen del viaje todavía** (totales de kilómetros, litros y gasto),
+   ni se puede descargar la carpeta del viaje por Wi-Fi. Son las dos últimas
+   fases pendientes.
+3. **No tiene reloj propio.** Sin haber visto a la P4 desde que arrancó no sabe
+   qué hora es; en ese caso el apunte se marca como de **hora aproximada** y la
+   P4 le pone la de recepción.
 4. **No lleva acentos ni ñ en pantalla.** Las letras que trae la fuente son solo
    las básicas; poner acentos sacaría cuadraditos vacíos. Decisión consciente:
    compilar fuentes nuevas era mucho lío para poco.
 
-La fase 3 del envío se lleva por delante los puntos 1 y 2: todo lo anotado aquí
-acabará en la carpeta del viaje, cada cosa en su fichero.
+Lo que viene: el resumen del viaje con sus totales, y poder traerte la carpeta
+entera del viaje por Wi-Fi en un solo archivo.
