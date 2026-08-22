@@ -421,8 +421,16 @@ static void refresh_bat(const mini_data_t *d)
         lv_label_set_text(s_bat_soc, "--");
         lv_obj_set_style_text_color(s_bat_soc, COL_TEXT, 0);
         lv_obj_set_height(s_bat_relleno, 0);
-        lv_label_set_text(s_bat_volt, "sin datos");
-        lv_label_set_text(s_bat_amp, "");
+        /* "--" en los dos, igual que el SoC de arriba y que MOTOR. Antes ponia
+         * "sin datos" en el hueco del voltaje y dejaba los amperios EN BLANCO:
+         * el texto se salia de su caja de ancho fijo, y el hueco vacio de al
+         * lado parecia un fallo de pintado en vez de una falta de dato. */
+        lv_label_set_text(s_bat_volt, "--");
+        lv_label_set_text(s_bat_amp, "--");
+        /* Devolver el color neutro: si no, el "--" se queda del verde o el
+         * naranja de la ultima lectura buena, como si siguiera cargando. */
+        lv_obj_set_style_text_color(s_bat_amp, COL_TEXT, 0);
+        lv_obj_set_style_text_color(s_bat_amp_u, COL_TEXT, 0);
     }
 }
 
