@@ -2,6 +2,9 @@
 
 > **ES** | [**EN**](#en)
 
+> 📖 **[Manual de uso](docs/MANUAL.md)** — cómo se usan viaje, paradas,
+> repostajes, peajes, bombonas y mantenimiento, en lenguaje llano.
+
 Proyecto **nuevo desde 0** para el módulo Guition JC3248W535 3.5"
 (ESP32-S3 + AXS15231B QSPI + táctil, 320×480, LVGL 8.4.0), reconvertido en
 **satélite de la P4** (`~/joint/victron`, pantalla de 7" del salón) en vez
@@ -460,6 +463,9 @@ idf.py build
 
 <a name="en"></a>
 ## EN
+
+> 📖 **[User manual](docs/MANUAL.md)** (Spanish) — how to use trip, stops,
+> refuelling, tolls, gas bottles and maintenance, in plain language.
 
 **New project from scratch** for the Guition JC3248W535 3.5" module
 (ESP32-S3 + AXS15231B QSPI + touch, 320×480, LVGL 8.4.0), turned into a
