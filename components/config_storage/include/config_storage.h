@@ -47,6 +47,20 @@ esp_err_t save_wifi_config(const char *ssid, const char *pass);
 esp_err_t load_trip_active(bool *active_out);
 esp_err_t save_trip_active(bool active);
 
+/* Destino del viaje en curso (da nombre a la carpeta en la SD de la P4). */
+esp_err_t load_trip_destino(char *out, size_t *len);
+esp_err_t save_trip_destino(const char *destino);
+
+/* Siguiente numero de apunte. Creciente y sin huecos: la P4 lo usa para
+ * descartar duplicados cuando un reintento llega dos veces. */
+uint32_t next_trip_seq(void);
+
+/* Usuario y clave del PORTAL de la P4 (no del Wi-Fi). Se ven en la P4, en
+ * Ajustes -> Wi-Fi. */
+esp_err_t load_portal_creds(char *user_out, size_t *user_len,
+                            char *pass_out, size_t *pass_len);
+esp_err_t save_portal_creds(const char *user, const char *pass);
+
 // Parada en curso (NVS namespace: "parada").
 //
 // Una parada en un area, un camping o una pernocta puede durar varios dias, y

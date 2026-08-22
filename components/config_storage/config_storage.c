@@ -23,6 +23,13 @@
 #define WIFI_PASS_KEY         "password"
 #define TRIP_NAMESPACE        "viaje"
 #define TRIP_ACTIVE_KEY       "activo"
+#define TRIP_DESTINO_KEY      "destino"
+#define TRIP_SEQ_KEY          "seq"
+/* Credenciales del PORTAL de la P4 (no del Wi-Fi): desde el 21-ago-2026 el
+ * portal exige Basic Auth tambien en el nivel abierto, y el satelite escribe
+ * en el. Se tecleaan una vez en Ajustes; se leen en la P4, Ajustes -> Wi-Fi. */
+#define PORTAL_USER_KEY       "http_user"
+#define PORTAL_PASS_KEY       "http_pass"
 #define PARADA_NAMESPACE      "parada"
 #define PARADA_ABIERTA_KEY    "abierta"
 #define PARADA_LUGAR_KEY      "lugar"
@@ -294,6 +301,72 @@ esp_err_t save_trip_active(bool active)
     esp_err_t err = nvs_open(TRIP_NAMESPACE, NVS_READWRITE, &h);
     if (err != ESP_OK) return err;
     err = nvs_set_u8(h, TRIP_ACTIVE_KEY, active ? 1 : 0);
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+/* Destino del viaje en curso. Es lo que da nombre a la carpeta en la SD de la
+ * P4, asi que se guarda aqui tambien: si la 3.5" se reinicia a media entrega,
+ * tiene que poder repetir el mismo nombre y no crear una carpeta nueva. */
+esp_err_t load_trip_destino(char *out, size_t *len)
+{
+    if (!out || !len) return ESP_ERR_INVALID_ARG;
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(TRIP_NAMESPACE, NVS_READONLY, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_get_str(h, TRIP_DESTINO_KEY, out, len);
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t save_trip_destino(const char *destino)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(TRIP_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_str(h, TRIP_DESTINO_KEY, destino ? destino : "");
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+/* Contador de apuntes, CRECIENTE Y SIN HUECOS: es lo que permite a la P4
+ * descartar duplicados cuando un reintento llega dos veces. Persistente porque
+ * la 3.5" se apaga con el contacto constantemente. */
+uint32_t next_trip_seq(void)
+{
+    nvs_handle_t h;
+    uint32_t v = 0;
+    if (nvs_open(TRIP_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return 0;
+    nvs_get_u32(h, TRIP_SEQ_KEY, &v);
+    v++;
+    nvs_set_u32(h, TRIP_SEQ_KEY, v);
+    nvs_commit(h);
+    nvs_close(h);
+    return v;
+}
+
+esp_err_t load_portal_creds(char *user_out, size_t *user_len,
+                            char *pass_out, size_t *pass_len)
+{
+    if (!user_out || !user_len || !pass_out || !pass_len) return ESP_ERR_INVALID_ARG;
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READONLY, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_get_str(h, PORTAL_USER_KEY, user_out, user_len);
+    if (err == ESP_OK) err = nvs_get_str(h, PORTAL_PASS_KEY, pass_out, pass_len);
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t save_portal_creds(const char *user, const char *pass)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_str(h, PORTAL_USER_KEY, user ? user : "");
+    if (err == ESP_OK) err = nvs_set_str(h, PORTAL_PASS_KEY, pass ? pass : "");
     if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
     return err;

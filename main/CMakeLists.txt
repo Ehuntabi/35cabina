@@ -13,6 +13,7 @@ idf_component_register(
         esp_netif         # <— interfaz TCP/IP para el STA hacia la P4
         esp_event         # <— eventos Wi-Fi/netif
         esp_wifi          # <— asociarse al AP de la P4
+        esp_http_client   # <— mandar los apuntes al portal de la P4 (p4_api.c)
 )
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE

@@ -27,6 +27,7 @@
 #include "entry_screen.h"
 #include "confirm_screen.h"
 #include "config_storage.h"
+#include "p4_api.h"
 #include "../data_model.h"
 #include "esp_log.h"
 #include <stdlib.h>
@@ -133,6 +134,11 @@ static lv_obj_t *s_viaje_btn_fin_parada;  /* solo si hay una parada abierta */
  * se entra en la pantalla de Viaje. La NVS manda; esto solo la sigue. */
 static bool      s_parada_abierta;
 static lv_obj_t *s_tile_viaje_lbl;       /* texto de su casilla en el menu */
+/* Campo oculto donde el editor a pantalla completa deja el destino tecleado. No
+ * se ve nunca: el editor necesita un textarea al que volcar, y en la pantalla de
+ * Viaje no hay formulario donde ponerlo. */
+static lv_obj_t *s_viaje_destino_ta;
+static char      s_viaje_destino[24];
 
 /* --- Parada: donde has parado y que has hecho ------------------------------
  * Varias a la vez: en un area sueles vaciar Y llenar en la misma parada. */
@@ -1421,23 +1427,76 @@ static void viaje_set_activo(bool activo)
     viaje_refresh();
 }
 
+/* --- Envio a la P4 (Fase 4, fase 1) ---------------------------------------
+ *
+ * El viaje NO se da por iniciado hasta que la P4 confirma. Es lo contrario de
+ * lo que hacia antes (marcarlo aqui y ya): si se marcara sin confirmacion, la
+ * 3.5" diria "viaje en curso" mientras en la tarjeta de la P4 no hay carpeta
+ * ninguna, y todo lo que se anotara despues iria a un viaje que no existe. */
+
+static void aviso_envio_fallo(int estado, const char *que)
+{
+    char cuerpo[160];
+    if (estado == 401) {
+        snprintf(cuerpo, sizeof(cuerpo),
+                 "La P4 no acepta la clave.\nRevisa usuario y clave en\nAjustes.");
+    } else if (estado == 409) {
+        snprintf(cuerpo, sizeof(cuerpo),
+                 "La P4 dice que ya hay un\nviaje abierto. Terminalo\nantes de empezar otro.");
+    } else if (estado == 0) {
+        snprintf(cuerpo, sizeof(cuerpo),
+                 "No he podido hablar con la P4.\nComprueba que este encendida.");
+    } else {
+        snprintf(cuerpo, sizeof(cuerpo), "La P4 ha respondido %d\ny no se ha guardado.", estado);
+    }
+    char titulo[40];
+    snprintf(titulo, sizeof(titulo), "%s sin guardar", que);
+    confirm_screen_aviso(titulo, cuerpo, COL_ACCION_STOP, "Entendido");
+}
+
+static void inicio_resultado_cb(bool ok, int estado)
+{
+    if (!ok) { aviso_envio_fallo(estado, "Viaje"); return; }
+    save_trip_destino(s_viaje_destino);
+    viaje_set_activo(true);
+    ESP_LOGI(TAG, "viaje iniciado en la P4, destino '%s'", s_viaje_destino);
+    show_grid();
+}
+
+static void fin_resultado_cb(bool ok, int estado)
+{
+    if (!ok) { aviso_envio_fallo(estado, "Fin de viaje"); return; }
+    save_trip_destino("");
+    viaje_set_activo(false);
+    ESP_LOGI(TAG, "viaje finalizado en la P4");
+    show_grid();
+}
+
 /* Viaje no lleva resumen: no hay nada tecleado que repasar. Solo el segundo
  * toque, que aqui importa mas que en ningun sitio -- finalizar un viaje por un
  * roce cierra el registro en curso de la P4. */
 static void viaje_do_iniciar(void *ud)
 {
     (void)ud;
-    ESP_LOGI(TAG, "CONFIRMADO iniciar viaje -- TODO Fase 4: comando a trip_manager.c de la P4");
-    viaje_set_activo(true);
-    show_grid();
+    uint32_t ahora = reloj_p4();
+    if (ahora == 0) {   /* comprobado tambien antes de teclear; puede caerse en medio */
+        confirm_screen_aviso("Enciende la P4 primero",
+                             "Sin ella no se que dia es,\ny la carpeta del viaje lleva\nla fecha en el nombre.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    if (!p4_api_viaje_inicio(next_trip_seq(), s_viaje_destino,
+                             ahora / 86400u, inicio_resultado_cb)) {
+        aviso_envio_fallo(0, "Viaje");
+    }
 }
 
 static void viaje_do_finalizar(void *ud)
 {
     (void)ud;
-    ESP_LOGI(TAG, "CONFIRMADO finalizar viaje -- TODO Fase 4: comando a trip_manager.c de la P4");
-    viaje_set_activo(false);
-    show_grid();
+    if (!p4_api_viaje_fin(next_trip_seq(), fin_resultado_cb)) {
+        aviso_envio_fallo(0, "Fin de viaje");
+    }
 }
 
 /* "Anotar parada" y "Servicios del area" son navegacion, no guardado: van
@@ -1480,11 +1539,35 @@ static void parada_lugar_cb(lv_event_t *e)
     parada_refresh_extras();
 }
 
+/* Se llama al aceptar el editor del destino. */
+static void viaje_destino_listo_cb(lv_event_t *e)
+{
+    (void)e;
+    const char *txt = lv_textarea_get_text(s_viaje_destino_ta);
+    if (!txt || !txt[0]) return;      /* lo dejo en blanco: no se hace nada */
+    snprintf(s_viaje_destino, sizeof(s_viaje_destino), "%s", txt);
+
+    char cuerpo[120];
+    snprintf(cuerpo, sizeof(cuerpo), "Destino: %s\n\nLa carpeta se llamara asi\ny NO se podra cambiar.",
+             s_viaje_destino);
+    confirm_screen_open("Empezar el viaje?", cuerpo, COL_ACCION_OK,
+                        "Si, empezar", "Cancelar", viaje_do_iniciar, NULL);
+}
+
 static void viaje_iniciar_cb(lv_event_t *e)
 {
     (void)e;
-    confirm_screen_open("Iniciar el viaje?", NULL, COL_ACCION_OK,
-                        "Si, iniciar", "Cancelar", viaje_do_iniciar, NULL);
+    /* Se exige la P4 ANTES de teclear nada: la carpeta del viaje lleva la fecha
+     * en el nombre y este aparato no tiene reloj propio. Preguntar el destino
+     * para luego no poder empezar seria hacer teclear en balde. */
+    if (reloj_p4() == 0) {
+        confirm_screen_aviso("Enciende la P4 primero",
+                             "Sin ella no se que dia es,\ny la carpeta del viaje lleva\nla fecha en el nombre.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    lv_textarea_set_text(s_viaje_destino_ta, "");
+    entry_screen_open(s_viaje_destino_ta, "Destino", false);
 }
 
 static void viaje_finalizar_cb(lv_event_t *e)
@@ -1576,6 +1659,27 @@ static void build_viaje(lv_obj_t *form)
      * el GPS real (Fase 4 + modulo GPS de la P4) la posicion de
      * inicio/fin se capturaria sola en el instante del toque, no tiene
      * sentido pedirla a mano para una accion pensada como "un solo toque". */
+    /* Campo INVISIBLE para el destino: el editor a pantalla completa vuelca
+     * sobre un textarea, y aqui no hay formulario donde ponerlo. Fuera del
+     * layout y de tamano 0 para que no ocupe ni un pixel. */
+    s_viaje_destino_ta = lv_textarea_create(form);
+    lv_obj_add_flag(s_viaje_destino_ta, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_viaje_destino_ta, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_size(s_viaje_destino_ta, 0, 0);
+    lv_textarea_set_one_line(s_viaje_destino_ta, true);
+    /* 20 caracteres: es el limite del diseño, y la ruta en la SD de la P4 no
+     * debe crecer sin control. */
+    lv_textarea_set_max_length(s_viaje_destino_ta, 20);
+    /* SOLO ASCII, y no es un descuido: ver el bloque de monedas arriba -- las
+     * fuentes Montserrat compiladas no traen acentos ni la ñ, y saldrian
+     * cuadrados. Ademas esto acaba siendo un NOMBRE DE CARPETA, asi que los
+     * caracteres que romperian la ruta no se dejan ni teclear. La P4 vuelve a
+     * filtrar por su cuenta: no se fia de lo que le manden. */
+    lv_textarea_set_accepted_chars(s_viaje_destino_ta,
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -_");
+    lv_obj_add_event_cb(s_viaje_destino_ta, viaje_destino_listo_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+
     s_viaje_msg = lv_label_create(form);
     lv_label_set_text(s_viaje_msg, "Inicio y fin de viaje de la P4, desde aqui.");
     lv_obj_set_style_text_color(s_viaje_msg, lv_color_hex(COL_LABEL), 0);

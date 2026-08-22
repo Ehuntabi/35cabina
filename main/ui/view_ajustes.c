@@ -6,6 +6,7 @@
 #include "view_ajustes.h"
 #include "../net/udp_rx.h"
 #include "confirm_screen.h"
+#include "config_storage.h"
 #include "entry_screen.h"
 #include "nav.h"
 #include "esp_log.h"
@@ -17,6 +18,11 @@ static const char *TAG = "view_ajustes";
 static lv_obj_t *s_ssid_ta;
 static lv_obj_t *s_pass_ta;
 static lv_obj_t *s_status_lbl;
+/* Usuario y clave del PORTAL de la P4 -- NO son los del Wi-Fi. Hacen falta
+ * desde que el portal exige Basic Auth tambien en el nivel abierto (21-ago-2026)
+ * y la 3.5" le escribe apuntes de viaje. Se ven en la P4, en Ajustes -> Wi-Fi. */
+static lv_obj_t *s_http_user_ta;
+static lv_obj_t *s_http_pass_ta;
 
 /* Lo que habia al abrir la pantalla, para saber si de verdad se ha cambiado
  * algo. Mismos tamanos que en udp_rx_get_credentials(). */
@@ -85,6 +91,9 @@ static void do_guardar(void *ud)
     snprintf(s_ssid_orig, sizeof(s_ssid_orig), "%s", ssid);
     snprintf(s_pass_orig, sizeof(s_pass_orig), "%s", pass);
 
+    save_portal_creds(lv_textarea_get_text(s_http_user_ta),
+                      lv_textarea_get_text(s_http_pass_ta));
+
     lv_label_set_text(s_status_lbl, "Guardado, reconectando...");
     ESP_LOGI(TAG, "Nuevas credenciales guardadas desde Ajustes");
 }
@@ -100,8 +109,16 @@ static void guardar_cb(lv_event_t *e)
     const char *ssid = lv_textarea_get_text(s_ssid_ta);
     const char *pass = lv_textarea_get_text(s_pass_ta);
 
-    if (strcmp(ssid, s_ssid_orig) == 0 && strcmp(pass, s_pass_orig) == 0) {
-        lv_label_set_text(s_status_lbl, "No has cambiado nada.");
+    bool cambio_red = strcmp(ssid, s_ssid_orig) != 0 || strcmp(pass, s_pass_orig) != 0;
+
+    /* Las del portal se guardan SIN preguntar: equivocarse ahi no deja la
+     * pantalla incomunicada, solo hace que la P4 rechace los apuntes con un
+     * mensaje claro. La confirmacion se reserva para lo que si puede dejarte
+     * sin datos, que es cambiar de red. */
+    if (!cambio_red) {
+        save_portal_creds(lv_textarea_get_text(s_http_user_ta),
+                          lv_textarea_get_text(s_http_pass_ta));
+        lv_label_set_text(s_status_lbl, "Guardado.");
         return;
     }
 
@@ -118,6 +135,13 @@ void view_ajustes_refresh(void)
                            s_pass_orig, sizeof(s_pass_orig));
     lv_textarea_set_text(s_ssid_ta, s_ssid_orig);
     lv_textarea_set_text(s_pass_ta, s_pass_orig);
+
+    char hu[33] = {0}, hp[65] = {0};
+    size_t hul = sizeof(hu), hpl = sizeof(hp);
+    load_portal_creds(hu, &hul, hp, &hpl);   /* si no hay nada, quedan vacios */
+    lv_textarea_set_text(s_http_user_ta, hu);
+    lv_textarea_set_text(s_http_pass_ta, hp);
+
     lv_label_set_text(s_status_lbl, "");
 }
 
@@ -128,7 +152,12 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_style_pad_all(parent, 8, 0);
     lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(parent, 4, 0);
-    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+    /* Cuatro campos y dos explicaciones NO caben en 320 px de alto, asi que
+     * esta pantalla se desliza. Solo en vertical: en horizontal no hay nada que
+     * ver y ademas confundiria con el gesto del carrusel (aunque Ajustes queda
+     * fuera de el, el dedo no lo sabe). */
+    lv_obj_set_scroll_dir(parent, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_AUTO);
 
     lv_obj_t *row = lv_obj_create(parent);
     lv_obj_set_size(row, lv_pct(100), 34);
@@ -161,6 +190,15 @@ void view_ajustes_create(lv_obj_t *parent)
 
     s_ssid_ta = make_field(parent, "SSID");
     s_pass_ta = make_field(parent, "Password");
+
+    lv_obj_t *hint2 = lv_label_create(parent);
+    lv_label_set_text(hint2, "Usuario y clave del PORTAL de la P4 (no del wifi),\npara mandarle los apuntes del viaje");
+    lv_obj_set_style_text_color(hint2, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_font(hint2, &lv_font_montserrat_14, 0);
+    lv_obj_set_width(hint2, lv_pct(100));
+
+    s_http_user_ta = make_field(parent, "Usuario del portal");
+    s_http_pass_ta = make_field(parent, "Clave del portal");
 
     lv_obj_t *btn = lv_btn_create(parent);
     lv_obj_set_width(btn, lv_pct(100));
