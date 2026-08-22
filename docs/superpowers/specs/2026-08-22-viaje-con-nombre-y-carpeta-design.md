@@ -109,6 +109,29 @@ el evento se marca como **hora aproximada** y la P4 le pone la de recepción. Va
 con una marca en el fichero, para que al leerlo se sepa que ese dato no es
 exacto en vez de creerselo.
 
+### El GPS que viene (nota del 22-ago-2026)
+
+El usuario avisa de que **la P4 tendrá GPS en breve**. La posición tiene el
+**mismo problema que la hora, y peor**: si la P4 sellara las coordenadas al
+*recibir* el apunte, un repostaje que estuvo en cola saldría situado donde
+estabas al llegar a casa, a cientos de km del surtidor. Un mapa con puntos mal
+puestos parece correcto, así que el error no se nota.
+
+La solución es la misma que ya está montada para el reloj:
+
+1. La P4 manda su posición en la telemetría UDP → **`mini_proto.h` sube a v4**
+   (lat/lon, previsiblemente dos `int32_t` en grados × 1e7).
+2. La 3.5" guarda la última posición conocida junto al `esp_timer` de ese
+   instante, igual que `reloj.c` hace con la hora.
+3. Cada apunte se sella con ella al ocurrir, y añade dos campos más a `datos`.
+
+**Antigüedad, no interpolación:** a diferencia de la hora, la posición NO se
+puede extrapolar — el vehículo se mueve. Así que se manda también **cuántos
+segundos hace que se supo**, y si pasa de un umbral razonable, no se pone
+posición en vez de poner una mentira.
+
+Nada de la fase 3 lo bloquea: `datos` admite campos nuevos sin tocar el canal.
+
 ### Estado y cola en la 3.5"
 
 En NVS, namespace `viaje` (ya existe con `activo`):

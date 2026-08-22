@@ -198,15 +198,19 @@ static void reparto_task(void *arg)
             continue;
         }
 
-        /* 4xx que NO son "vuelve luego": el apunte es invalido o ya no procede,
-         * y reintentarlo eternamente atascaria la cola entera detras de el.
-         * Se tira, pero se deja constancia bien visible en el log.
+        /* 4xx que NO son "vuelve luego": el apunte esta mal formado y
+         * reintentarlo eternamente atascaria la cola entera detras de el. Se
+         * tira, pero dejando constancia bien visible en el log.
          *
-         * El 401 se EXCLUYE a proposito: es credenciales mal puestas, se
-         * arregla en Ajustes y entonces el mismo apunte entra bien. Tirarlo
-         * seria perder un repostaje por un dedazo. */
+         * Tres se EXCLUYEN porque significan "ahora no" y no "esto no vale":
+         *   401 credenciales mal puestas -> se arreglan en Ajustes y entonces
+         *       el mismo apunte entra bien. Tirarlo seria perder un repostaje
+         *       por un dedazo.
+         *   409 no hay viaje abierto todavia en la P4 -> el inicio puede estar
+         *       aun por delante en esta misma cola.
+         *   408 / 429 son "vuelve luego" por definicion. */
         if (estado >= 400 && estado < 500 && estado != 401 && estado != 408 &&
-            estado != 429) {
+            estado != 409 && estado != 429) {
             ESP_LOGE(TAG, "la P4 rechaza el apunte con %d, lo DESCARTO: %s",
                      estado, cuerpo);
             descartar_cabeza();

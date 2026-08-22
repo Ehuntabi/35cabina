@@ -29,6 +29,8 @@
 #include "config_storage.h"
 #include "p4_api.h"
 #include "viaje_cola.h"
+#include "apunte.h"
+#include "tilt.h"
 #include "reloj.h"
 #include "../data_model.h"
 #include "esp_log.h"
@@ -1018,6 +1020,32 @@ static const char *CAT_NOMBRE[CAT_COUNT] = {
     "parada", "servicios", "valoracion"
 };
 
+/* CLAVES para el JSON y las columnas del CSV de la P4. Separadas de los rotulos
+ * de pantalla A PROPOSITO: los rotulos pueden cambiar de redaccion cuando el
+ * usuario pida otra cosa, y si las columnas fueran los rotulos, ese cambio
+ * partiria en dos el historico de todos los viajes anteriores.
+ *
+ * Sin espacios ni acentos: acaban siendo cabeceras de una hoja de calculo.
+ * EL ORDEN NO SE TOCA -- es el de las columnas. Añadir al final. */
+#define CAT_CLAVE CAT_NOMBRE
+
+static const char *const MANT_CLAVE[MANT_COUNT] = {
+    "aceite", "filtro_aceite", "filtro_aire", "filtro_habitaculo",
+    "correa", "ruedas"
+};
+static const char *const PARADA_CLAVE[PARADA_COUNT] = {
+    "vaciado", "llenado", "agua_potable", "pernocta_gratis", "area", "camping"
+};
+/* Solo los seis servicios; el septimo de SERV_OPCIONES es la puerta a la
+ * pantalla de valoracion, no un servicio. */
+static const char *const SERV_CLAVE[SERV_IDX_VALORACION] = {
+    "serv_agua", "serv_vaciado_grises", "serv_vaciado_wc",
+    "serv_electricidad", "serv_duchas", "serv_basura"
+};
+static const char *const VAL_EXTRA_CLAVE[VAL_EXTRA_COUNT] = {
+    "ruidoso", "sin_sombra"
+};
+
 static uint32_t cat_color(categoria_t c)
 {
     switch (c) {
@@ -1294,13 +1322,114 @@ static void parada_abrir_si_procede(void)
              (unsigned long)ahora);
 }
 
-/* La accion de verdad, ya confirmada. Hoy solo loguea; en la Fase 4 sera el
- * envio por mini_cmd_t a la P4. */
+/* Monta el apunte de la categoria y lo mete en la cola.
+ *
+ * El resumen que va al diario del viaje se reaprovecha de s_resumen, el mismo
+ * que acabas de ver en la confirmacion: si lo que se guarda no coincidiera con
+ * lo que te enseño la pantalla, seria un fallo dificil de pillar. Se le quitan
+ * los saltos de linea, que ahi eran para leerlo y en un CSV sobran. */
+static void apunte_encolar(categoria_t cat)
+{
+    char b[384];
+    size_t u = apunte_cabecera(b, sizeof(b), next_trip_seq(), CAT_CLAVE[cat]);
+
+    switch (cat) {
+        case CAT_REPOSTAJE:
+            u = apunte_campo_txt(b, sizeof(b), u, "moneda", currency_of(s_repo_currency_dd));
+            u = apunte_campo_txt(b, sizeof(b), u, "importe", lv_textarea_get_text(s_repo_importe_ta));
+            u = apunte_campo_txt(b, sizeof(b), u, "litros",  lv_textarea_get_text(s_repo_litros_ta));
+            u = apunte_campo_txt(b, sizeof(b), u, "precio_litro", lv_label_get_text(s_repo_preciolitro_lbl));
+            break;
+        case CAT_PEAJE:
+            u = apunte_campo_txt(b, sizeof(b), u, "moneda", currency_of(s_peaje_currency_dd));
+            u = apunte_campo_txt(b, sizeof(b), u, "importe", lv_textarea_get_text(s_peaje_importe_ta));
+            break;
+        case CAT_BOMBONA:
+            u = apunte_campo_num(b, sizeof(b), u, "cuantas",
+                                 btnmatrix_checked(s_bombona_cuantas_bm, 2) + 1);
+            u = apunte_campo_txt(b, sizeof(b), u, "moneda", currency_of(s_bombona_currency_dd));
+            u = apunte_campo_txt(b, sizeof(b), u, "precio", lv_textarea_get_text(s_bombona_precio_ta));
+            break;
+        case CAT_MANTENIMIENTO:
+            /* Una columna por casilla, con 0/1. Asi se pueden sumar y filtrar
+             * en la hoja de calculo; una lista de texto no se puede. */
+            for (uint8_t i = 0; i < MANT_COUNT; i++) {
+                u = apunte_campo_num(b, sizeof(b), u, MANT_CLAVE[i],
+                                     lv_obj_has_state(s_mant_chk[i], LV_STATE_CHECKED) ? 1 : 0);
+            }
+            u = apunte_campo_num(b, sizeof(b), u, "ruedas_n",
+                                 lv_obj_has_state(s_mant_chk[MANT_IDX_RUEDAS], LV_STATE_CHECKED)
+                                 ? (long)ruedas_elegidas() : 0);
+            u = apunte_campo_txt(b, sizeof(b), u, "km",    lv_textarea_get_text(s_mant_km_ta));
+            u = apunte_campo_txt(b, sizeof(b), u, "coste", lv_textarea_get_text(s_mant_coste_ta));
+            break;
+        case CAT_PARADA: {
+            for (uint8_t i = 0; i < PARADA_COUNT; i++) {
+                u = apunte_campo_num(b, sizeof(b), u, PARADA_CLAVE[i],
+                                     lv_obj_has_state(s_parada_chk[i], LV_STATE_CHECKED) ? 1 : 0);
+            }
+            u = apunte_campo_txt(b, sizeof(b), u, "cobro",
+                                 parada_cobro_actual() == PARADA_COBRO_24H ? "24h" : "noche");
+            u = apunte_campo_txt(b, sizeof(b), u, "moneda", currency_of(s_parada_currency_dd));
+            u = apunte_campo_txt(b, sizeof(b), u, "precio", lv_textarea_get_text(s_parada_precio_ta));
+            for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
+                u = apunte_campo_num(b, sizeof(b), u, SERV_CLAVE[i],
+                                     lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED) ? 1 : 0);
+            }
+            u = apunte_campo_txt(b, sizeof(b), u, "valoracion", VALORACION[s_val_nota]);
+            for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
+                u = apunte_campo_num(b, sizeof(b), u, VAL_EXTRA_CLAVE[i],
+                                     lv_obj_has_state(s_val_extra_chk[i], LV_STATE_CHECKED) ? 1 : 0);
+            }
+            /* Como quedo aparcada. Es un dato DEL SITIO, no del momento: si un
+             * area tiene mucha pendiente, conviene saberlo antes de volver. */
+            float pitch = 0, roll = 0;
+            if (tilt_get(&pitch, &roll)) {
+                u = apunte_campo_num(b, sizeof(b), u, "cabeceo_centi", (long)(pitch * 100));
+                u = apunte_campo_num(b, sizeof(b), u, "balanceo_centi", (long)(roll * 100));
+            }
+            break;
+        }
+        default:
+            break;
+    }
+
+    /* El resumen, en una linea. */
+    char resumen[96];
+    size_t j = 0;
+    for (size_t i = 0; s_resumen[i] && j + 1 < sizeof(resumen); i++) {
+        resumen[j++] = (s_resumen[i] == '\n') ? ' ' : s_resumen[i];
+    }
+    resumen[j] = 0;
+    u = apunte_cerrar(b, sizeof(b), u, resumen);
+
+    if (!viaje_cola_push(b)) {
+        confirm_screen_aviso("No he podido apuntarlo",
+                             "La cola de pendientes esta\nllena. Enciende la P4 para\nque se vacie.",
+                             COL_ACCION_STOP, "Entendido");
+    }
+}
+
+/* La accion de verdad, ya confirmada. */
 static void do_save(void *user_data)
 {
     categoria_t cat = (categoria_t)(uintptr_t)user_data;
-    ESP_LOGI(TAG, "CONFIRMADO '%s' -- TODO Fase 4: enviar por mini_cmd_t a la P4",
-             CAT_NOMBRE[cat]);
+
+    /* Sin viaje en marcha no hay carpeta donde escribirlo, asi que se queda
+     * solo en la pantalla. Se avisa en vez de callarse: guardar un repostaje
+     * que no va a ninguna parte y no decirlo es justo lo que hace que te fies
+     * de un dato que no existe. */
+    if (!s_viaje_activo) {
+        ESP_LOGW(TAG, "'%s' NO se manda: no hay viaje en marcha", CAT_NOMBRE[cat]);
+        if (cat == CAT_PARADA) parada_abrir_si_procede();
+        confirm_screen_aviso("Guardado solo aqui",
+                             "No hay ningun viaje en marcha,\nasi que esto no se guarda en\nla P4. Inicia un viaje antes.",
+                             COL_ACCION_STOP, "Entendido");
+        show_grid();
+        return;
+    }
+
+    apunte_encolar(cat);
     if (cat == CAT_PARADA) parada_abrir_si_procede();
     show_grid();
 }
