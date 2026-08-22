@@ -127,6 +127,25 @@ silencio.
 | Reenvío duplicado | La P4 lo descarta por `id` y responde OK |
 | Nombre repetido el mismo día | La P4 añade un sufijo `_2` en vez de mezclar dos viajes |
 
+## Descarga del viaje por Wi-Fi
+
+Hoy la P4 ya sirve un `viaje.tar` en su portal, **pero no es un viaje**: empaqueta
+`/sdcard/bateria`, `/sdcard/solar` y `/sdcard/frigo`, o sea el histórico entero.
+El nombre engaña desde que existe.
+
+Con esto:
+
+- **`viaje.tar` pasa a ser de verdad un viaje**: la carpeta completa, con los
+  registros, la telemetría y el resumen dentro.
+- El paquete de siempre **no se pierde**: pasa a llamarse `historico.tar`. El
+  analizador del PC sigue teniendo lo suyo y los nombres dejan de mentir.
+- En la página de descargas sale **la lista de viajes guardados**, ordenados por
+  fecha, y se elige cuál bajarse. Con varios viajes en la tarjeta es lo único
+  práctico: `/data/viaje/2026-08-22_Galicia.tar`.
+
+Se reaprovecha `tar_stream_dir()`, que ya sabe meter una carpeta con su prefijo
+dentro de un `.tar` en streaming, y ya respeta el cerrojo de la SD con la cámara.
+
 ## Lo que NO entra
 
 - El log del sistema en la carpeta del viaje (decisión del usuario).
@@ -152,3 +171,5 @@ silencio.
 3. **Registros** (repostaje, peaje, bombona, mantenimiento, parada) al fichero
    que les toca.
 4. **Telemetría duplicada** y **resumen** con totales.
+5. **Descarga**: `viaje.tar` por viaje, lista para elegir y renombrar el paquete
+   viejo a `historico.tar`.
