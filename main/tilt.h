@@ -13,6 +13,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -37,6 +38,12 @@ bool tilt_get(float *pitch_deg, float *roll_deg);
  * superficie conocida). Bloquea ~0.5s (uso desde un boton, no desde LVGL
  * directamente sin feedback). */
 void tilt_calibrate(void);
+
+/* Como va montado el sensor respecto al vehiculo: 0, 90, 180 o 270 grados.
+ * Cambiarlo BORRA la calibracion (los desvios guardados eran de los ejes
+ * viejos) y hay que volver a calibrar. */
+void     tilt_set_orientacion(uint16_t grados);
+uint16_t tilt_get_orientacion(void);
 
 #ifdef __cplusplus
 }
