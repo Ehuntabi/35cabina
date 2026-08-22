@@ -77,6 +77,22 @@ Cuerpo, según la operación:
 el último `id` aplicado y **descarta lo que ya haya aplicado**, respondiendo OK
 igualmente para que la 3.5" lo dé por entregado y no se atasque.
 
+### El "cuándo": cada cosa se sella al ocurrir, no al entregarse
+
+**El punto débil del primer borrador.** Caso normal: repostas con la P4 apagada,
+el registro se queda en cola y sale dos días después al arrancar el motor. Si la
+hora la pusiera la P4 al recibirlo, ese repostaje figuraría **dos días tarde**.
+
+Así que la 3.5" sella cada evento en el momento en que ocurre: guarda el último
+`epoch_local` que le dio la P4 junto con el `esp_timer` de ese instante, y para
+sellar suma el tiempo transcurrido desde entonces. No necesita reloj propio, solo
+recordar cuándo supo la hora por última vez.
+
+Si en todo el arranque **nunca** ha visto a la P4, no hay de dónde sacar la hora:
+el evento se marca como **hora aproximada** y la P4 le pone la de recepción. Va
+con una marca en el fichero, para que al leerlo se sepa que ese dato no es
+exacto en vez de creerselo.
+
 ### Estado y cola en la 3.5"
 
 En NVS, namespace `viaje` (ya existe con `activo`):
@@ -104,8 +120,34 @@ silencio.
 3. Telemetría: mientras haya viaje abierto, el `datalogger` escribe **además** en
    `<carpeta>/telemetria_AAAA-MM-DD.csv`. Sigue guardando en `/sdcard/frigo/`
    como siempre, para no romper el histórico continuo.
-4. `op=fin` → vuelca lo pendiente, deja de duplicar la telemetría y escribe
+4. **Contadores cada hora** en `contadores.csv`: kilómetros, tiempo y consumo del
+   `trip_computer`. Si el viaje se corta a lo bruto (batería, avería) no se
+   pierde el recorrido, y además se ve la evolución.
+5. `op=fin` → vuelca lo pendiente, deja de duplicar la telemetría y escribe
    `resumen.txt`: días, kilómetros, litros repostados y gasto por conceptos.
+
+### Qué hay dentro de la carpeta
+
+```
+/sdcard/viajes/2026-08-22_Galicia/
+├─ eventos.csv          ← el DIARIO: todo en orden y con su hora
+├─ repostajes.csv
+├─ peajes.csv
+├─ bombonas.csv
+├─ mantenimientos.csv
+├─ paradas.csv          ← con la nivelación con que se aparcó
+├─ contadores.csv       ← km/tiempo/consumo, una línea por hora
+├─ telemetria_2026-08-22.csv   (uno por día)
+└─ resumen.txt          ← totales, al cerrar
+```
+
+`eventos.csv` es el que se lee para saber **qué pasó**: inicio, cada registro,
+cada parada abierta y cerrada, el fin, todo seguido. Los CSV por tipo son para
+hacer cuentas. Se escriben las dos cosas porque sirven para cosas distintas.
+
+En `paradas.csv` va también **cómo quedó nivelada** la autocaravana (cabeceo y
+balanceo al guardarla): es un dato del sitio, no del momento — si un área tiene
+mucha pendiente, conviene saberlo antes de volver.
 
 ### El nombre
 
@@ -146,6 +188,30 @@ Con esto:
 Se reaprovecha `tar_stream_dir()`, que ya sabe meter una carpeta con su prefijo
 dentro de un `.tar` en streaming, y ya respeta el cerrojo de la SD con la cámara.
 
+#### Solo se descarga lo que está COMPLETO
+
+Un viaje solo se puede bajar cuando la P4 **sabe** que no le falta nada. En el
+propio código del `.tar` ya hay un aviso sobre esto: *"el analizador del PC se
+traga un viaje incompleto creyendo que está entero"*.
+
+Cómo lo sabe: el mensaje de `fin` lleva **cuántos eventos ha mandado la 3.5" en
+total**, y la P4 comprueba que los tiene todos **sin huecos** en los `id`. Solo
+entonces lo marca como descargable.
+
+En la lista, cada viaje sale con su estado:
+
+| Estado | Qué significa | Descarga |
+|---|---|---|
+| **En curso** | No se ha finalizado | Bloqueada |
+| **Incompleto (faltan N)** | Cerrado, pero faltan eventos | Solo la salida de emergencia |
+| **Listo** | Cerrado y sin huecos | Normal |
+
+**Salida de emergencia:** si se perdió algo para siempre (la cola se llenó, un
+reinicio en mal momento), el viaje quedaría bloqueado eternamente. Hay un enlace
+aparte que avisa de qué falta y descarga el paquete como
+`2026-08-22_Galicia_INCOMPLETO.tar`. Así no te quedas sin tus datos y es
+imposible confundirlo con uno entero.
+
 ## Lo que NO entra
 
 - El log del sistema en la carpeta del viaje (decisión del usuario).
@@ -171,5 +237,6 @@ dentro de un `.tar` en streaming, y ya respeta el cerrojo de la SD con la cámar
 3. **Registros** (repostaje, peaje, bombona, mantenimiento, parada) al fichero
    que les toca.
 4. **Telemetría duplicada** y **resumen** con totales.
-5. **Descarga**: `viaje.tar` por viaje, lista para elegir y renombrar el paquete
-   viejo a `historico.tar`.
+5. **Descarga**: `viaje.tar` por viaje, lista con el estado de cada uno, bloqueo
+   de los incompletos con su salida de emergencia, y renombrar el paquete viejo
+   a `historico.tar`.
