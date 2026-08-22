@@ -68,6 +68,7 @@ static lv_obj_t   *s_lbl_gray;     /* el rotulo, que tambien avisa */
 static lv_obj_t   *s_frigo_val;
 static lv_obj_t   *s_frigo_trend;  /* flecha de tendencia */
 static lv_obj_t   *s_ext_trend;
+static lv_obj_t   *s_pendientes;      /* pastilla "N sin enviar", oculta si 0 */
 static lv_obj_t   *s_frigo_fan;
 static lv_obj_t   *s_ext_val;
 static lv_timer_t *s_refresh_timer;
@@ -792,5 +793,55 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_frigo_fan, &lv_font_montserrat_14, 0);
     lv_obj_align(s_frigo_fan, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
 
+    /* Pastilla de pendientes: encima de todo y FUERA de la rejilla, para no
+     * robarle sitio a ninguna tarjeta -- casi siempre no esta. Abajo al centro,
+     * que es donde no tapa ningun numero. */
+    s_pendientes = lv_label_create(parent);
+    lv_obj_add_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_pendientes, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_label_set_text(s_pendientes, "");
+    lv_obj_set_style_bg_color(s_pendientes, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_bg_opa(s_pendientes, LV_OPA_COVER, 0);
+    lv_obj_set_style_text_color(s_pendientes, lv_color_hex(0x000000), 0);
+    /* Letra 24 y no 14: con la 14 quedaba tan pequena que se confundia con un
+     * rotulo mas de la pantalla, y esto es lo unico que puede impedirte irte a
+     * casa con un apunte sin entregar. Tiene que verse de un vistazo desde el
+     * asiento, no leerse de cerca. */
+    lv_obj_set_style_text_font(s_pendientes, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_pad_hor(s_pendientes, 20, 0);
+    lv_obj_set_style_pad_ver(s_pendientes, 8, 0);
+    lv_obj_set_style_radius(s_pendientes, LV_RADIUS_CIRCLE, 0);
+    /* Sombra negra alrededor: la pastilla cae ENCIMA de las tarjetas de aguas y
+     * temperaturas, y sin separacion el naranja se pegaba a sus bordes. */
+    lv_obj_set_style_border_color(s_pendientes, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_border_width(s_pendientes, 3, 0);
+    lv_obj_align(s_pendientes, LV_ALIGN_BOTTOM_MID, 0, -6);
+
     s_refresh_timer = lv_timer_create(refresh_cb, 500, NULL);
+}
+
+/* --- Pastilla de pendientes ------------------------------------------------
+ *
+ * Llega desde la tarea del repartidor, no desde LVGL, asi que el trabajo real
+ * se aplaza con lv_async_call: tocar un widget desde otra tarea corrompe la
+ * lista de objetos y el fallo aparece mucho despues y en otro sitio. */
+static size_t s_pend_valor;
+
+static void pendientes_aplicar(void *arg)
+{
+    (void)arg;
+    if (!s_pendientes) return;
+    if (s_pend_valor == 0) {
+        lv_obj_add_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    lv_label_set_text_fmt(s_pendientes, "%u sin enviar", (unsigned)s_pend_valor);
+    lv_obj_clear_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_align(s_pendientes, LV_ALIGN_BOTTOM_MID, 0, -6);
+}
+
+void view_info_set_pendientes(size_t pendientes)
+{
+    s_pend_valor = pendientes;
+    lv_async_call(pendientes_aplicar, NULL);
 }

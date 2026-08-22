@@ -16,6 +16,8 @@
 #include "tilt.h"
 #include "ui/nav.h"
 #include "net/udp_rx.h"
+#include "net/viaje_cola.h"
+#include "ui/view_info.h"
 #include "esp_log.h"
 #include "esp_flash.h"
 #include "esp_chip_info.h"
@@ -179,6 +181,12 @@ void setup(void) {
     lvgl_port_unlock();
 
     udp_rx_start();
+
+    /* El repartidor de apuntes pendientes. Va DESPUES de udp_rx_start() porque
+     * necesita la red, y arranca aunque la cola este vacia: lo normal es que
+     * quede algo del encendido anterior (esta pantalla se apaga con el
+     * contacto, y los apuntes se hacen justo antes). */
+    viaje_cola_init(view_info_set_pendientes);
 
     static esp_timer_handle_t reboot_timer;
     const esp_timer_create_args_t reboot_timer_args = {

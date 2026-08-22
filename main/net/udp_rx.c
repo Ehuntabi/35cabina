@@ -24,6 +24,7 @@
 #include "wifi_credentials.h"
 #include "config_storage.h"
 #include "../data_model.h"
+#include "../reloj.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -264,6 +265,7 @@ static void rx_task(void *arg)
             continue;
         }
         data_model_update_from_msg(msg);
+        reloj_set_desde_p4(msg->epoch_local);
         s_msgs_ok++;
 
         /* El reloj de la P4 es lo unico que permite contar lo que dura una

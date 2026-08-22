@@ -28,6 +28,8 @@
 #include "confirm_screen.h"
 #include "config_storage.h"
 #include "p4_api.h"
+#include "viaje_cola.h"
+#include "reloj.h"
 #include "../data_model.h"
 #include "esp_log.h"
 #include <stdlib.h>
@@ -1463,15 +1465,6 @@ static void inicio_resultado_cb(bool ok, int estado)
     show_grid();
 }
 
-static void fin_resultado_cb(bool ok, int estado)
-{
-    if (!ok) { aviso_envio_fallo(estado, "Fin de viaje"); return; }
-    save_trip_destino("");
-    viaje_set_activo(false);
-    ESP_LOGI(TAG, "viaje finalizado en la P4");
-    show_grid();
-}
-
 /* Viaje no lleva resumen: no hay nada tecleado que repasar. Solo el segundo
  * toque, que aqui importa mas que en ningun sitio -- finalizar un viaje por un
  * roce cierra el registro en curso de la P4. */
@@ -1491,12 +1484,36 @@ static void viaje_do_iniciar(void *ud)
     }
 }
 
+/* El FIN va por la COLA, no directo como el inicio, y la diferencia es a
+ * proposito:
+ *
+ *  - El inicio EXIGE la P4 delante (la carpeta lleva la fecha en el nombre), y
+ *    hasta que no confirma no hay viaje. Encolarlo no tendria sentido: no se
+ *    puede anotar nada de un viaje cuya carpeta aun no existe.
+ *  - El fin se apunta cuando llegas, que es justo cuando puedes haber apagado
+ *    ya la P4. Y ademas entra en la cola DETRAS de los registros pendientes,
+ *    asi que nunca los adelanta: la P4 no cerrara el viaje con apuntes suyos
+ *    todavia por llegar.
+ *
+ * Por eso aqui el viaje se da por terminado en el acto aunque no se haya
+ * entregado: la cola sobrevive al apagon y lo entregara. Lo que no puede pasar
+ * es que te quedes con "viaje en curso" en pantalla porque la P4 estaba
+ * apagada. */
 static void viaje_do_finalizar(void *ud)
 {
     (void)ud;
-    if (!p4_api_viaje_fin(next_trip_seq(), fin_resultado_cb)) {
-        aviso_envio_fallo(0, "Fin de viaje");
+    char cuerpo[64];
+    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq());
+
+    if (!viaje_cola_push(cuerpo)) {
+        confirm_screen_aviso("No he podido apuntarlo",
+                             "La cola de pendientes esta\nllena. Enciende la P4 para\nque se vacie.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
     }
+    save_trip_destino("");
+    viaje_set_activo(false);
+    show_grid();
 }
 
 /* "Anotar parada" y "Servicios del area" son navegacion, no guardado: van
