@@ -140,7 +140,7 @@ Encima, una tira con **el nombre del viaje, el día que va** y, si hay algo sin
 cerrar, **cuántas cosas quedan** («2 sin cerrar»).
 
 > No pone lo gastado. Esta pantalla no lleva la cuenta del dinero — los importes
-> se rellenan al arrancar y viven en la P4 — y poner un `0,00 €` sería mentir.
+> se rellenan al volver a dar el contacto y viven en la P4 — y poner un `0,00 €` sería mentir.
 
 ### Las seis cosas que se anotan en un viaje
 
@@ -231,7 +231,7 @@ corte de corriente no lo pierde.
 
 ## 6. Parada: el formulario del final
 
-> **Ojo, en obras.** Este formulario es el que se rellenará **al arrancar**, al
+> **Ojo, en obras.** Este formulario es el que se rellenará **al volver a dar el contacto**, al
 > cerrar una pernocta. Ahora mismo el menú nuevo (apartado 4) declara la parada
 > pero **todavía no abre este formulario**: el apunte se queda abierto. Lo que
 > sigue describe cómo es el formulario, que no ha cambiado.
@@ -338,7 +338,7 @@ enlacen antes de anotar la parada.
 
 > De estos, ahora mismo solo se llega al de **Peaje** — es el único que se
 > rellena en el momento. Los otros son los que pedirán los números **al
-> arrancar**, cuando se conecte esa parte.
+> volver a dar el contacto**, cuando se conecte esa parte.
 
 ### Repostaje
 Moneda · **Importe** y **Litros** en la misma línea · **Precio/litro**, que se
@@ -459,7 +459,7 @@ llama por lo que es: **`historico.tar`**.
 
 Para no llevarse sorpresas:
 
-1. **Lo declarado todavía no se cierra solo.** Al arrancar aún no te pregunta
+1. **Lo declarado todavía no se cierra solo.** Al volver a dar el contacto aún no te pregunta
    por lo que dejaste abierto: el apunte se queda en la lista («2 sin cerrar»)
    esperando a que esa parte esté hecha. Lo único que se guarda entero de
    principio a fin es el **peaje**, que se rellena en el momento.

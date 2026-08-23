@@ -2480,8 +2480,7 @@ static lv_obj_t *fila(lv_obj_t *padre)
  */
 
 static const char *const EV_NOMBRE[EV_COUNT] = {
-    "La parada", "El apunte de aguas", "El repostaje", "El peaje",
-    "La bombona", "La averia", "La ITV"
+    "Parada", "Aguas", "Repostaje", "Peaje", "Bombona", "Averia", "ITV"
 };
 
 /* Todas las pantallas de menu ocultas. Lo llama show_form() antes de sacar un
@@ -2559,7 +2558,7 @@ static void declarar(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
     }
     if (salida_eventos_abiertos() >= SALIDA_EVENTOS_MAX) {
         confirm_screen_aviso("Ya hay cuatro sin cerrar",
-                             "Arranca y cierra alguna antes\nde anotar otra cosa.",
+                             "No cabe otra. Te preguntare\npor ellas cuando vuelvas a\ndar el contacto.",
                              COL_ACCION_STOP, "Entendido");
         return;
     }
@@ -2575,7 +2574,7 @@ static void declarar(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
      * servido de algo. */
     static char cuerpo[96];
     snprintf(cuerpo, sizeof(cuerpo),
-             "%s queda abierta.\nAl volver a arrancar te\npedire lo que falte.",
+             "Queda abierto: %s.\nCuando vuelvas a dar el\ncontacto te pedire los datos.",
              EV_NOMBRE[tipo]);
     confirm_screen_aviso("Anotado", cuerpo, COL_ACCION_OK, "Vale");
     volver_al_menu();
@@ -2618,32 +2617,47 @@ static void puntual_cb(lv_event_t *e)
     mostrar_menu(PAN_PUNTUAL);
 }
 
+/* Cerrar la salida OLVIDA lo que quedase abierto (ver salida_cerrar). Cuando
+ * hay algo abierto no se impide -- si se impidiera no habria forma de salir,
+ * porque cerrar un apunte solo se puede al arrancar y esa parte aun no esta --
+ * pero se dice CUANTO se pierde y se pide el segundo toque.
+ *
+ * Buffer estatico porque el cartel lo lee mientras esta abierto. */
+static char s_perder_txt[80];
+
+static bool avisa_de_lo_abierto(const char *titulo, confirm_cb_t si)
+{
+    int n = salida_eventos_abiertos();
+    if (n == 0) return false;
+    snprintf(s_perder_txt, sizeof(s_perder_txt),
+             "Hay %d apunte%s sin cerrar.\nSi sigues, se pierde%s.",
+             n, n == 1 ? "" : "s", n == 1 ? "" : "n");
+    confirm_screen_open(titulo, s_perder_txt, COL_ACCION_STOP,
+                        "Si, descartar", "No, dejarlo", si, NULL);
+    return true;
+}
+
+static void puntual_do_cancelar(void *ud)
+{
+    (void)ud;
+    salida_cerrar();
+    mostrar_menu(PAN_PRINCIPAL);
+}
+
 /* En una salida puntual la flecha de arriba no navega: la CANCELA. No hay a
- * donde volver -- la salida ya esta abierta -- y mientras no hayas anotado
- * nada, deshacerla es lo unico que tiene sentido. Con algo anotado no se
- * cancela: se perderia el apunte sin decirlo. */
+ * donde volver -- la salida ya esta abierta -- asi que deshacerla es lo unico
+ * que tiene sentido. */
 static void puntual_cancelar_cb(lv_event_t *e)
 {
     (void)e;
-    if (salida_eventos_abiertos() > 0) {
-        confirm_screen_aviso("Ya has anotado algo",
-                             "Esta salida se cierra sola\ncuando arranques y rellenes\nlo que falta.",
-                             COL_ACCION_STOP, "Entendido");
-        return;
-    }
-    salida_cerrar();
-    mostrar_menu(PAN_PRINCIPAL);
+    if (avisa_de_lo_abierto("Cancelar la salida?", puntual_do_cancelar)) return;
+    puntual_do_cancelar(NULL);
 }
 
 static void terminar_salida_cb(lv_event_t *e)
 {
     (void)e;
-    if (salida_eventos_abiertos() > 0) {
-        confirm_screen_aviso("Queda algo sin cerrar",
-                             "Cierra lo que tengas abierto\nantes de terminar el viaje,\no se perderia.",
-                             COL_ACCION_STOP, "Entendido");
-        return;
-    }
+    if (avisa_de_lo_abierto("Terminar el viaje?", viaje_do_finalizar)) return;
     viaje_finalizar_cb(e);   /* el mismo cartel de confirmacion de siempre */
 }
 
