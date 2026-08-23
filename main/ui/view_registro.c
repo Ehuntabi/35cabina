@@ -2644,8 +2644,10 @@ static void salida_tira_refresh(void)
      * el nombre crezca esto seria una pisada de memoria muy dificil de ver. */
     if (n < 0 || (size_t)n >= sizeof(txt)) return;
 
+    /* El dia SOLO en un viaje. Una salida puntual es ir y volver -- "dia 1" no
+     * significa nada ahi, y contar dias de algo que dura una hora confunde. */
     uint32_t ahora = reloj_p4();
-    if (ahora && s->epoch_ini) {
+    if (s->tipo == SALIDA_VIAJE && ahora && s->epoch_ini) {
         n += snprintf(txt + n, sizeof(txt) - (size_t)n, "  -  dia %u",
                       (unsigned)(salida_noches(s->epoch_ini, ahora) + 1));
         if (n < 0 || (size_t)n >= sizeof(txt)) return;
