@@ -594,9 +594,20 @@ static void refresh_cb(lv_timer_t *t)
     refresh_tendencia(&t_ext, s_ext_trend, d.exterior_has_data, d.exterior_temp_centi);
 
     if (s_gps) {
-        uint32_t c = (d.gps_estado == 2) ? 0x4CD964    /* fijado  */
+        /* CADUCA con el enlace, igual que los numeros. El estado del GPS lo
+         * manda la P4; si la P4 deja de hablar, el ultimo valor recibido se
+         * queda congelado en el modelo y el icono seguiria VERDE diciendo que
+         * hay posicion sin que haya ni comunicacion. Mismo criterio que el
+         * punto de conexion: sin dato fresco, gris.
+         *
+         * Es el mismo fallo que gps.c ya evita en la P4 con su caducidad de
+         * 5 s; faltaba aplicarlo en el lado que recibe. */
+        uint32_t ms = (uint32_t)(esp_timer_get_time() / 1000);
+        bool fresco = d.has_data && (ms - d.last_update_ms < CONN_TIMEOUT_MS);
+        uint32_t c = !fresco             ? 0x666666    /* sin enlace */
+                   : (d.gps_estado == 2) ? 0x4CD964    /* fijado  */
                    : (d.gps_estado == 1) ? 0xFF9800    /* buscando */
-                                         : 0x666666;   /* sin datos */
+                                         : 0x666666;   /* la P4 no ve el GPS */
         lv_obj_set_style_text_color(s_gps, lv_color_hex(c), 0);
     }
     lv_label_set_text(s_frigo_fan, frigo_secondary);
