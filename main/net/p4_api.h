@@ -35,6 +35,18 @@ void p4_api_cuerpo_inicio(char *out, size_t n, uint32_t id,
  * eso la P4 sabe si le falta alguno y marca el viaje como incompleto. */
 void p4_api_cuerpo_fin(char *out, size_t n, uint32_t id, uint32_t eventos);
 
+/* Fin SIN el recuento de apuntes. Para cerrar un viaje que esta abierto en la
+ * P4 pero no en esta pantalla (se empezo desde otro sitio, o se perdio el
+ * estado): no sabemos cuantos apuntes generó, y mandar un numero inventado
+ * marcaria el viaje como INCOMPLETO sin serlo. Sin el campo, la P4 lo da por
+ * bueno -- ver comprobar_completo() en config_server_viaje.c. */
+void p4_api_cuerpo_fin_ajeno(char *out, size_t n, uint32_t id);
+
+/* APARTAR el viaje abierto en la P4 en vez de cerrarlo: su carpeta pasa a
+ * llamarse DESCARTADO_<nombre> y deja de contar como viaje. Para el que se
+ * empezo por error. No borra nada. */
+void p4_api_cuerpo_descartar(char *out, size_t n, uint32_t id);
+
 #ifdef __cplusplus
 }
 #endif

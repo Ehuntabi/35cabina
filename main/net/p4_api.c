@@ -136,6 +136,16 @@ void p4_api_cuerpo_fin(char *out, size_t n, uint32_t id, uint32_t eventos)
              (unsigned long)id, (unsigned long)eventos);
 }
 
+void p4_api_cuerpo_fin_ajeno(char *out, size_t n, uint32_t id)
+{
+    snprintf(out, n, "{\"op\":\"fin\",\"id\":%lu}", (unsigned long)id);
+}
+
+void p4_api_cuerpo_descartar(char *out, size_t n, uint32_t id)
+{
+    snprintf(out, n, "{\"op\":\"descartar\",\"id\":%lu}", (unsigned long)id);
+}
+
 bool p4_api_viaje_inicio(uint32_t id, const char *destino, uint32_t fecha_dias,
                          p4_api_done_cb cb)
 {

@@ -273,9 +273,31 @@ static void clear_forms(void);
 static void valoracion_actualiza_texto(bool marcado);
 static void valoracion_reset(void);
 
+/* Las pantallas de menu. La lista vive aqui arriba y no con su codigo porque
+ * cosas de mas arriba necesitan nombrarlas -- el 409 de la P4, sin ir mas
+ * lejos, manda a PAN_VIAJE_P4. */
+typedef enum {
+    PAN_PRINCIPAL = 0,   /* Nueva salida / Configuracion */
+    PAN_TIPO,            /* Viaje / Puntual */
+    PAN_SALIDA,          /* Anadir parada / Terminar salida / Configuracion */
+    PAN_TIPOS,           /* las seis cosas que se anotan en un viaje */
+    PAN_PUNTUAL,         /* las cuatro de una salida puntual */
+    PAN_MOTIVO,          /* por que paras */
+    PAN_SITIO,           /* donde pasas la noche */
+    PAN_ABIERTOS,        /* lo que queda sin cerrar, para poder borrarlo */
+    PAN_VIAJE_P4,        /* la P4 tiene un viaje abierto y esta pantalla no */
+    PAN_COUNT
+} pantalla_t;
+
+/* Dos destinos de la flecha que NO son pantallas. Van detras de PAN_COUNT para
+ * no ocupar sitio en los arrays. */
+#define PAN_CANCELA_PUNTUAL  (PAN_COUNT)       /* la flecha cancela, no navega */
+#define PAN_VOLVER           (PAN_COUNT + 1)   /* al menu que toque por estado */
+
 /* Definidas abajo, con los menus de la salida. */
 static void ocultar_menus(void);
 static void volver_al_menu(void);
+static void mostrar_menu(pantalla_t p);
 
 /* Volver al menu deja los formularios EN BLANCO: se vacian sus campos, casillas
  * y selectores. Como es el unico camino de vuelta (boton Volver, guardado
@@ -1598,8 +1620,9 @@ static void aviso_envio_fallo(int estado, const char *que)
         snprintf(cuerpo, sizeof(cuerpo),
                  "La P4 no acepta la clave.\nRevisa usuario y clave en\nAjustes.");
     } else if (estado == 409) {
+        /* No deberia llegar aqui: el inicio lo desvia a PAN_VIAJE_P4. */
         snprintf(cuerpo, sizeof(cuerpo),
-                 "La P4 dice que ya hay un\nviaje abierto. Terminalo\nantes de empezar otro.");
+                 "La P4 dice que ya hay un\nviaje abierto.");
     } else if (estado == 0) {
         snprintf(cuerpo, sizeof(cuerpo),
                  "No he podido hablar con la P4.\nComprueba que este encendida.");
@@ -1613,6 +1636,11 @@ static void aviso_envio_fallo(int estado, const char *que)
 
 static void inicio_resultado_cb(bool ok, int estado)
 {
+    /* 409 = la P4 ya tiene un viaje abierto que esta pantalla no conocia (se
+     * empezo antes de perder el estado, o desde otro sitio). Decir "terminalo
+     * antes" y quedarse ahi era un callejon sin salida: el unico aparato que
+     * puede cerrarlo es ESTE, y la P4 vive en la parte de atras. */
+    if (!ok && estado == 409) { mostrar_menu(PAN_VIAJE_P4); return; }
     if (!ok) { aviso_envio_fallo(estado, "Viaje"); return; }
     save_trip_destino(s_viaje_destino);
     trip_eventos_reset();
@@ -2186,22 +2214,6 @@ static void build_valoracion(lv_obj_t *form)
  * probaron y se veian apagadas con sol de lado.
  */
 
-typedef enum {
-    PAN_PRINCIPAL = 0,   /* Nueva salida / Configuracion */
-    PAN_TIPO,            /* Viaje / Puntual */
-    PAN_SALIDA,          /* Anadir parada / Terminar salida / Configuracion */
-    PAN_TIPOS,           /* las seis cosas que se anotan en un viaje */
-    PAN_PUNTUAL,         /* las cuatro de una salida puntual */
-    PAN_MOTIVO,          /* por que paras */
-    PAN_SITIO,           /* donde pasas la noche */
-    PAN_ABIERTOS,        /* lo que queda sin cerrar, para poder borrarlo */
-    PAN_COUNT
-} pantalla_t;
-
-/* Dos destinos de la flecha que NO son pantallas. Van detras de PAN_COUNT para
- * no ocupar sitio en los arrays. */
-#define PAN_CANCELA_PUNTUAL  (PAN_COUNT)       /* la flecha cancela, no navega */
-#define PAN_VOLVER           (PAN_COUNT + 1)   /* al menu que toque por estado */
 
 static lv_obj_t *s_menus[PAN_COUNT];
 static lv_obj_t *s_bar_hora[PAN_COUNT];
@@ -2680,6 +2692,63 @@ static void borrar_cb(lv_event_t *e)
                         (void *)(intptr_t)idx);
 }
 
+/* --- El viaje que la P4 tiene abierto y esta pantalla no --------------------
+ *
+ * Las dos van por la COLA y no directas: asi valen aunque la P4 conteste tarde,
+ * y entran detras de lo que hubiera pendiente. La cola despacha cada 15 s como
+ * mucho, de ahi el "unos segundos" del cartel. */
+static void viaje_p4_manda(const char *cuerpo, const char *titulo)
+{
+    if (!viaje_cola_push(cuerpo)) {
+        confirm_screen_aviso("No he podido pedirlo",
+                             "La cola de pendientes esta\nllena. Enciende la P4 para\nque se vacie.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    confirm_screen_aviso(titulo,
+                         "Se lo he pedido a la P4.\nEn unos segundos podras\nempezar el viaje nuevo.",
+                         COL_ACCION_OK, "Vale");
+    volver_al_menu();
+}
+
+/* Cerrarlo como bueno: la P4 le escribe su resumen y lo deja terminado.
+ *
+ * Va SIN el recuento de apuntes a proposito: no sabemos cuantos genero ese
+ * viaje -- no es nuestro -- y mandar un numero inventado lo marcaria como
+ * INCOMPLETO sin serlo. */
+static void viaje_p4_guardar(void *ud)
+{
+    (void)ud;
+    char cuerpo[80];
+    p4_api_cuerpo_fin_ajeno(cuerpo, sizeof(cuerpo), next_trip_seq());
+    viaje_p4_manda(cuerpo, "Viaje guardado");
+}
+
+static void viaje_p4_descartar(void *ud)
+{
+    (void)ud;
+    char cuerpo[80];
+    p4_api_cuerpo_descartar(cuerpo, sizeof(cuerpo), next_trip_seq());
+    viaje_p4_manda(cuerpo, "Viaje apartado");
+}
+
+static void viaje_p4_guardar_cb(lv_event_t *e)
+{
+    (void)e;
+    confirm_screen_open("Guardar el viaje?", "La P4 lo cierra y le escribe\nsu resumen. Luego ya puedes\nempezar el nuevo.",
+                        COL_ACCION_OK, "Si, guardarlo", "Cancelar", viaje_p4_guardar, NULL);
+}
+
+static void viaje_p4_descartar_cb(lv_event_t *e)
+{
+    (void)e;
+    /* Se dice EXACTAMENTE lo que pasa con la carpeta. "Descartar" a secas suena
+     * a borrar, y no borra: aparta. */
+    confirm_screen_open("Apartar el viaje?", "Su carpeta pasa a llamarse\nDESCARTADO_... y deja de\ncontar. No se borra nada.",
+                        COL_ACCION_STOP, "Si, apartarlo", "Cancelar",
+                        viaje_p4_descartar, NULL);
+}
+
 /* Deshacer lo que se acaba de anotar: el ultimo de la cola. */
 static void deshacer_ultimo(void *ud)
 {
@@ -2935,6 +3004,21 @@ static void crear_menus(lv_obj_t *parent)
      * que toque, que no es siempre el mismo (viaje o puntual). */
     body = pantalla_crear(parent, PAN_ABIERTOS, "SIN CERRAR", PAN_VOLVER);
     for (int i = 0; i < SALIDA_EVENTOS_MAX; i++) abiertos_fila_crear(body, i);
+
+    /* --- 9. La P4 tiene un viaje abierto ---
+     * Se llega sola cuando la P4 contesta 409 al empezar un viaje. Se resuelve
+     * DESDE AQUI porque la P4 esta en la parte de atras: levantarse del asiento
+     * del conductor para pulsar un boton no es una opcion. */
+    body = pantalla_crear(parent, PAN_VIAJE_P4, "VIAJE EN LA P4", PAN_VOLVER);
+    lv_obj_t *aviso = lv_label_create(body);
+    lv_label_set_text(aviso, "La P4 tiene un viaje abierto.\nHay que cerrarlo antes de\nempezar otro.");
+    lv_obj_set_style_text_font(aviso, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(aviso, lv_color_hex(COL_LABEL), 0);
+    boton_grande(body, LV_SYMBOL_SAVE, "GUARDARLO", "lo cierra con su resumen",
+                 COL_ACCION_OK, viaje_p4_guardar_cb, NULL);
+    lv_obj_set_flex_grow(boton_chico(body, "Apartarlo (era una prueba)",
+                                     COL_ACCION_STOP, lv_pct(100),
+                                     viaje_p4_descartar_cb, NULL), 0);
 }
 
 void view_registro_create(lv_obj_t *parent)

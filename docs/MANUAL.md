@@ -229,6 +229,25 @@ delante para que se ordenen solas:
 - **Hace falta la P4 encendida.** Si no, avisa («Enciende la P4 primero») y no
   empieza: la carpeta lleva la fecha en el nombre y esta pantalla no tiene reloj.
 
+### Si la P4 dice que ya hay un viaje abierto
+
+Pasa cuando se empezó un viaje y esta pantalla perdió el hilo (o se empezó desde
+otro sitio). **Se resuelve desde la cabina**, sin ir a la P4: sale una pantalla
+con dos salidas.
+
+| Botón | Qué hace en la P4 |
+|---|---|
+| **GUARDARLO** | Lo cierra como bueno y le escribe su resumen |
+| **Apartarlo (era una prueba)** | Renombra su carpeta a `DESCARTADO_…` y la suelta. **No borra nada** |
+
+Las dos van por la cola de pendientes, así que tardan unos segundos en llegar.
+Después ya puedes empezar el viaje nuevo. La flecha «Atrás» te saca sin tocar
+nada.
+
+> «Apartarlo» no pide el recuento de apuntes del viaje viejo a propósito: no lo
+> sabemos, no era nuestro, y mandar un número inventado lo marcaría como
+> incompleto sin serlo.
+
 El viaje **no se da por empezado hasta que la P4 lo confirma**. Si algo falla te
 lo dice y todo se queda como estaba, en vez de poner «viaje en curso» mientras en
 la tarjeta no hay nada.

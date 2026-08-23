@@ -177,12 +177,14 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   La pantalla se apaga al quitar el contacto, y todo se apoya en eso:
   **declaras al llegar, rellenas al salir**.
 
-  **Ocho pantallas de menú**, una detrás de otra y **un botón grande en cada
+  **Nueve pantallas de menú**, una detrás de otra y **un botón grande en cada
   una** (`crear_menus()` en `view_registro.c`): principal → tipo de salida
   (viaje / puntual) → menú de salida → las seis cosas de un viaje → por qué
   paras → dónde duermes; más la de las cuatro de una salida puntual y la de
   **lo que queda sin cerrar** (se llega tocando la tira de estado, y es desde
-  donde se borra un apunte puesto por error).
+  donde se borra un apunte puesto por error) y la de **el viaje que la P4 tiene
+  abierto** (sale sola con el 409: guardarlo o apartarlo, desde la cabina —
+  `op=descartar` en la P4, que renombra la carpeta a `DESCARTADO_…`).
   Configuración queda pequeño y gris en todas. Arriba, una franja de 26 px con
   la hora y dos puntos (GPS y P4) que **caducan con el enlace**.
 
