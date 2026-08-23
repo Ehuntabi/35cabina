@@ -1,0 +1,153 @@
+En el menu principal tiene que haber solo dos opciones "Nueva Salida" el boton mas grande y "Configuracion" en mucho mas pequeño
+
+Nueva salida
+Seleccionar el tipo se salida "Viaje" o "Puntual"
+
+- Si se selecciona "Viaje" se pide dar un nombre descriptivo (no muy largo) y se crea una carpeta nombre descriptivo + añomesdia
+
+Nuevo menu (que sera el principal hasta que se pulse Terminar salida" con el boton mas grande "Añadir parada" y mas pequeños "Terminar salida" y el mas pequeño "Configuracion"
+
+
+Submenu Añadir parada: (en todos los casos incluir coordenadas y hora inicio y hora final)
+
+
+Que opciones tiene un viaje
+
+1 - Parada
+2 - Vaciado wc, aguas, llenado agua
+3 - Repostaje
+4 - Peaje
+4 - Bombona
+5 - Averia/Mantenimiento
+
+
+
+1 -- Causa de una parada 
+
+- para visitar algo / descansar / comer / cenar / compras
+
+- Parado para pernoctar:
+    En un parking gratuito
+        wc (incluida o coste), agua (incluida o coste), vaciado (incluida o coste), luz (incluida o coste), valoracion , que se tenga en cuenta que puede ser mas 
+            de un dia
+    En un parking de pago
+        wc (incluida o coste), agua (incluida o coste), vaciado (incluida o coste), luz (incluida o coste), valoracion , que se tenga en cuenta que puede ser mas 
+            de un dia y precio
+    En un area gratuita
+        wc (incluida o coste), agua (incluida o coste), vaciado (incluida o coste), luz (incluida o coste), valoracion , que se tenga en cuenta que puede ser mas 
+            de un dia
+    En un area de pago 
+        wc (incluida o coste), agua (incluida o coste), vaciado (incluida o coste), luz (incluida o coste/h), modo de cobro 00:00 salida a las 12:00 (elegible) o 
+            24 horas desde que se entra, valoracion, precio dia y que se tenga en cuenta que puede ser mas de un dia
+    En un camping
+        wc, agua, vaciado, luz, valoracion, precio dia y que se tenga en cuenta que puede ser mas de un dia
+
+
+Cuando esta una parada activa, al volver a poner el motor/contacto en marcha debe salir el mensaje de 
+
+    "prolongar parada" implica que se continua con el motivo de la parada
+
+    "finalizar parada" calcula si hay coste, presenta los datos seleccionados y pide "confirmacion" o "cancelar finalizar parada", y vuelve al menu "Añadir parada" y mas pequeños "Terminar salida" y el mas pequeño "Configuracion"
+
+
+
+2 -- Vaciado wc, aguas, llenado de agua
+     Se entiende que es algo que ocurre en viaje, no es una parada en si
+
+    wc (gratis o coste), agua (gratis o coste), vaciado (gratis o coste)
+
+    Cuando se halla seleccionado esta opcion, al volver a poner el motor/contacto en marcha debe salir el mensaje de 
+
+    "Rellenado / vaciado terminado " calcula si hay coste, presenta los datos seleccionados y pide "confirmacion" o "cancelar finalizar Rellenado /vaciado" y vuelve al menu "Añadir parada" y mas pequeños "Terminar salida" y el mas pequeño "Configuracion"
+
+
+3 -- Repostaje
+     
+    Cuando se halla seleccionado esta opcion, al volver a poner el motor/contacto en marcha debe salir el mensaje de 
+
+    "finalizar repostaje" formulario solicitando importe, litros y calcula el coste, presenta los datos seleccionados y pide "confirmacion"y vuelve al menu "Añadir parada" y mas pequeños "Terminar salida" y el mas pequeño "Configuracion"
+
+
+4 -- Peaje esta operacion se suele hacer con el motor en marcha por lo que cuando se elija, en la pantalla saldra el formulario para rellenar Clase, importe (aunque no siempre es posible)
+
+
+
+5 -- Bombona
+
+    Cuando se halla seleccionado esta opcion, al volver a poner el motor/contacto en marcha debe salir el mensaje de 
+
+    "Bombonas cargadas" formulario solicitando 1 o 2 el precio unidad y calcula el coste, presenta los datos seleccionados y pide "confirmacion"y vuelve al menu "Añadir parada" y mas pequeños "Terminar salida" y el mas pequeño "Configuracion"
+    
+
+6 -- Averia/Mantenimiento
+
+    Mantenimiento
+                Aceite, filtros, ruedas (numero) correa, otros (descripcion)
+
+                Averia (descripcion)
+
+                        Cuando se halla seleccionado esta opcion, al volver a poner el motor/contacto en marcha debe salir el mensaje de 
+
+                                "Mantenimiento/averia finalizado" formulario solicitando el coste, presenta los datos seleccionados y pide "confirmacion"y vuelve al menu "Añadir parada" y mas pequeños "Terminar salida" y el mas pequeño "Configuracion"    
+
+
+
+
+
+
+
+- Si se selecciona "Puntual" despliega estas opciones: (en todos los casos incluir coordenadas y hora)
+
+Repostaje               Importe, litros 
+
+        Cuando se halla seleccionado esta opcion, al volver a poner el motor/contacto en marcha debe salir el mensaje de 
+
+        "finalizar repostaje" formulario solicitando importe, litros y calcula el coste, presenta los datos seleccionados y pide "confirmacion"y vuelve almenu principal tiene que haber solo dos opciones "Nueva Salida" el boton mas grande y 
+                        "Configuracion" en mucho mas pequeño
+
+Bombona                 1 o 2 precio unidad
+
+
+        Cuando se halla seleccionado esta opcion, al volver a poner el motor/contacto en marcha debe salir el mensaje de 
+
+        "Bombonas cargadas" formulario solicitando 1 o 2 el precio unidad y calcula el coste, presenta los datos seleccionados y pide "confirmacion"y vuelve almenu principal tiene que haber solo dos opciones "Nueva Salida" el boton mas grande y 
+                        "Configuracion" en mucho mas pequeño
+
+
+Itv                     
+
+
+        Cuando se halla seleccionado esta opcion, al volver a poner el motor/contacto en marcha debe salir el mensaje de 
+
+        "ITV acabada" formulario solicitando Km, precio, favorable desfavorable, presenta los datos seleccionados y pide "confirmacion"y vuelve almenu principal tiene que haber solo dos opciones "Nueva Salida" el boton mas grande y 
+                        "Configuracion" en mucho mas pequeño
+
+
+Mantenimiento/Averia    
+
+                Mantenimiento
+                                Aceite, filtros, ruedas (numero) correa, otros (descripcion)
+
+                Averia (descripcion)
+
+
+
+
+
+        Cuando se halla seleccionado esta opcion, al volver a poner el motor/contacto en marcha debe salir el mensaje de 
+
+        "Mantenimiento/averia acabada" formulario solicitando Km, formulario solicitando el coste, presenta los datos seleccionados y pide "confirmacion"y vuelve almenu principal tiene que haber solo dos opciones "Nueva Salida" el boton mas grande y 
+                        "Configuracion" en mucho mas pequeño
+
+
+
+
+
+
+
+Configuracion:
+
+    En esta opcion de momento solo esta la configuracion del wifi
+
+
+

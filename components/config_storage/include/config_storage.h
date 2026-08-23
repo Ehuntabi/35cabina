@@ -97,6 +97,33 @@ esp_err_t load_parada_abierta(parada_abierta_t *out);
 esp_err_t save_parada_abierta(const parada_abierta_t *p);
 esp_err_t clear_parada_abierta(void);
 
+// Salida en curso y lo que dejo abierto (NVS namespace: "salida").
+//
+// Sustituye a los dos apartados de arriba ("viaje" y "parada"), que solo sabian
+// guardar UNA parada: en una estancia larga hay varias cosas abiertas a la vez
+// (pernoctas cinco dias en un camping y por el medio repostas). Ahora se guarda
+// TODO el estado en un unico blob, que ademas se escribe de una sola vez: si se
+// va la corriente a mitad no queda un estado a medias.
+//
+// La forma del blob la define main/salida.h, que es quien entiende lo que
+// significa cada campo. Aqui solo se guarda y se recupera.
+esp_err_t load_salida_blob(void *out, size_t *len);
+esp_err_t save_salida_blob(const void *data, size_t len);
+esp_err_t clear_salida_blob(void);
+
+// Marca de vida: la hora local de la P4, reescrita cada pocos minutos mientras
+// la pantalla esta encendida.
+//
+// La 3.5" se apaga de GOLPE al quitar el contacto, sin aviso ni tiempo de
+// guardar nada, asi que no puede anotar cuando se apago. Lo que hace es dejar
+// la hora periodicamente: al arrancar, la ultima marca ES el momento del
+// apagon, con el margen del periodo de escritura. Sirve para ofrecer "estuviste
+// parado desde las 19:40" cuando se olvido declarar la parada.
+//
+// Devuelve 0 si nunca se escribio ninguna.
+uint32_t  load_salida_vida(void);
+esp_err_t save_salida_vida(uint32_t epoch_local);
+
 // Calibracion de nivel del ADXL345 (NVS namespace: "tilt").
 // Offsets en centesimas de grado (deg*100), se restan de cada lectura.
 // Si no hay calibracion guardada devuelve 0/0 (sin error).

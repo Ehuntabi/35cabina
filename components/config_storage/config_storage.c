@@ -15,6 +15,9 @@
 #define RELAY_LABELS_KEY      "labels"
 #define RELAY_MAX_PINS        8
 #define RELAY_UNUSED_PIN      0xFF
+#define SALIDA_NAMESPACE      "salida"
+#define SALIDA_ESTADO_KEY     "estado"
+#define SALIDA_VIDA_KEY       "vida"
 #define TILT_NAMESPACE        "tilt"
 #define TILT_PITCH_KEY        "pitch_off"
 #define TILT_ROLL_KEY         "roll_off"
@@ -236,6 +239,68 @@ esp_err_t save_relay_config(bool enabled,
     if (err == ESP_OK) err = nvs_set_blob(h, RELAY_LABELS_KEY, stored_labels, sizeof(stored_labels));
     if (err == ESP_OK) err = nvs_commit(h);
 
+    nvs_close(h);
+    return err;
+}
+
+/* === Salida en curso ====================================================== */
+
+/* Un unico blob con todo el estado. De una sola escritura: si se va la
+ * corriente a mitad, NVS deja el valor anterior entero en vez de un estado
+ * mezclado (media salida con eventos de la otra). Con una clave por campo eso
+ * no estaria garantizado, y aqui la corriente se va constantemente. */
+esp_err_t load_salida_blob(void *out, size_t *len)
+{
+    if (!out || !len) return ESP_ERR_INVALID_ARG;
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(SALIDA_NAMESPACE, NVS_READONLY, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_get_blob(h, SALIDA_ESTADO_KEY, out, len);
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t save_salida_blob(const void *data, size_t len)
+{
+    if (!data || len == 0) return ESP_ERR_INVALID_ARG;
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(SALIDA_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_blob(h, SALIDA_ESTADO_KEY, data, len);
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t clear_salida_blob(void)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(SALIDA_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_erase_key(h, SALIDA_ESTADO_KEY);
+    if (err == ESP_ERR_NVS_NOT_FOUND) err = ESP_OK;   /* ya no estaba: bien */
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+uint32_t load_salida_vida(void)
+{
+    nvs_handle_t h;
+    uint32_t v = 0;
+    if (nvs_open(SALIDA_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return 0;
+    nvs_get_u32(h, SALIDA_VIDA_KEY, &v);
+    nvs_close(h);
+    return v;
+}
+
+esp_err_t save_salida_vida(uint32_t epoch_local)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(SALIDA_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_u32(h, SALIDA_VIDA_KEY, epoch_local);
+    if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
     return err;
 }
