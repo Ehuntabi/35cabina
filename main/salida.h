@@ -145,6 +145,15 @@ const salida_evento_t *salida_evento_primero(void);
  * usuario decide descartarlo. */
 void salida_evento_cerrar_primero(void);
 
+/* Uno cualquiera, por su sitio en la cola. Existe para DESHACER: el evento se
+ * abre de un toque y sin esto un dedo equivocado no tendria vuelta atras.
+ * false si el indice no existe. */
+bool salida_evento_borrar(int idx);
+
+/* El de la cola, por su sitio. NULL si no existe. Para pintar la lista de lo
+ * que queda abierto. */
+const salida_evento_t *salida_evento_en(int idx);
+
 /* Cambia la hora de inicio del primero. Lo usa "prolongar parada": la parada
  * sigue abierta pero no queremos reabrirla, solo dejar constancia. En realidad
  * NO se toca la hora -- prolongar significa justo que sigue contando desde el

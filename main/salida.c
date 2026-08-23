@@ -317,6 +317,26 @@ uint32_t salida_evento_abrir(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
     return id;
 }
 
+bool salida_evento_borrar(int idx)
+{
+    if (idx < 0 || idx >= (int)s_st.n_eventos) return false;
+    for (int i = idx; i + 1 < (int)s_st.n_eventos; i++) {
+        s_st.eventos[i] = s_st.eventos[i + 1];
+    }
+    s_st.n_eventos--;
+    memset(&s_st.eventos[s_st.n_eventos], 0, sizeof(salida_evento_t));
+    guardar();
+    refrescar_vista();
+    ESP_LOGI(TAG, "evento %d borrado a mano (%u abiertos)", idx, (unsigned)s_st.n_eventos);
+    return true;
+}
+
+const salida_evento_t *salida_evento_en(int idx)
+{
+    if (idx < 0 || idx >= (int)s_st.n_eventos) return NULL;
+    return &s_st.eventos[idx];
+}
+
 int salida_eventos_abiertos(void)
 {
     return s_st.n_eventos;

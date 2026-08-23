@@ -177,10 +177,12 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   La pantalla se apaga al quitar el contacto, y todo se apoya en eso:
   **declaras al llegar, rellenas al salir**.
 
-  **Siete pantallas de menú**, una detrás de otra y **un botón grande en cada
+  **Ocho pantallas de menú**, una detrás de otra y **un botón grande en cada
   una** (`crear_menus()` en `view_registro.c`): principal → tipo de salida
   (viaje / puntual) → menú de salida → las seis cosas de un viaje → por qué
-  paras → dónde duermes; más la de las cuatro de una salida puntual.
+  paras → dónde duermes; más la de las cuatro de una salida puntual y la de
+  **lo que queda sin cerrar** (se llega tocando la tira de estado, y es desde
+  donde se borra un apunte puesto por error).
   Configuración queda pequeño y gris en todas. Arriba, una franja de 26 px con
   la hora y dos puntos (GPS y P4) que **caducan con el enlace**.
 
@@ -199,7 +201,8 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   lo que quedó abierto, prolongar/finalizar parada y el aviso de «estuviste
   parado desde las 19:40». Hoy se declara y el apunte se queda abierto (la tira
   del menú dice cuántos). El **peaje** es el único que se guarda entero, porque
-  se rellena en el momento.
+  se rellena en el momento. Mientras tanto, deshacer se puede de dos maneras:
+  en el propio cartel de «Anotado» y en la pantalla de lo que queda sin cerrar.
 
   **Mantenimiento** usa **casillas, no un desplegable**: con el mismo
   kilometraje puedes haber hecho varias cosas (el aceite Y su filtro es el

@@ -181,7 +181,8 @@ no perder el apunte sin decírtelo.
 
 ### Qué pasa cuando declaras algo
 
-Sale un «Anotado» y vuelves al menú. El apunte queda **abierto** y guardado en la
+Sale un **«Anotado»** con dos botones: **Vale** y **Deshacer** (en rojo). Se abre
+de un toque, así que un dedo equivocado tiene que tener vuelta atrás. El apunte queda **abierto** y guardado en la
 memoria interna, así que **sobrevive a que se apague la pantalla** — que es
 justo lo que va a pasar en cuanto quites el contacto.
 
@@ -191,6 +192,23 @@ repostar, compras una bombona y pagas un peaje.
 
 **Hace falta la P4 encendida** para declarar: el apunte lleva su hora de inicio y
 esta pantalla no tiene reloj propio. Si no está, avisa y no anota.
+
+### Borrar algo que anotaste antes
+
+La tira de arriba, cuando hay algo abierto, pone **«2 sin cerrar ›»**. **Tócala**
+y sale la lista de lo que tienes pendiente: qué es, a qué hora lo anotaste y un
+**Borrar** al lado de cada uno. Pide confirmación, y al borrar el último te
+devuelve al menú.
+
+Es la red de seguridad mientras no estén las pantallas de cerrar apuntes: sin
+ella, un toque equivocado se quedaría ahí para siempre.
+
+### Terminar con algo abierto
+
+Ni «Terminar salida» ni cancelar una salida puntual te lo impiden, pero **te
+dicen cuántos apuntes se van a perder** y piden un segundo toque. No se impide a
+propósito: cerrar un apunte solo se puede al volver a dar el contacto, así que
+prohibirlo dejaría la pantalla sin salida.
 
 ---
 

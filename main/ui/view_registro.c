@@ -2194,14 +2194,30 @@ typedef enum {
     PAN_PUNTUAL,         /* las cuatro de una salida puntual */
     PAN_MOTIVO,          /* por que paras */
     PAN_SITIO,           /* donde pasas la noche */
+    PAN_ABIERTOS,        /* lo que queda sin cerrar, para poder borrarlo */
     PAN_COUNT
 } pantalla_t;
+
+/* Dos destinos de la flecha que NO son pantallas. Van detras de PAN_COUNT para
+ * no ocupar sitio en los arrays. */
+#define PAN_CANCELA_PUNTUAL  (PAN_COUNT)       /* la flecha cancela, no navega */
+#define PAN_VOLVER           (PAN_COUNT + 1)   /* al menu que toque por estado */
 
 static lv_obj_t *s_menus[PAN_COUNT];
 static lv_obj_t *s_bar_hora[PAN_COUNT];
 static lv_obj_t *s_bar_gps[PAN_COUNT];
 static lv_obj_t *s_bar_wifi[PAN_COUNT];
-static lv_obj_t *s_salida_tira;       /* nombre + dia + gastado, en PAN_SALIDA */
+/* La tira de estado. Dos, porque las dos pantallas que hacen de menu principal
+ * de una salida la llevan: la de viaje y la de puntual. */
+#define TIRA_SALIDA   0
+#define TIRA_PUNTUAL  1
+static lv_obj_t *s_tiras[2];
+
+/* Filas de PAN_ABIERTOS: se crean las cuatro y se ocultan las que sobren, que
+ * es mas simple y mas seguro que crearlas y destruirlas cada vez. */
+static lv_obj_t *s_ab_fila[SALIDA_EVENTOS_MAX];
+static lv_obj_t *s_ab_tipo[SALIDA_EVENTOS_MAX];
+static lv_obj_t *s_ab_hora[SALIDA_EVENTOS_MAX];
 
 #define BAR_H     26
 #define PAN_PAD   12
@@ -2210,6 +2226,8 @@ static lv_obj_t *s_salida_tira;       /* nombre + dia + gastado, en PAN_SALIDA *
 
 static void mostrar_menu(pantalla_t p);
 static void puntual_cancelar_cb(lv_event_t *e);
+static void deshacer_ultimo(void *ud);
+static void volver_al_menu(void);
 
 /* --- La franja de arriba -------------------------------------------------
  *
@@ -2246,9 +2264,10 @@ static lv_obj_t *punto_crear(lv_obj_t *padre, const char *texto)
  * salida ya esta abierta y no hay menu anterior al que volver. */
 static void atras_cb(lv_event_t *e)
 {
-    pantalla_t destino = (pantalla_t)(uintptr_t)lv_event_get_user_data(e);
-    if (destino == PAN_COUNT) puntual_cancelar_cb(e);
-    else                      mostrar_menu(destino);
+    unsigned destino = (unsigned)(uintptr_t)lv_event_get_user_data(e);
+    if (destino == PAN_CANCELA_PUNTUAL)   puntual_cancelar_cb(e);
+    else if (destino == PAN_VOLVER)       volver_al_menu();
+    else                                  mostrar_menu((pantalla_t)destino);
 }
 
 /* Crea una pantalla de menu entera (oculta) y devuelve su CUERPO, que es donde
@@ -2498,10 +2517,15 @@ static void ocultar_menus(void)
  * NO lleva lo gastado, aunque la maqueta lo pintaba: esta pantalla no lleva la
  * cuenta del dinero -- los importes se rellenan al arrancar y viven en la P4 --
  * y poner un 0,00 seria mentir con autoridad. */
+/* "hh:mm" a partir de un epoch local de la P4. */
+static void hora_corta(uint32_t epoch, char *buf, size_t n)
+{
+    snprintf(buf, n, "%02u:%02u", (unsigned)((epoch / 3600) % 24),
+             (unsigned)((epoch / 60) % 60));
+}
+
 static void salida_tira_refresh(void)
 {
-    if (!s_salida_tira) return;
-
     const salida_vista_t *s = salida_get();
     char txt[SALIDA_NOMBRE_MAX + 32];
     int  n = snprintf(txt, sizeof(txt), "%s", s->nombre);
@@ -2518,14 +2542,39 @@ static void salida_tira_refresh(void)
     }
     int abiertos = salida_eventos_abiertos();
     if (abiertos > 0) {
-        snprintf(txt + n, sizeof(txt) - (size_t)n, "  -  %d sin cerrar", abiertos);
+        /* La flecha no es adorno: avisa de que la tira se puede tocar, que es
+         * por donde se llega a borrar un apunte puesto por error. */
+        snprintf(txt + n, sizeof(txt) - (size_t)n, "  -  %d sin cerrar  >", abiertos);
     }
-    lv_label_set_text(s_salida_tira, txt);
+    for (int i = 0; i < 2; i++) {
+        if (s_tiras[i]) lv_label_set_text(s_tiras[i], txt);
+    }
+}
+
+/* Pinta la lista de lo que queda abierto. Las filas que sobran se esconden. */
+static void abiertos_refresh(void)
+{
+    int n = salida_eventos_abiertos();
+    for (int i = 0; i < SALIDA_EVENTOS_MAX; i++) {
+        if (!s_ab_fila[i]) continue;
+        const salida_evento_t *ev = salida_evento_en(i);
+        if (!ev) { lv_obj_add_flag(s_ab_fila[i], LV_OBJ_FLAG_HIDDEN); continue; }
+        lv_obj_clear_flag(s_ab_fila[i], LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(s_ab_tipo[i],
+                          ev->tipo < EV_COUNT ? EV_NOMBRE[ev->tipo] : "?");
+        char h[8];
+        hora_corta(ev->epoch_ini, h, sizeof(h));
+        char linea[32];
+        snprintf(linea, sizeof(linea), "anotado a las %s", h);
+        lv_label_set_text(s_ab_hora[i], linea);
+    }
+    (void)n;
 }
 
 static void mostrar_menu(pantalla_t p)
 {
-    if (p == PAN_SALIDA) salida_tira_refresh();
+    salida_tira_refresh();
+    if (p == PAN_ABIERTOS) abiertos_refresh();
     for (int i = 0; i < PAN_COUNT; i++) {
         if (!s_menus[i]) continue;
         if (i == (int)p) lv_obj_clear_flag(s_menus[i], LV_OBJ_FLAG_HIDDEN);
@@ -2569,14 +2618,16 @@ static void declarar(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
         return;
     }
 
-    /* Se avisa a proposito, aunque cueste un toque mas: sin esto la pantalla
-     * vuelve al menu igual que estaba y no hay forma de saber si el toque ha
-     * servido de algo. */
+    /* El cartel no es solo para enterarse: lleva DESHACER. El evento se abre de
+     * un toque, y sin esto un dedo equivocado no tendria vuelta atras. Va en
+     * rojo y a la derecha, que es donde estan el resto de acciones que
+     * descartan. */
     static char cuerpo[96];
     snprintf(cuerpo, sizeof(cuerpo),
              "Queda abierto: %s.\nCuando vuelvas a dar el\ncontacto te pedire los datos.",
              EV_NOMBRE[tipo]);
-    confirm_screen_aviso("Anotado", cuerpo, COL_ACCION_OK, "Vale");
+    confirm_screen_open("Anotado", cuerpo, COL_ACCION_STOP,
+                        "Deshacer", "Vale", deshacer_ultimo, NULL);
     volver_al_menu();
 }
 
@@ -2593,6 +2644,48 @@ static void declarar_cb(lv_event_t *e)
 static void ir_a_cb(lv_event_t *e)
 {
     mostrar_menu((pantalla_t)(uintptr_t)lv_event_get_user_data(e));
+}
+
+/* Tocar la tira solo lleva a algun sitio si hay algo que ver. Sin nada abierto
+ * no hace nada, en vez de abrir una lista vacia. */
+static void tira_cb(lv_event_t *e)
+{
+    (void)e;
+    if (salida_eventos_abiertos() > 0) mostrar_menu(PAN_ABIERTOS);
+}
+
+/* --- Borrar un apunte puesto por error ------------------------------------ */
+
+static char s_borrar_txt[96];
+
+static void borrar_do(void *ud)
+{
+    salida_evento_borrar((int)(intptr_t)ud);
+    if (salida_eventos_abiertos() == 0) volver_al_menu();   /* ya no hay lista */
+    else                                { abiertos_refresh(); salida_tira_refresh(); }
+}
+
+static void borrar_cb(lv_event_t *e)
+{
+    int idx = (int)(intptr_t)lv_event_get_user_data(e);
+    const salida_evento_t *ev = salida_evento_en(idx);
+    if (!ev) return;
+    char h[8];
+    hora_corta(ev->epoch_ini, h, sizeof(h));
+    snprintf(s_borrar_txt, sizeof(s_borrar_txt),
+             "%s, anotado a las %s.\nNo se guardara nada de el.",
+             ev->tipo < EV_COUNT ? EV_NOMBRE[ev->tipo] : "?", h);
+    confirm_screen_open("Borrar el apunte?", s_borrar_txt, COL_ACCION_STOP,
+                        "Si, borrar", "No, dejarlo", borrar_do,
+                        (void *)(intptr_t)idx);
+}
+
+/* Deshacer lo que se acaba de anotar: el ultimo de la cola. */
+static void deshacer_ultimo(void *ud)
+{
+    (void)ud;
+    salida_evento_borrar(salida_eventos_abiertos() - 1);
+    volver_al_menu();
 }
 
 /* --- Abrir y cerrar la salida --------------------------------------------- */
@@ -2677,6 +2770,54 @@ static void terminar_salida_cb(lv_event_t *e)
 #define CEL3_W  145
 #define CEL2_W  223
 
+/* La tira de estado de un menu de salida. Es un rotulo, pero se TOCA: es la
+ * puerta a la lista de lo que queda abierto. Area de toque generosa por lo de
+ * siempre -- 16 px de alto no se aciertan con el vehiculo en marcha. */
+static lv_obj_t *tira_crear(lv_obj_t *body)
+{
+    lv_obj_t *l = lv_label_create(body);
+    lv_label_set_text(l, "");
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(COL_LABEL), 0);
+    lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+    lv_obj_set_width(l, lv_pct(100));
+    lv_obj_add_flag(l, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(l, 12);
+    lv_obj_add_event_cb(l, tira_cb, LV_EVENT_CLICKED, NULL);
+    return l;
+}
+
+/* Una fila de la lista de lo abierto: que es, a que hora se anoto, y Borrar. */
+static void abiertos_fila_crear(lv_obj_t *body, int idx)
+{
+    lv_obj_t *f = lv_obj_create(body);
+    lv_obj_remove_style_all(f);
+    lv_obj_set_width(f, lv_pct(100));
+    lv_obj_set_height(f, 58);
+    lv_obj_clear_flag(f, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(f, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(f, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_add_flag(f, LV_OBJ_FLAG_HIDDEN);
+    s_ab_fila[idx] = f;
+
+    lv_obj_t *col = lv_obj_create(f);
+    lv_obj_remove_style_all(col);
+    lv_obj_set_height(col, LV_SIZE_CONTENT);
+    lv_obj_set_flex_grow(col, 1);
+    lv_obj_clear_flag(col, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+
+    s_ab_tipo[idx] = lv_label_create(col);
+    lv_obj_set_style_text_font(s_ab_tipo[idx], &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_color(s_ab_tipo[idx], lv_color_hex(0xFFFFFF), 0);
+
+    s_ab_hora[idx] = lv_label_create(col);
+    lv_obj_set_style_text_font(s_ab_hora[idx], &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(s_ab_hora[idx], lv_color_hex(COL_LABEL), 0);
+
+    boton_chico(f, "Borrar", COL_ACCION_STOP, 120, borrar_cb, (void *)(intptr_t)idx);
+}
+
 static void crear_menus(lv_obj_t *parent)
 {
     lv_obj_t *body, *f;
@@ -2700,12 +2841,7 @@ static void crear_menus(lv_obj_t *parent)
 
     /* --- 3. Menu de salida: el principal mientras dure el viaje --- */
     body = pantalla_crear(parent, PAN_SALIDA, NULL, -1);
-    s_salida_tira = lv_label_create(body);
-    lv_label_set_text(s_salida_tira, "");
-    lv_obj_set_style_text_font(s_salida_tira, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(s_salida_tira, lv_color_hex(COL_LABEL), 0);
-    lv_label_set_long_mode(s_salida_tira, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(s_salida_tira, lv_pct(100));
+    s_tiras[TIRA_SALIDA] = tira_crear(body);
 
     boton_grande(body, LV_SYMBOL_PLUS, "ANADIR PARADA", NULL,
                  COL_ACCION_OK, ir_a_cb, (void *)(uintptr_t)PAN_TIPOS);
@@ -2740,7 +2876,8 @@ static void crear_menus(lv_obj_t *parent)
             CEL3_W, lv_pct(100), declarar_cb, DECL(EV_AVERIA, 0, 0));
 
     /* --- 5. Las cuatro de una salida puntual --- */
-    body = pantalla_crear(parent, PAN_PUNTUAL, "SALIDA PUNTUAL", PAN_COUNT);
+    body = pantalla_crear(parent, PAN_PUNTUAL, "SALIDA PUNTUAL", PAN_CANCELA_PUNTUAL);
+    s_tiras[TIRA_PUNTUAL] = tira_crear(body);
     f = fila(body);
     casilla(f, LV_SYMBOL_CHARGE,   "Repostaje", NULL, COL_BOMBONA,
             CEL2_W, lv_pct(100), declarar_cb, DECL(EV_REPOSTAJE, 0, 0));
@@ -2790,6 +2927,14 @@ static void crear_menus(lv_obj_t *parent)
      * de pago. 145 + 10 + 300 = 455, los 456 utiles. */
     casilla(f, NULL, "Camping", "de pago", COL_BOMBONA,   300, lv_pct(100),
             declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_CAMPING));
+
+    /* --- 8. Lo que queda sin cerrar ---
+     * Se llega tocando la tira. Existe para PODER DESHACER: hasta que estén
+     * las pantallas de al volver a dar el contacto, este es el unico sitio
+     * desde donde quitar un apunte puesto por error. La flecha vuelve al menu
+     * que toque, que no es siempre el mismo (viaje o puntual). */
+    body = pantalla_crear(parent, PAN_ABIERTOS, "SIN CERRAR", PAN_VOLVER);
+    for (int i = 0; i < SALIDA_EVENTOS_MAX; i++) abiertos_fila_crear(body, i);
 }
 
 void view_registro_create(lv_obj_t *parent)
