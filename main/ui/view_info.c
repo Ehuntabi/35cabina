@@ -839,7 +839,7 @@ void view_info_create(lv_obj_t *parent)
      * Antes estaba en y=1 con letra 14, por encima del borde de la tarjeta. */
     lv_obj_set_style_text_font(s_gps, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(s_gps, lv_color_hex(0x666666), 0);
-    lv_obj_align(s_gps, LV_ALIGN_TOP_LEFT, 20, 11);
+    lv_obj_align(s_gps, LV_ALIGN_TOP_LEFT, 14, 11);
 
     s_refresh_timer = lv_timer_create(refresh_cb, 500, NULL);
 }
