@@ -205,9 +205,8 @@ esta pantalla no tiene reloj propio. Si no está, avisa y no anota.
 ### Al volver a dar el contacto: cerrar lo que dejaste abierto
 
 Al encender se te pregunta por lo que quedó abierto, **en orden de cuándo lo
-declaraste**. De momento se saben cerrar dos cosas: la **parada** y el
-**repostaje**. Los demás (aguas, bombona, avería, ITV) se saltan y siguen
-esperando su formulario.
+declaraste**. Se saben cerrar la **parada**, el **repostaje**, la **bombona** y
+la **avería**. Aguas e ITV se saltan y siguen esperando su formulario.
 
 Solo se pregunta una vez por encendido, y solo cuando la P4 ya ha dicho la hora
 —sin ella no hay nada que calcular.
@@ -232,7 +231,11 @@ Solo se pregunta una vez por encendido, y solo cuando la P4 ya ha dicho la hora
 > pero **aún no te pide servicios ni precio**. El cartel lo dice antes de que
 > confirmes.
 
-#### El repostaje
+#### El repostaje, la bombona y la avería
+
+Los tres funcionan igual: un cartel con la hora a la que lo anotaste y dos
+botones, **Rellenarlo** (abre su formulario de siempre) y **Luego** (sigue
+abierto, se vuelve a preguntar).
 
 ```
         FINALIZAR REPOSTAJE
@@ -255,8 +258,8 @@ La tira de arriba, cuando hay algo abierto, pone **«2 sin cerrar ›»**. **Tó
 y sale la lista de lo que tienes pendiente: qué es, a qué hora lo anotaste y los
 botones de cada uno:
 
-- **Terminar** (verde) — en las **paradas** y los **repostajes**, que es lo que
-  hoy se sabe cerrar. Saca la misma pregunta que al dar el contacto.
+- **Terminar** (verde) — en todo lo que hoy se sabe cerrar: paradas,
+  repostajes, bombonas y averías. Saca la misma pregunta que al dar el contacto.
 - **Borrar** (rojo) — en todos. Pide confirmación, y al borrar el último te
   devuelve al menú.
 
@@ -570,8 +573,9 @@ llama por lo que es: **`historico.tar`**.
 
 Para no llevarse sorpresas:
 
-1. **De lo declarado, se cierran la parada y el repostaje.** Del resto —aguas,
-   bombona, avería, ITV— todavía no te pide los números: se quedan en la lista
+1. **Aguas e ITV todavía no se cierran.** Parada, repostaje, bombona y avería
+   sí — los tres últimos abriendo su formulario de siempre. De aguas e ITV no te
+   pide los números: se quedan en la lista
    («2 sin cerrar») esperando su formulario. Y de la **pernocta** se guarda el
    sitio y las noches, pero aún no los servicios ni el precio. El **peaje** se
    guarda entero desde el principio, porque se rellena en el momento.

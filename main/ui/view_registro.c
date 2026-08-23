@@ -27,6 +27,7 @@
 #include "entry_screen.h"
 #include "confirm_screen.h"
 #include "view_info.h"
+#include "../icons/iconos.h"
 #include "config_storage.h"
 #include "p4_api.h"
 #include "viaje_cola.h"
@@ -2449,7 +2450,7 @@ static lv_obj_t *boton_grande(lv_obj_t *padre, const char *icono,
         lv_obj_t *ic = lv_label_create(b);
         lv_label_set_text(ic, icono);
         lv_obj_set_style_text_color(ic, lv_color_hex(COL_TILE_FG), 0);
-        lv_obj_set_style_text_font(ic, &lv_font_montserrat_32, 0);
+        lv_obj_set_style_text_font(ic, &iconos_32, 0);
     }
     lv_obj_t *l = lv_label_create(b);
     lv_label_set_text(l, texto);
@@ -2486,10 +2487,13 @@ static lv_obj_t *boton_chico(lv_obj_t *padre, const char *texto, uint32_t color,
     return b;
 }
 
-/* Casilla de rejilla. 'icono' puede ser NULL: en las pantallas de motivo y de
- * sitio no lo lleva, porque la letra del firmware no trae ningun simbolo que
- * signifique "cenar" o "camping" y un icono forzado confunde mas que ayuda.
- * Sin icono, el rotulo va en letra 22 en vez de 16 y se lee mejor. */
+/* Casilla de rejilla. 'icono' puede ser NULL: la pantalla de donde duermes no
+ * lo lleva -- ahi el color ya dice el sitio y la etiqueta el precio, y un
+ * tercer elemento no cabe en 130 px de alto. Sin icono, el rotulo va en letra
+ * 22 en vez de 16 y se lee mejor.
+ *
+ * Los iconos salen de iconos.h, una fuente propia: los LV_SYMBOL_* de LVGL no
+ * tienen surtidor, bombona ni peaje, y se estaban usando por parecido. */
 static lv_obj_t *casilla(lv_obj_t *padre, const char *icono, const char *texto,
                          const char *apoyo, uint32_t color,
                          lv_coord_t w, lv_coord_t h, lv_event_cb_t cb, void *ud)
@@ -2510,7 +2514,7 @@ static lv_obj_t *casilla(lv_obj_t *padre, const char *icono, const char *texto,
         lv_obj_t *ic = lv_label_create(b);
         lv_label_set_text(ic, icono);
         lv_obj_set_style_text_color(ic, lv_color_hex(COL_TILE_FG), 0);
-        lv_obj_set_style_text_font(ic, &lv_font_montserrat_32, 0);
+        lv_obj_set_style_text_font(ic, &iconos_32, 0);
     }
     lv_obj_t *l = lv_label_create(b);
     lv_label_set_text(l, texto);
@@ -3006,43 +3010,72 @@ static void cierre_empezar(int idx, categoria_t cat)
     show_form(cat);
 }
 
-static void repostaje_rellenar(void *ud)
+/* Que formulario cierra cada tipo, y como se pregunta.
+ *
+ * El repostaje es el caso que da nombre a todo el diseno: pulsas al llegar al
+ * surtidor y los numeros te los pide despues, que es cuando los sabes. Los
+ * demas funcionan igual, cada uno con su formulario de siempre.
+ *
+ * cat == CAT_COUNT significa "todavia no se sabe cerrar": aguas e ITV esperan
+ * un formulario que no existe, y la parada va por su camino (prolongar o
+ * terminar, sin formulario). */
+typedef struct {
+    categoria_t cat;
+    const char *titulo;
+    const char *ya_sabes;      /* completa "Ahora ya sabes ..." */
+} cierre_t;
+
+static const cierre_t CIERRE[EV_COUNT] = {
+    [EV_PARADA]    = { CAT_COUNT,          NULL,                 NULL },
+    [EV_AGUAS]     = { CAT_COUNT,          NULL,                 NULL },
+    [EV_REPOSTAJE] = { CAT_REPOSTAJE,      "Finalizar repostaje",
+                       "el importe, los litros\ny los kilometros" },
+    [EV_PEAJE]     = { CAT_COUNT,          NULL,                 NULL },
+    [EV_BOMBONA]   = { CAT_BOMBONA,        "Bombonas cargadas",
+                       "cuantas son y lo que\nhan costado" },
+    [EV_AVERIA]    = { CAT_MANTENIMIENTO,  "Averia terminada",
+                       "que se ha hecho y lo\nque ha costado" },
+    [EV_ITV]       = { CAT_COUNT,          NULL,                 NULL },
+};
+
+/* idx y categoria caben de sobra en el user_data. */
+static void cierre_rellenar(void *ud)
 {
-    cierre_empezar((int)(intptr_t)ud, CAT_REPOSTAJE);
+    unsigned v = (unsigned)(uintptr_t)ud;
+    cierre_empezar((int)(v & 0xFF), (categoria_t)(v >> 8));
 }
 
-/* El repostaje es el caso que da nombre a todo el diseno: pulsas al llegar al
- * surtidor y los numeros te los pide despues, que es cuando los sabes. */
-static bool repostaje_preguntar_en(int idx)
+static bool cierre_form_preguntar(int idx, const salida_evento_t *ev)
 {
-    const salida_evento_t *ev = salida_evento_en(idx);
-    if (!ev) return true;
+    const cierre_t *c = &CIERRE[ev->tipo];
     if (reloj_p4() == 0) return false;
 
     char h[8];
     hora_corta(ev->epoch_ini, h, sizeof(h));
     snprintf(s_parada_txt, sizeof(s_parada_txt),
-             "Lo anotaste a las %s.\nAhora ya sabes el importe,\nlos litros y los kilometros.", h);
-    /* El "no" no descarta nada: el repostaje sigue abierto y se vuelve a
-     * preguntar. Rellenarlo con el surtidor delante no siempre se puede. */
-    confirm_screen_open("Finalizar repostaje", s_parada_txt, COL_REPOSTAJE,
-                        "Rellenarlo", "Luego", repostaje_rellenar,
-                        (void *)(intptr_t)idx);
+             "Lo anotaste a las %s.\nAhora ya sabes %s.", h, c->ya_sabes);
+    /* El "no" no descarta nada: sigue abierto y se vuelve a preguntar.
+     * Rellenarlo con el surtidor delante no siempre se puede. */
+    confirm_screen_open(c->titulo, s_parada_txt, cat_color(c->cat),
+                        "Rellenarlo", "Luego", cierre_rellenar,
+                        (void *)(uintptr_t)((unsigned)c->cat << 8 | (unsigned)idx));
     return true;
 }
 
 /* Lo que hoy se sabe cerrar. Los demas tipos siguen esperando su formulario. */
 static bool cierre_sabe(uint8_t tipo)
 {
-    return tipo == EV_PARADA || tipo == EV_REPOSTAJE;
+    if (tipo >= EV_COUNT) return false;
+    return tipo == EV_PARADA || CIERRE[tipo].cat != CAT_COUNT;
 }
 
 static bool cierre_preguntar_en(int idx)
 {
     const salida_evento_t *ev = salida_evento_en(idx);
     if (!ev) return true;
-    if (ev->tipo == EV_REPOSTAJE) return repostaje_preguntar_en(idx);
-    return parada_preguntar_en(idx);
+    if (ev->tipo == EV_PARADA)     return parada_preguntar_en(idx);
+    if (cierre_sabe(ev->tipo))     return cierre_form_preguntar(idx, ev);
+    return true;
 }
 
 /* La del arranque: el PRIMERO de la cola que se sepa cerrar. En orden de
@@ -3272,7 +3305,7 @@ static void crear_menus(lv_obj_t *parent)
     body = pantalla_crear(parent, PAN_PRINCIPAL, NULL, -1);
     lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
-    boton_grande(body, LV_SYMBOL_PLUS, "NUEVA SALIDA", "viaje o gestion suelta",
+    boton_grande(body, ICO_MAS, "NUEVA SALIDA", "viaje o gestion suelta",
                  COL_ACCION_OK, ir_a_cb, (void *)(uintptr_t)PAN_TIPO);
     boton_chico(body, "Configuracion", COL_AJUSTES, 160, ajustes_click_cb, NULL);
 
@@ -3280,16 +3313,16 @@ static void crear_menus(lv_obj_t *parent)
     body = pantalla_crear(parent, PAN_TIPO, "TIPO DE SALIDA", PAN_PRINCIPAL);
     f = fila(body);
     /* Las dos del mismo tamano: ninguna manda sobre la otra. */
-    casilla(f, LV_SYMBOL_GPS, "VIAJE", "varios dias\ncon carpeta propia",
+    casilla(f, ICO_VIAJE, "VIAJE", "varios dias\ncon carpeta propia",
             COL_VIAJE, CEL2_W, lv_pct(100), viaje_iniciar_cb, NULL);
-    casilla(f, LV_SYMBOL_CHARGE, "PUNTUAL", "repostar, ITV,\nbombona o taller",
+    casilla(f, ICO_PUNTUAL, "PUNTUAL", "repostar, ITV,\nbombona o taller",
             COL_BOMBONA, CEL2_W, lv_pct(100), puntual_cb, NULL);
 
     /* --- 3. Menu de salida: el principal mientras dure el viaje --- */
     body = pantalla_crear(parent, PAN_SALIDA, NULL, -1);
     tira_crear(body, TIRA_SALIDA);
 
-    boton_grande(body, LV_SYMBOL_PLUS, "ANADIR PARADA", NULL,
+    boton_grande(body, ICO_MAS, "ANADIR PARADA", NULL,
                  COL_ACCION_OK, ir_a_cb, (void *)(uintptr_t)PAN_TIPOS);
 
     /* Los dos secundarios comparten fila: entre los dos gastan lo que gastaria
@@ -3305,54 +3338,54 @@ static void crear_menus(lv_obj_t *parent)
     /* --- 4. Las seis cosas que se anotan en un viaje --- */
     body = pantalla_crear(parent, PAN_TIPOS, "QUE ANOTAS?", PAN_SALIDA);
     f = fila(body);
-    casilla(f, LV_SYMBOL_GPS,      "Parada",    NULL, COL_ACCION_OK,
+    casilla(f, ICO_PARADA,    "Parada",    NULL, COL_ACCION_OK,
             CEL3_W, lv_pct(100), ir_a_cb, (void *)(uintptr_t)PAN_MOTIVO);
-    casilla(f, LV_SYMBOL_TINT,     "Aguas",     NULL, COL_VIAJE,
+    casilla(f, ICO_AGUAS,     "Aguas",     NULL, COL_VIAJE,
             CEL3_W, lv_pct(100), declarar_cb, DECL(EV_AGUAS, 0, 0));
-    casilla(f, LV_SYMBOL_CHARGE,   "Repostaje", NULL, COL_BOMBONA,
+    casilla(f, ICO_REPOSTAJE, "Repostaje", NULL, COL_BOMBONA,
             CEL3_W, lv_pct(100), declarar_cb, DECL(EV_REPOSTAJE, 0, 0));
     f = fila(body);
     /* El peaje es la excepcion: se paga con el motor en marcha y lo rellena el
      * copiloto en el momento, asi que abre su formulario y no un evento. */
-    casilla(f, LV_SYMBOL_LIST,     "Peaje",     NULL, COL_PEAJE,
+    casilla(f, ICO_PEAJE,     "Peaje",     NULL, COL_PEAJE,
             CEL3_W, lv_pct(100), icon_click_cb, (void *)(uintptr_t)CAT_PEAJE);
-    casilla(f, LV_SYMBOL_REFRESH,  "Bombona",   NULL, COL_AJUSTES,
+    casilla(f, ICO_BOMBONA,   "Bombona",   NULL, COL_AJUSTES,
             CEL3_W, lv_pct(100), declarar_cb, DECL(EV_BOMBONA, 0, 0));
-    casilla(f, LV_SYMBOL_SETTINGS, "Averia",    NULL, COL_AJUSTES,
+    casilla(f, ICO_AVERIA,    "Averia",    NULL, COL_AJUSTES,
             CEL3_W, lv_pct(100), declarar_cb, DECL(EV_AVERIA, 0, 0));
 
     /* --- 5. Las cuatro de una salida puntual --- */
     body = pantalla_crear(parent, PAN_PUNTUAL, "SALIDA PUNTUAL", PAN_CANCELA_PUNTUAL);
     tira_crear(body, TIRA_PUNTUAL);
     f = fila(body);
-    casilla(f, LV_SYMBOL_CHARGE,   "Repostaje", NULL, COL_BOMBONA,
+    casilla(f, ICO_REPOSTAJE, "Repostaje", NULL, COL_BOMBONA,
             CEL2_W, lv_pct(100), declarar_cb, DECL(EV_REPOSTAJE, 0, 0));
-    casilla(f, LV_SYMBOL_REFRESH,  "Bombona",   NULL, COL_AJUSTES,
+    casilla(f, ICO_BOMBONA,   "Bombona",   NULL, COL_AJUSTES,
             CEL2_W, lv_pct(100), declarar_cb, DECL(EV_BOMBONA, 0, 0));
     f = fila(body);
-    casilla(f, LV_SYMBOL_FILE,     "ITV",       NULL, COL_VIAJE,
+    casilla(f, ICO_ITV,       "ITV",       NULL, COL_VIAJE,
             CEL2_W, lv_pct(100), declarar_cb, DECL(EV_ITV, 0, 0));
-    casilla(f, LV_SYMBOL_SETTINGS, "Averia/Mant.", NULL, COL_AJUSTES,
+    casilla(f, ICO_AVERIA,    "Averia/Mant.", NULL, COL_AJUSTES,
             CEL2_W, lv_pct(100), declarar_cb, DECL(EV_AVERIA, 0, 0));
 
     /* --- 6. Por que paras --- */
     body = pantalla_crear(parent, PAN_MOTIVO, "POR QUE PARAS?", PAN_TIPOS);
     f = fila(body);
-    casilla(f, NULL, "Visita",   NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
+    casilla(f, ICO_VISITA,   "Visita",   NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
             declarar_cb, DECL(EV_PARADA, MOTIVO_VISITA, 0));
-    casilla(f, NULL, "Descanso", NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
+    casilla(f, ICO_DESCANSO, "Descanso", NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
             declarar_cb, DECL(EV_PARADA, MOTIVO_DESCANSO, 0));
-    casilla(f, NULL, "Comer",    NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
+    casilla(f, ICO_COMER,    "Comer",    NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
             declarar_cb, DECL(EV_PARADA, MOTIVO_COMER, 0));
     f = fila(body);
-    casilla(f, NULL, "Cenar",    NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
+    casilla(f, ICO_CENAR,    "Cenar",    NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
             declarar_cb, DECL(EV_PARADA, MOTIVO_CENAR, 0));
-    casilla(f, NULL, "Compras",  NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
+    casilla(f, ICO_COMPRAS,  "Compras",  NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
             declarar_cb, DECL(EV_PARADA, MOTIVO_COMPRAS, 0));
     /* Pernocta va en verde y no en gris como las otras cinco: es la unica que
      * lleva cola -- donde, servicios, precio y valoracion -- y no debe
      * pulsarse por error creyendo que es un descanso. */
-    casilla(f, NULL, "PERNOCTA", NULL, COL_ACCION_OK, CEL3_W, lv_pct(100),
+    casilla(f, ICO_PERNOCTA, "PERNOCTA", NULL, COL_ACCION_OK, CEL3_W, lv_pct(100),
             ir_a_cb, (void *)(uintptr_t)PAN_SITIO);
 
     /* --- 7. Donde pasas la noche --- */
@@ -3389,7 +3422,7 @@ static void crear_menus(lv_obj_t *parent)
     lv_label_set_text(aviso, "La P4 tiene un viaje abierto.\nHay que cerrarlo antes de\nempezar otro.");
     lv_obj_set_style_text_font(aviso, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(aviso, lv_color_hex(COL_LABEL), 0);
-    boton_grande(body, LV_SYMBOL_SAVE, "GUARDARLO", "lo cierra con su resumen",
+    boton_grande(body, ICO_GUARDAR, "GUARDARLO", "lo cierra con su resumen",
                  COL_ACCION_OK, viaje_p4_guardar_cb, NULL);
     lv_obj_set_flex_grow(boton_chico(body, "Apartarlo (era una prueba)",
                                      COL_ACCION_STOP, lv_pct(100),

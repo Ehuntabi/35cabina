@@ -213,7 +213,14 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   El aviso de que queda algo se ve **en la pantalla de datos**, no solo en el
   cuaderno: comparte pastilla con «N sin enviar» y **se toca** para ir a la lista.
 
-  ⏳ **Lo que falta del rediseño**: cerrar aguas, bombona, avería e ITV; los
+  **Iconos propios** (`main/icons/iconos.{h,c}`): los `LV_SYMBOL_*` de LVGL no
+  tienen surtidor, bombona ni peaje y se estaban usando por parecido (el rayo de
+  CHARGE para el repostaje). Fuente compilada con `lv_font_conv` mezclando
+  FontAwesome 4.7 y Noto Sans Symbols (solo por el surtidor ⛽, U+26FD); las dos
+  ya están en el equipo. La orden exacta para regenerarla está en `iconos.h`.
+
+  ⏳ **Lo que falta del rediseño**: cerrar aguas e ITV (necesitan formulario
+  nuevo); los
   servicios y el precio de una **pernocta**; y el aviso de «estuviste parado
   desde las 19:40». Deshacer se puede de dos maneras: en el cartel de «Anotado»
   y en la pantalla de lo que queda sin cerrar.
