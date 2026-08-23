@@ -61,7 +61,6 @@ static lv_obj_t   *s_aux_val;      /* bateria motor, en la misma tarjeta */
 
 /* Abajo: aguas a la izquierda, las dos temperaturas a la derecha. */
 static lv_obj_t   *s_water_card;
-static lv_obj_t   *s_water_conn_dot;
 static lv_obj_t   *s_led_clean[4];
 static lv_obj_t   *s_led_gray;
 static lv_obj_t   *s_lbl_gray;     /* el rotulo, que tambien avisa */
@@ -270,17 +269,11 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     s_water_card = card;
 
-    lv_obj_t *dot = lv_obj_create(card);
-    lv_obj_set_size(dot, 12, 12);
-    lv_obj_set_style_bg_color(dot, COL_CONN_NONE, 0);
-    lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(dot, 0, 0);
-    lv_obj_set_style_radius(dot, 6, 0);
-    lv_obj_set_style_pad_all(dot, 0, 0);
-    lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_align(dot, LV_ALIGN_TOP_LEFT, 2, 2);
-    s_water_conn_dot = dot;
-
+    /* Esta tarjeta ya NO lleva punto de conexion. Habia dos, aqui y en la de
+     * bateria, y los DOS se pintaban del mismo color calculado una sola vez:
+     * eran el mismo indicador repetido. El usuario pregunto si significaban
+     * cosas distintas -- que es justo lo que sugiere ver dos -- y no. Se queda
+     * el de la tarjeta de bateria, que es la principal. */
     lv_obj_t *t = lv_label_create(card);
     lv_label_set_text(t, "AGUAS");
     lv_obj_set_style_text_color(t, COL_BORDER_WATER, 0);
@@ -574,7 +567,6 @@ static void update_conn_dots(const mini_data_t *d)
         col = (now - d->last_update_ms < CONN_TIMEOUT_MS) ? COL_CONN_OK : COL_CONN_LOST;
     }
     lv_obj_set_style_bg_color(s_bat_dot, col, 0);
-    lv_obj_set_style_bg_color(s_water_conn_dot, col, 0);
 }
 
 static void refresh_cb(lv_timer_t *t)
