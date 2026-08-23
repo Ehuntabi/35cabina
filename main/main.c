@@ -14,6 +14,7 @@
 #include "lv_port.h"
 #include "data_model.h"
 #include "tilt.h"
+#include "salida.h"
 #include "ui/nav.h"
 #include "net/udp_rx.h"
 #include "net/viaje_cola.h"
@@ -170,6 +171,11 @@ void setup(void) {
         nvs_err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(nvs_err);
+
+    /* La salida en curso y lo que quedo abierto. Va ANTES de construir la UI:
+     * el menu de registros pregunta el estado nada mas crearse, y lee la marca
+     * de vida antes de pisarla (ver salida.h). */
+    salida_init();
 
     /* No es fatal si no responde: tilt_is_present() queda en false y la
      * pantalla de inclinacion lo muestra en vez de crashear. */

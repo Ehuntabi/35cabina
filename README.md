@@ -103,12 +103,13 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
    ├─ tilt.c/h                        # ADXL345 (bus I2C propio IO17/IO18) -- pitch/roll (Fase 3)
    ├─ esp_bsp.c/h                     # pantalla QSPI + tactil + bus I2C
    ├─ lv_port.c/h, display.h          # bring-up LVGL / panel
+   ├─ salida.c/h                      # la salida en curso y lo que quedo abierto (NVS)
    ├─ wifi_credentials.h.example      # plantilla; el real NO se versiona
    ├─ ui/
    │  ├─ ui_theme.c/h, ui_format.c/h  # genericos, sin Victron
    │  ├─ nav.c/h                      # carrusel de 3 pantallas por gesto (Fase 2)
    │  ├─ view_info.c/h                # centro: info agrupada (Fase 1)
-   │  ├─ view_registro.c/h            # derecha: menu de registros + viaje/parada (Fase 2)
+   │  ├─ view_registro.c/h            # derecha: los 7 menus de la salida + formularios (Fase 2)
    │  ├─ view_inclinacion.c/h         # izquierda: burbuja de nivel (Fase 3)
    │  └─ view_ajustes.c/h             # SSID/password de la P4, editable sin reflashear
    └─ net/
@@ -169,20 +170,36 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   `wifi_credentials.h.example`) solo se usa como valor de fábrica la
   primera vez que arranca con NVS vacía.
 - **Fase 2** (hecho): carrusel de 3 pantallas por gesto horizontal (centro:
-  info · derecha: menú de 5 iconos — **Viaje** (contextual, ver abajo),
-  **Repostaje** (moneda arriba; importe y litros en la misma línea;
-  precio/litro calculado), **Peaje** (moneda arriba, importe debajo en
-  letra 40), **Bombona** (cuántas: 1 o 2, precio total),
-  **Mantenimiento** (ver abajo) · izquierda: placeholder de inclinación).
-  Una sexta celda, **Wi-Fi**, no es un registro: salta a `view_ajustes.c`.
+  info · derecha: el cuaderno de registros · izquierda: inclinación).
 
-  El **menú ocupa toda la pantalla**: **3+3, seis celdas de 146×145**, cada
-  una con su **color de fondo**. Los tamaños van en píxeles y no en
-  porcentaje **a propósito**: en LVGL el `pad_gap` no se descuenta del
-  porcentaje y las tres celdas de arriba se salían de fila. Por lo justo del
-  encaje (458 de 460 px útiles), `view_registro_create()` anula el padding y
-  el borde que el tema de LVGL pone en la pantalla; si no, la tercera celda
-  bajaría de fila.
+  **El cuaderno se organiza alrededor de la SALIDA** y no de las categorías
+  (rediseño del 23-ago-2026, `docs/superpowers/specs/2026-08-23-pantalla-registros-salidas-design.md`).
+  La pantalla se apaga al quitar el contacto, y todo se apoya en eso:
+  **declaras al llegar, rellenas al salir**.
+
+  **Siete pantallas de menú**, una detrás de otra y **un botón grande en cada
+  una** (`crear_menus()` en `view_registro.c`): principal → tipo de salida
+  (viaje / puntual) → menú de salida → las seis cosas de un viaje → por qué
+  paras → dónde duermes; más la de las cuatro de una salida puntual.
+  Configuración queda pequeño y gris en todas. Arriba, una franja de 26 px con
+  la hora y dos puntos (GPS y P4) que **caducan con el enlace**.
+
+  Los tamaños van en píxeles y no en porcentaje **a propósito**: en LVGL el
+  `pad_gap` no se descuenta del porcentaje y las celdas de la derecha se salen
+  de fila. Con la franja arriba, el cuerpo útil es 456×270 → celdas de 145×130
+  en rejilla de tres, 223 de ancho en la de dos. `view_registro_create()` anula
+  el padding y el borde que el tema de LVGL pone en la pantalla.
+
+  **Estado de la salida en NVS** (`main/salida.{c,h}`): la salida en curso y
+  hasta **4 eventos abiertos a la vez**, en un único blob de una escritura.
+  Cuatro porque en una estancia larga conviven parada, repostaje, bombona y
+  peaje. Marca de vida cada 10 min para saber a qué hora se fue la luz.
+
+  ⏳ **Lo que falta del rediseño**: las pantallas de **al arrancar** — rellenar
+  lo que quedó abierto, prolongar/finalizar parada y el aviso de «estuviste
+  parado desde las 19:40». Hoy se declara y el apunte se queda abierto (la tira
+  del menú dice cuántos). El **peaje** es el único que se guarda entero, porque
+  se rellena en el momento.
 
   **Mantenimiento** usa **casillas, no un desplegable**: con el mismo
   kilometraje puedes haber hecho varias cosas (el aceite Y su filtro es el

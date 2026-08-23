@@ -96,67 +96,109 @@ no esté montada perfectamente recta.
 
 ---
 
-## 4. Registros: el menú
+## 4. Registros: la salida
 
-Seis casillas, cada una de su color:
+La pantalla de la derecha es el cuaderno de a bordo, y se organiza alrededor de
+la **salida**: la autocaravana se mueve por un motivo, y el viaje es solo uno de
+ellos.
 
-| Casilla | Para qué |
+> **La idea que lo sostiene todo.** Esta pantalla se apaga al quitar el
+> contacto. Eso parecía un estorbo y resulta ser el mecanismo:
+> **declaras al llegar, rellenas al salir.** Con el motor aún en marcha pulsas
+> «Repostaje». Echas gasolina. Al girar la llave, la pantalla arranca y ya sabe
+> que dejó un repostaje abierto.
+
+**Un botón grande por pantalla.** Lo que se hace siempre tiene que verse desde
+lejos y acertarse con el dedo con el vehículo en marcha. **Configuración** queda
+pequeño y gris en todas partes.
+
+Arriba, una franja fina con **la hora** y dos puntos: **GPS** y **P4**. Verde =
+va; ámbar = el GPS todavía busca; gris = no hay. Los dos puntos **caducan con el
+enlace**: si se cae la comunicación con la P4 se apagan, porque un indicador que
+miente justo cuando algo va mal es peor que no tenerlo.
+
+### Sin salida en marcha
+
+Un solo botón: **NUEVA SALIDA**. Debajo, pequeño, Configuración.
+
+### Qué tipo de salida
+
+| | Qué es |
 |---|---|
-| 🔵 **Viaje** | Empezar y terminar viaje, y anotar paradas |
-| 🟢 **Repostaje** | Gasoil / gasolina |
-| 🟣 **Peaje** | Un importe y ya |
-| 🟠 **Bombona** | Compra de bombonas de gas |
-| 🩵 **Mantenimiento** | Aceite, filtros, correa, ruedas |
-| ⬜ **Wi-Fi** | Ajustes del aparato (gris a propósito: no anota nada) |
+| 🔵 **Viaje** | Dura días, tiene nombre y carpeta propia, y dentro caben muchos apuntes |
+| 🟠 **Puntual** | Sales a repostar, a la ITV, a por una bombona o al taller. Un apunte y se acabó |
 
-**Todos los formularios funcionan igual:**
+### Mientras dura el viaje
 
-1. Tocas un campo → se abre **a pantalla completa** con teclado grande.
-   (No sale un teclado pequeño debajo: la pantalla es de 3,5" y no cabría.)
-2. Rellenas y vuelves.
-3. Pulsas **Guardar**.
-4. Sale **"¿Es correcto?"** con el resumen de lo que has metido. Confirmas o
-   corriges.
+Este pasa a ser el menú principal:
 
-**Lo que NO te piden y por qué:** ni fecha ni hora. La pantalla las pone sola,
-**con la hora en que lo anotaste**, no con la de cuando se entregue. Si repostas
-con la P4 apagada y el apunte sale dos días después, sigue figurando el día del
-repostaje. Teclear la fecha a mano en el surtidor no aporta nada.
+- **AÑADIR PARADA** — grande, es lo único que se hace cada día.
+- **Terminar salida** y **Configuración** — comparten fila abajo: entre los dos
+  gastan lo que gastaría uno solo.
 
-**Dónde acaba cada cosa.** En la tarjeta de la P4, dentro de la carpeta del
-viaje:
+Encima, una tira con **el nombre del viaje, el día que va** y, si hay algo sin
+cerrar, **cuántas cosas quedan** («2 sin cerrar»).
 
-```
-/sdcard/viajes/2026-08-22_Zumaia/
-├─ eventos.csv        ← el diario: todo en orden y con su hora
-├─ repostajes.csv     ← para hacer cuentas
-├─ peajes.csv
-├─ bombonas.csv
-├─ mantenimientos.csv
-└─ paradas.csv
-```
+> No pone lo gastado. Esta pantalla no lleva la cuenta del dinero — los importes
+> se rellenan al arrancar y viven en la P4 — y poner un `0,00 €` sería mentir.
 
-El diario sirve para saber **qué pasó**; los de cada tipo, para **hacer cuentas**
-en una hoja de cálculo. Por eso se guardan las dos cosas.
+### Las seis cosas que se anotan en un viaje
 
-**Moneda:** por defecto EUR. Hay diez monedas de la Europa continental (GBP,
-CHF, SEK, NOK, DKK, PLN, CZK, HUF, RON). La elegida **se reinicia a EUR** cada
-vez que se vuelve a abrir el formulario.
+| Casilla | Qué hace al tocarla |
+|---|---|
+| 🟢 **Parada** | Pregunta **por qué** paras |
+| 🔵 **Aguas** | WC, vaciado de grises, llenado de agua |
+| 🟠 **Repostaje** | Un toque y listo |
+| 🟣 **Peaje** | **La excepción**: abre el formulario ahí mismo |
+| ⬜ **Bombona** | Un toque |
+| ⬜ **Avería** | Avería o mantenimiento |
+
+El **peaje** se rellena en el momento a propósito: se paga con el motor en
+marcha y lo teclea el copiloto.
+
+### Por qué paras
+
+Visita · Descanso · Comer · Cenar · Compras · **PERNOCTA**.
+
+**Pernocta va en verde** y las otras cinco en gris: es la única que lleva cola
+—dónde, servicios, precio, valoración— y no debe pulsarse por error creyendo que
+es un descanso. Al tocarla pregunta **dónde pasas la noche**:
+
+Parking gratis · Parking de pago · Área gratis · Área de pago · Camping.
+
+**Verde gratis, ámbar de pago.** El color ya dice si esto va a costar dinero, y
+decide qué te preguntará al marcharte. Y ahí acaba lo que se toca al llegar:
+llegas de noche, cansado y con el motor en marcha, y ahí no se rellena un
+formulario de siete campos.
+
+### Salida puntual
+
+Cuatro opciones: **Repostaje · Bombona · ITV · Avería/Mant.**
+
+La flecha «Atrás» de esta pantalla **cancela la salida** (no navega: la salida ya
+está abierta y no hay menú anterior). Si ya has anotado algo no se cancela, para
+no perder el apunte sin decírtelo.
+
+### Qué pasa cuando declaras algo
+
+Sale un «Anotado» y vuelves al menú. El apunte queda **abierto** y guardado en la
+memoria interna, así que **sobrevive a que se apague la pantalla** — que es
+justo lo que va a pasar en cuanto quites el contacto.
+
+**Caben cuatro cosas abiertas a la vez.** Cuatro y no una porque en una estancia
+larga conviven: pernoctas cinco días en un camping y por el medio sales a
+repostar, compras una bombona y pagas un peaje.
+
+**Hace falta la P4 encendida** para declarar: el apunte lleva su hora de inicio y
+esta pantalla no tiene reloj propio. Si no está, avisa y no anota.
 
 ---
 
-## 5. Viaje
+## 5. Viaje: empezar y terminar
 
-**Esta pantalla cambia según haya viaje en marcha o no.**
-
-### Sin viaje
-
-Solo un botón: **Iniciar viaje**. No hay "Finalizar": terminar lo que no ha
-empezado no significa nada.
-
-Al pulsarlo te pide **el destino** con el teclado grande: no un nombre para el
-viaje, sino *a dónde vas*, que es mucho más fácil de contestar con el motor en
-marcha. Con eso la P4 crea la carpeta del viaje en su tarjeta, con la fecha
+Al elegir **Viaje** te pide **el destino** con el teclado grande: no un nombre
+para el viaje, sino *a dónde vas*, que es mucho más fácil de contestar con el
+motor en marcha. Con eso la P4 crea la carpeta en su tarjeta, con la fecha
 delante para que se ordenen solas:
 
 ```
@@ -166,31 +208,35 @@ delante para que se ordenen solas:
 - Sin acentos ni ñ, y máximo 20 caracteres. La pantalla no te deja teclear otra
   cosa.
 - **El nombre no se puede cambiar después.** Te avisa antes de empezar.
-- **Hace falta la P4 encendida.** Si no, avisa ("Enciende la P4 primero") y no
+- **Hace falta la P4 encendida.** Si no, avisa («Enciende la P4 primero») y no
   empieza: la carpeta lleva la fecha en el nombre y esta pantalla no tiene reloj.
 
 El viaje **no se da por empezado hasta que la P4 lo confirma**. Si algo falla te
-lo dice y todo se queda como estaba, en vez de poner "viaje en curso" mientras en
+lo dice y todo se queda como estaba, en vez de poner «viaje en curso» mientras en
 la tarjeta no hay nada.
 
-### Con viaje en marcha
+**Terminar salida** pide confirmación y **no deja terminar con algo sin cerrar**:
+avisa y te manda a cerrarlo, porque al cerrar la salida se olvidan los apuntes
+abiertos y se perderían.
 
-- **Anotar parada** — grande, arriba. Es lo que se usa cada día.
-- **Finalizar parada** — solo aparece si hay una parada abierta (ver apartado 6).
-- **Finalizar viaje** — pequeño, rojo, abajo del todo. Lejos del pulgar que
-  viene de anotar, para no darle sin querer.
+A diferencia del inicio, el fin **no exige la P4 delante**: entra en la cola de
+pendientes, detrás de los apuntes que falten por entregar, y se manda cuando
+aparezca. Lo que no puede pasar es que te quedes con «viaje en curso» en pantalla
+porque la P4 estaba apagada.
 
-El título pasa a "VIAJE EN CURSO" y la casilla del menú también lo dice, así que
-de un vistazo sabes si el viaje está abierto.
-
-**El estado sobrevive a apagar la pantalla.** Se guarda en la memoria interna;
-un corte de corriente no lo pierde.
+**El estado sobrevive a apagar la pantalla.** Se guarda en la memoria interna; un
+corte de corriente no lo pierde.
 
 ---
 
-## 6. Parada
+## 6. Parada: el formulario del final
 
-Se llega desde **Viaje → Anotar parada**. Marca lo que hayas hecho:
+> **Ojo, en obras.** Este formulario es el que se rellenará **al arrancar**, al
+> cerrar una pernocta. Ahora mismo el menú nuevo (apartado 4) declara la parada
+> pero **todavía no abre este formulario**: el apunte se queda abierto. Lo que
+> sigue describe cómo es el formulario, que no ha cambiado.
+
+Marca lo que hayas hecho:
 
 | Casilla | Nota |
 |---|---|
@@ -289,6 +335,10 @@ enlacen antes de anotar la parada.
 ---
 
 ## 8. Los demás formularios
+
+> De estos, ahora mismo solo se llega al de **Peaje** — es el único que se
+> rellena en el momento. Los otros son los que pedirán los números **al
+> arrancar**, cuando se conecte esa parte.
 
 ### Repostaje
 Moneda · **Importe** y **Litros** en la misma línea · **Precio/litro**, que se
@@ -409,7 +459,10 @@ llama por lo que es: **`historico.tar`**.
 
 Para no llevarse sorpresas:
 
-1. **Lo anotado sin viaje en marcha no se guarda.** La pantalla te avisa.
+1. **Lo declarado todavía no se cierra solo.** Al arrancar aún no te pregunta
+   por lo que dejaste abierto: el apunte se queda en la lista («2 sin cerrar»)
+   esperando a que esa parte esté hecha. Lo único que se guarda entero de
+   principio a fin es el **peaje**, que se rellena en el momento.
 2. **No hay kilómetros.** La P4 no tiene GPS ni cuentakilómetros todavía, así
    que el resumen no puede decir cuánto recorriste. Lo dice explícitamente en
    vez de callarlo, para que no parezca un viaje de 0 km. Cuando llegue el GPS,

@@ -32,8 +32,10 @@
 #include "apunte.h"
 #include "tilt.h"
 #include "reloj.h"
+#include "salida.h"
 #include "../data_model.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -60,8 +62,10 @@ typedef enum {
 #define BACK_TO_GRID  (-1)
 
 
-static lv_obj_t *s_grid;
 static lv_obj_t *s_forms[CAT_COUNT];
+/* Puesto a true al final de view_registro_create(). view_registro_reset()
+ * puede llegar antes de que la vista exista (el carrusel la crea perezosa). */
+static bool      s_ui_lista;
 
 /* --- Reparto 3+2 del menu, a pantalla completa (480x320 apaisada) ---------
  *
@@ -137,7 +141,6 @@ static lv_obj_t *s_viaje_btn_fin_parada;  /* solo si hay una parada abierta */
 /* Copia en memoria de si hay parada abierta, para no leer la NVS cada vez que
  * se entra en la pantalla de Viaje. La NVS manda; esto solo la sigue. */
 static bool      s_parada_abierta;
-static lv_obj_t *s_tile_viaje_lbl;       /* texto de su casilla en el menu */
 /* Campo oculto donde el editor a pantalla completa deja el destino tecleado. No
  * se ve nunca: el editor necesita un textarea al que volcar, y en la pantalla de
  * Viaje no hay formulario donde ponerlo. */
@@ -270,17 +273,24 @@ static void clear_forms(void);
 static void valoracion_actualiza_texto(bool marcado);
 static void valoracion_reset(void);
 
+/* Definidas abajo, con los menus de la salida. */
+static void ocultar_menus(void);
+static void volver_al_menu(void);
+
 /* Volver al menu deja los formularios EN BLANCO: se vacian sus campos, casillas
  * y selectores. Como es el unico camino de vuelta (boton Volver, guardado
  * confirmado y salida por gesto pasan todos por aqui), basta con hacerlo en un
- * sitio. */
+ * sitio.
+ *
+ * A que menu se vuelve depende de si hay salida en marcha y de que tipo: lo
+ * decide volver_al_menu(). */
 static void show_grid(void)
 {
     clear_forms();
-    lv_obj_clear_flag(s_grid, LV_OBJ_FLAG_HIDDEN);
     for (int i = 0; i < CAT_COUNT; i++) {
         lv_obj_add_flag(s_forms[i], LV_OBJ_FLAG_HIDDEN);
     }
+    volver_al_menu();
 }
 
 static void viaje_refresh(void);
@@ -291,7 +301,7 @@ static void show_form(int idx)
      * aqui para que valga igual venga del menu o de cerrar una parada. */
     if (idx == CAT_VIAJE) viaje_refresh();
 
-    lv_obj_add_flag(s_grid, LV_OBJ_FLAG_HIDDEN);
+    ocultar_menus();
     for (int i = 0; i < CAT_COUNT; i++) {
         if (i == idx) {
             lv_obj_clear_flag(s_forms[i], LV_OBJ_FLAG_HIDDEN);
@@ -333,8 +343,7 @@ static void back_click_cb(lv_event_t *e)
 
 void view_registro_reset(void)
 {
-    /* s_grid puede no existir todavia si se llamase antes de crear la vista. */
-    if (!s_grid) return;
+    if (!s_ui_lista) return;
     entry_screen_close();
     confirm_screen_close();
     show_grid();
@@ -1561,7 +1570,6 @@ static void viaje_refresh(void)
      * el viaje se termino con una parada sin cerrar, sigue habiendo que
      * cerrarla y este es el unico sitio desde donde hacerlo. */
     set_hidden(s_viaje_btn_fin_parada, !s_parada_abierta);
-    lv_label_set_text(s_tile_viaje_lbl, s_viaje_activo ? "Viaje en curso" : "Viaje");
 }
 
 static void viaje_set_activo(bool activo)
@@ -1609,6 +1617,10 @@ static void inicio_resultado_cb(bool ok, int estado)
     save_trip_destino(s_viaje_destino);
     trip_eventos_reset();
     viaje_set_activo(true);
+    /* La P4 ya ha creado su carpeta; aqui se abre la salida que sostiene los
+     * menus. Si fallase (sin hora no puede ser: la acabamos de usar) el viaje
+     * quedaria en la P4 y no en la pantalla, y se veria al momento. */
+    salida_abrir_viaje(s_viaje_destino);
     ESP_LOGI(TAG, "viaje iniciado en la P4, destino '%s'", s_viaje_destino);
     show_grid();
 }
@@ -1665,6 +1677,7 @@ static void viaje_do_finalizar(void *ud)
     }
     save_trip_destino("");
     viaje_set_activo(false);
+    salida_cerrar();
     show_grid();
 }
 
@@ -2156,41 +2169,613 @@ static void build_valoracion(lv_obj_t *form)
     valoracion_pinta();
 }
 
-/* === Grid principal ======================================================= */
+/* === Menus de la salida ===================================================
+ *
+ * El cuaderno se organiza alrededor de la SALIDA y no de las categorias. Ver
+ * docs/superpowers/specs/2026-08-23-pantalla-registros-salidas-design.md; en
+ * corto: la autocaravana se mueve por un motivo, y el viaje es solo uno de
+ * ellos. Y como la pantalla se apaga con el contacto, DECLARAS AL LLEGAR y
+ * RELLENAS AL SALIR.
+ *
+ * Un boton grande por pantalla: lo que se hace siempre tiene que verse desde
+ * lejos y acertarse con el dedo con la autocaravana en marcha. Configuracion
+ * queda pequeno y gris en todas partes.
+ *
+ * Los fondos CLAROS con contenido negro no son un capricho estetico: ver el
+ * comentario de los colores al principio del fichero. Las tarjetas oscuras se
+ * probaron y se veian apagadas con sol de lado.
+ */
 
-static lv_obj_t *make_icon_button(lv_obj_t *parent, const char *symbol,
-                                   const char *label_text, uint32_t color,
-                                   lv_event_cb_t cb, void *user_data)
+typedef enum {
+    PAN_PRINCIPAL = 0,   /* Nueva salida / Configuracion */
+    PAN_TIPO,            /* Viaje / Puntual */
+    PAN_SALIDA,          /* Anadir parada / Terminar salida / Configuracion */
+    PAN_TIPOS,           /* las seis cosas que se anotan en un viaje */
+    PAN_PUNTUAL,         /* las cuatro de una salida puntual */
+    PAN_MOTIVO,          /* por que paras */
+    PAN_SITIO,           /* donde pasas la noche */
+    PAN_COUNT
+} pantalla_t;
+
+static lv_obj_t *s_menus[PAN_COUNT];
+static lv_obj_t *s_bar_hora[PAN_COUNT];
+static lv_obj_t *s_bar_gps[PAN_COUNT];
+static lv_obj_t *s_bar_wifi[PAN_COUNT];
+static lv_obj_t *s_salida_tira;       /* nombre + dia + gastado, en PAN_SALIDA */
+
+#define BAR_H     26
+#define PAN_PAD   12
+#define PAN_GAP   10
+#define CONN_MS   5000   /* mismo criterio que view_info.c */
+
+static void mostrar_menu(pantalla_t p);
+static void puntual_cancelar_cb(lv_event_t *e);
+
+/* --- La franja de arriba -------------------------------------------------
+ *
+ * Cuesta 26 px de los 320 y ahorra cambiar de pantalla para mirar la hora o si
+ * hay enlace con la P4. Los dos puntos CADUCAN con el enlace: un indicador que
+ * miente cuando se cae la comunicacion es peor que no tenerlo, porque el
+ * momento en que se mira es justo cuando algo va mal. */
+static lv_obj_t *punto_crear(lv_obj_t *padre, const char *texto)
 {
-    lv_obj_t *btn = lv_btn_create(parent);
-    lv_obj_set_size(btn, MENU_TILE_W, MENU_TILE_H);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(color), 0);
-    /* Al fijar bg_color propio se pierde el realce de pulsado que trae LVGL,
-     * y un boton que no reacciona al tocarlo parece roto: se oscurece a mano. */
-    lv_obj_set_style_bg_color(btn, lv_color_darken(lv_color_hex(color), LV_OPA_30),
+    lv_obj_t *w = lv_obj_create(padre);
+    lv_obj_remove_style_all(w);
+    lv_obj_set_size(w, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(w, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(w, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(w, 4, 0);
+    lv_obj_clear_flag(w, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *dot = lv_obj_create(w);
+    lv_obj_set_size(dot, 8, 8);
+    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(dot, 0, 0);
+    lv_obj_set_style_bg_color(dot, lv_color_hex(0x666666), 0);
+    lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *l = lv_label_create(w);
+    lv_label_set_text(l, texto);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(0x888888), 0);
+    return dot;
+}
+
+/* PAN_COUNT como destino NO es navegar: cancela la salida puntual. Es la
+ * unica pantalla desde la que la flecha no lleva a ningun sitio, porque la
+ * salida ya esta abierta y no hay menu anterior al que volver. */
+static void atras_cb(lv_event_t *e)
+{
+    pantalla_t destino = (pantalla_t)(uintptr_t)lv_event_get_user_data(e);
+    if (destino == PAN_COUNT) puntual_cancelar_cb(e);
+    else                      mostrar_menu(destino);
+}
+
+/* Crea una pantalla de menu entera (oculta) y devuelve su CUERPO, que es donde
+ * se cuelga el contenido. 'atras' < 0 = sin boton de volver. */
+static lv_obj_t *pantalla_crear(lv_obj_t *parent, pantalla_t id,
+                                const char *titulo, int atras)
+{
+    lv_obj_t *scr = lv_obj_create(parent);
+    lv_obj_remove_style_all(scr);
+    lv_obj_set_size(scr, lv_pct(100), lv_pct(100));
+    lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
+    lv_obj_add_flag(scr, LV_OBJ_FLAG_HIDDEN);
+    s_menus[id] = scr;
+
+    /* --- franja --- */
+    lv_obj_t *bar = lv_obj_create(scr);
+    lv_obj_remove_style_all(bar);
+    lv_obj_set_size(bar, lv_pct(100), BAR_H);
+    lv_obj_set_style_pad_hor(bar, 10, 0);
+    lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(bar, 10, 0);
+
+    if (atras >= 0) {
+        lv_obj_t *b = lv_label_create(bar);
+        lv_label_set_text(b, LV_SYMBOL_LEFT " Atras");
+        lv_obj_set_style_text_font(b, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(b, lv_color_hex(0xB0BEC5), 0);
+        /* Area de toque generosa: el rotulo solo son 60x14 px y con la
+         * autocaravana en marcha eso no se acierta. */
+        lv_obj_set_ext_click_area(b, 14);
+        lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(b, atras_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)atras);
+    } else {
+        s_bar_hora[id] = lv_label_create(bar);
+        lv_label_set_text(s_bar_hora[id], "--:--");
+        lv_obj_set_style_text_font(s_bar_hora[id], &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(s_bar_hora[id], lv_color_hex(0xDDDDDD), 0);
+    }
+
+    if (titulo) {
+        lv_obj_t *t = lv_label_create(bar);
+        lv_label_set_text(t, titulo);
+        lv_obj_set_style_text_font(t, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(t, lv_color_hex(0x888888), 0);
+        lv_obj_set_style_text_letter_space(t, 1, 0);
+        lv_obj_set_flex_grow(t, 1);
+        lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
+    } else {
+        lv_obj_t *sp = lv_obj_create(bar);
+        lv_obj_remove_style_all(sp);
+        lv_obj_set_height(sp, 1);
+        lv_obj_set_flex_grow(sp, 1);
+    }
+
+    s_bar_gps[id]  = punto_crear(bar, "GPS");
+    s_bar_wifi[id] = punto_crear(bar, "P4");
+
+    /* --- cuerpo --- */
+    lv_obj_t *body = lv_obj_create(scr);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_width(body, lv_pct(100));
+    lv_obj_set_flex_grow(body, 1);
+    lv_obj_set_style_pad_all(body, PAN_PAD, 0);
+    lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(body, PAN_GAP, 0);
+    return body;
+}
+
+/* Refresca hora y puntos de TODAS las pantallas de menu. Una sola pasada por
+ * segundo: son siete etiquetas, no compensa afinar mas. */
+static void barra_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    mini_data_t d;
+    data_model_get(&d);
+    uint32_t ms     = (uint32_t)(esp_timer_get_time() / 1000);
+    bool     fresco = d.has_data && (ms - d.last_update_ms < CONN_MS);
+
+    uint32_t c_wifi = fresco ? 0x4CD964 : 0x666666;
+    uint32_t c_gps  = !fresco ? 0x666666
+                              : (d.gps_estado == 2) ? 0x4CD964
+                              : (d.gps_estado == 1) ? 0xFF9800 : 0x666666;
+
+    char hora[8] = "--:--";
+    uint32_t ahora;
+    if (reloj_ahora(&ahora)) {
+        /* El epoch ya viene en hora local de la P4 (ver mini_proto.h): la
+         * division entera basta y no hay que saber nada de husos. */
+        snprintf(hora, sizeof(hora), "%02u:%02u",
+                 (unsigned)((ahora / 3600) % 24), (unsigned)((ahora / 60) % 60));
+    }
+
+    for (int i = 0; i < PAN_COUNT; i++) {
+        if (s_bar_gps[i])  lv_obj_set_style_bg_color(s_bar_gps[i],  lv_color_hex(c_gps), 0);
+        if (s_bar_wifi[i]) lv_obj_set_style_bg_color(s_bar_wifi[i], lv_color_hex(c_wifi), 0);
+        if (s_bar_hora[i]) lv_label_set_text(s_bar_hora[i], hora);
+    }
+}
+
+/* --- Botones -------------------------------------------------------------- */
+
+/* Boton grande: el que manda en su pantalla. Icono + rotulo + una linea de
+ * apoyo opcional. */
+static lv_obj_t *boton_grande(lv_obj_t *padre, const char *icono,
+                              const char *texto, const char *apoyo,
+                              uint32_t color, lv_event_cb_t cb, void *ud)
+{
+    lv_obj_t *b = lv_btn_create(padre);
+    lv_obj_set_width(b, lv_pct(100));
+    lv_obj_set_flex_grow(b, 1);
+    lv_obj_set_style_bg_color(b, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_color(b, lv_color_darken(lv_color_hex(color), LV_OPA_30),
                               LV_STATE_PRESSED);
-    lv_obj_set_style_radius(btn, 12, 0);
-    lv_obj_set_style_pad_all(btn, 4, 0);
-    lv_obj_set_flex_flow(btn, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(btn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, user_data);
+    lv_obj_set_style_radius(b, 12, 0);
+    lv_obj_set_style_pad_all(b, 6, 0);
+    lv_obj_set_flex_flow(b, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(b, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(b, 2, 0);
+    if (cb) lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, ud);
 
-    lv_obj_t *ic = lv_label_create(btn);
-    lv_label_set_text(ic, symbol);
-    lv_obj_set_style_text_color(ic, lv_color_hex(COL_TILE_FG), 0);
-    lv_obj_set_style_text_font(ic, &lv_font_montserrat_40, 0);
+    if (icono) {
+        lv_obj_t *ic = lv_label_create(b);
+        lv_label_set_text(ic, icono);
+        lv_obj_set_style_text_color(ic, lv_color_hex(COL_TILE_FG), 0);
+        lv_obj_set_style_text_font(ic, &lv_font_montserrat_32, 0);
+    }
+    lv_obj_t *l = lv_label_create(b);
+    lv_label_set_text(l, texto);
+    lv_obj_set_style_text_color(l, lv_color_hex(COL_TILE_FG), 0);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_32, 0);
+    if (apoyo) {
+        lv_obj_t *s = lv_label_create(b);
+        lv_label_set_text(s, apoyo);
+        lv_obj_set_style_text_color(s, lv_color_hex(COL_TILE_FG), 0);
+        lv_obj_set_style_text_opa(s, LV_OPA_70, 0);
+        lv_obj_set_style_text_font(s, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_align(s, LV_TEXT_ALIGN_CENTER, 0);
+    }
+    return b;
+}
 
-    lv_obj_t *lbl = lv_label_create(btn);
-    lv_label_set_text(lbl, label_text);
-    lv_obj_set_style_text_color(lbl, lv_color_hex(COL_TILE_FG), 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
-    /* "MANTENIMIENTO" es mas ancho que su celda: que parta en dos lineas en
-     * vez de recortarse. */
-    lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(lbl, lv_pct(100));
+/* Boton pequeno de abajo. Alto fijo: no debe competir con el grande. */
+static lv_obj_t *boton_chico(lv_obj_t *padre, const char *texto, uint32_t color,
+                             lv_coord_t ancho, lv_event_cb_t cb, void *ud)
+{
+    lv_obj_t *b = lv_btn_create(padre);
+    lv_obj_set_size(b, ancho, 46);
+    lv_obj_set_style_bg_color(b, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_color(b, lv_color_darken(lv_color_hex(color), LV_OPA_30),
+                              LV_STATE_PRESSED);
+    lv_obj_set_style_radius(b, 10, 0);
+    if (cb) lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, ud);
 
-    return btn;
+    lv_obj_t *l = lv_label_create(b);
+    lv_label_set_text(l, texto);
+    lv_obj_set_style_text_color(l, lv_color_hex(COL_TILE_FG), 0);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_16, 0);
+    lv_obj_center(l);
+    return b;
+}
+
+/* Casilla de rejilla. 'icono' puede ser NULL: en las pantallas de motivo y de
+ * sitio no lo lleva, porque la letra del firmware no trae ningun simbolo que
+ * signifique "cenar" o "camping" y un icono forzado confunde mas que ayuda.
+ * Sin icono, el rotulo va en letra 22 en vez de 16 y se lee mejor. */
+static lv_obj_t *casilla(lv_obj_t *padre, const char *icono, const char *texto,
+                         const char *apoyo, uint32_t color,
+                         lv_coord_t w, lv_coord_t h, lv_event_cb_t cb, void *ud)
+{
+    lv_obj_t *b = lv_btn_create(padre);
+    lv_obj_set_size(b, w, h);
+    lv_obj_set_style_bg_color(b, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_color(b, lv_color_darken(lv_color_hex(color), LV_OPA_30),
+                              LV_STATE_PRESSED);
+    lv_obj_set_style_radius(b, 12, 0);
+    lv_obj_set_style_pad_all(b, 4, 0);
+    lv_obj_set_flex_flow(b, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(b, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(b, 2, 0);
+    if (cb) lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, ud);
+
+    if (icono) {
+        lv_obj_t *ic = lv_label_create(b);
+        lv_label_set_text(ic, icono);
+        lv_obj_set_style_text_color(ic, lv_color_hex(COL_TILE_FG), 0);
+        lv_obj_set_style_text_font(ic, &lv_font_montserrat_32, 0);
+    }
+    lv_obj_t *l = lv_label_create(b);
+    lv_label_set_text(l, texto);
+    lv_obj_set_style_text_color(l, lv_color_hex(COL_TILE_FG), 0);
+    lv_obj_set_style_text_font(l, icono ? &lv_font_montserrat_16 : &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(l, lv_pct(100));
+
+    if (apoyo) {
+        lv_obj_t *s = lv_label_create(b);
+        lv_label_set_text(s, apoyo);
+        lv_obj_set_style_text_color(s, lv_color_hex(COL_TILE_FG), 0);
+        lv_obj_set_style_text_opa(s, LV_OPA_70, 0);
+        lv_obj_set_style_text_font(s, &lv_font_montserrat_14, 0);
+    }
+    return b;
+}
+
+/* Fila elastica para repartir casillas a lo ancho. */
+static lv_obj_t *fila(lv_obj_t *padre)
+{
+    lv_obj_t *f = lv_obj_create(padre);
+    lv_obj_remove_style_all(f);
+    lv_obj_set_width(f, lv_pct(100));
+    lv_obj_set_flex_grow(f, 1);
+    lv_obj_clear_flag(f, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(f, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(f, PAN_GAP, 0);
+    return f;
+}
+
+/* === Que hace cada boton ==================================================
+ *
+ * Declarar es lo UNICO que se hace al llegar: se abre el evento y se vuelve al
+ * menu. Los numeros (importe, litros, precio de la noche...) se piden al
+ * arrancar, que es cuando ya se saben -- esas pantallas todavia no estan
+ * hechas, ver el diseno.
+ */
+
+static const char *const EV_NOMBRE[EV_COUNT] = {
+    "La parada", "El apunte de aguas", "El repostaje", "El peaje",
+    "La bombona", "La averia", "La ITV"
+};
+
+/* Todas las pantallas de menu ocultas. Lo llama show_form() antes de sacar un
+ * formulario. */
+static void ocultar_menus(void)
+{
+    for (int i = 0; i < PAN_COUNT; i++) {
+        if (s_menus[i]) lv_obj_add_flag(s_menus[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+/* La tira de PAN_SALIDA: nombre y dia del viaje, y cuantas cosas quedan sin
+ * cerrar.
+ *
+ * NO lleva lo gastado, aunque la maqueta lo pintaba: esta pantalla no lleva la
+ * cuenta del dinero -- los importes se rellenan al arrancar y viven en la P4 --
+ * y poner un 0,00 seria mentir con autoridad. */
+static void salida_tira_refresh(void)
+{
+    if (!s_salida_tira) return;
+
+    const salida_vista_t *s = salida_get();
+    char txt[SALIDA_NOMBRE_MAX + 32];
+    int  n = snprintf(txt, sizeof(txt), "%s", s->nombre);
+    /* snprintf devuelve lo que HABRIA escrito: si truncase, txt+n se saldria
+     * del buffer. Con los tamanos de ahora no llega a pasar, pero el dia que
+     * el nombre crezca esto seria una pisada de memoria muy dificil de ver. */
+    if (n < 0 || (size_t)n >= sizeof(txt)) return;
+
+    uint32_t ahora = reloj_p4();
+    if (ahora && s->epoch_ini) {
+        n += snprintf(txt + n, sizeof(txt) - (size_t)n, "  -  dia %u",
+                      (unsigned)(salida_noches(s->epoch_ini, ahora) + 1));
+        if (n < 0 || (size_t)n >= sizeof(txt)) return;
+    }
+    int abiertos = salida_eventos_abiertos();
+    if (abiertos > 0) {
+        snprintf(txt + n, sizeof(txt) - (size_t)n, "  -  %d sin cerrar", abiertos);
+    }
+    lv_label_set_text(s_salida_tira, txt);
+}
+
+static void mostrar_menu(pantalla_t p)
+{
+    if (p == PAN_SALIDA) salida_tira_refresh();
+    for (int i = 0; i < PAN_COUNT; i++) {
+        if (!s_menus[i]) continue;
+        if (i == (int)p) lv_obj_clear_flag(s_menus[i], LV_OBJ_FLAG_HIDDEN);
+        else             lv_obj_add_flag(s_menus[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+/* A donde se vuelve al cerrar un formulario o al terminar algo. Lo decide el
+ * ESTADO y no por donde se vino: si la salida se abrio o se cerro por el medio,
+ * el menu de antes ya no es el que toca. */
+static void volver_al_menu(void)
+{
+    switch (salida_get()->tipo) {
+    case SALIDA_VIAJE:   mostrar_menu(PAN_SALIDA);    break;
+    case SALIDA_PUNTUAL: mostrar_menu(PAN_PUNTUAL);   break;
+    default:             mostrar_menu(PAN_PRINCIPAL); break;
+    }
+}
+
+/* Abre el evento y vuelve al menu. Los tres motivos por los que puede no
+ * poder se dicen por separado: "no se ha podido" a secas deja al usuario sin
+ * saber si insistir, encender la P4 o cerrar algo. */
+static void declarar(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
+{
+    if (reloj_p4() == 0) {
+        confirm_screen_aviso("Enciende la P4 primero",
+                             "Sin ella no se que hora es,\ny el apunte va con su hora\nde inicio.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    if (salida_eventos_abiertos() >= SALIDA_EVENTOS_MAX) {
+        confirm_screen_aviso("Ya hay cuatro sin cerrar",
+                             "Arranca y cierra alguna antes\nde anotar otra cosa.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    if (salida_evento_abrir(tipo, sub, sub2) == 0) {
+        confirm_screen_aviso("No he podido anotarlo",
+                             "El apunte no se ha guardado.\nAvisa de esto, es un fallo\ndel programa.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+
+    /* Se avisa a proposito, aunque cueste un toque mas: sin esto la pantalla
+     * vuelve al menu igual que estaba y no hay forma de saber si el toque ha
+     * servido de algo. */
+    static char cuerpo[96];
+    snprintf(cuerpo, sizeof(cuerpo),
+             "%s queda abierta.\nAl volver a arrancar te\npedire lo que falte.",
+             EV_NOMBRE[tipo]);
+    confirm_screen_aviso("Anotado", cuerpo, COL_ACCION_OK, "Vale");
+    volver_al_menu();
+}
+
+/* tipo, sub y sub2 caben de sobra en el user_data del evento. */
+#define DECL(t, s, s2)  ((void *)(uintptr_t)((t) | ((s) << 8) | ((s2) << 16)))
+
+static void declarar_cb(lv_event_t *e)
+{
+    uint32_t v = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
+    declarar((evento_tipo_t)(v & 0xFF), (uint8_t)((v >> 8) & 0xFF),
+             (uint8_t)((v >> 16) & 0xFF));
+}
+
+static void ir_a_cb(lv_event_t *e)
+{
+    mostrar_menu((pantalla_t)(uintptr_t)lv_event_get_user_data(e));
+}
+
+/* --- Abrir y cerrar la salida --------------------------------------------- */
+
+static void puntual_cb(lv_event_t *e)
+{
+    (void)e;
+    /* Igual que el viaje: se exige la P4 ANTES de nada, porque el apunte va
+     * con su hora y este aparato no tiene reloj propio. */
+    if (reloj_p4() == 0) {
+        confirm_screen_aviso("Enciende la P4 primero",
+                             "Sin ella no se que hora es,\ny el apunte va con su hora.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    if (!salida_abrir_puntual()) {
+        confirm_screen_aviso("No he podido empezarla",
+                             "La salida no se ha guardado.\nAvisa de esto, es un fallo\ndel programa.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    mostrar_menu(PAN_PUNTUAL);
+}
+
+/* En una salida puntual la flecha de arriba no navega: la CANCELA. No hay a
+ * donde volver -- la salida ya esta abierta -- y mientras no hayas anotado
+ * nada, deshacerla es lo unico que tiene sentido. Con algo anotado no se
+ * cancela: se perderia el apunte sin decirlo. */
+static void puntual_cancelar_cb(lv_event_t *e)
+{
+    (void)e;
+    if (salida_eventos_abiertos() > 0) {
+        confirm_screen_aviso("Ya has anotado algo",
+                             "Esta salida se cierra sola\ncuando arranques y rellenes\nlo que falta.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    salida_cerrar();
+    mostrar_menu(PAN_PRINCIPAL);
+}
+
+static void terminar_salida_cb(lv_event_t *e)
+{
+    (void)e;
+    if (salida_eventos_abiertos() > 0) {
+        confirm_screen_aviso("Queda algo sin cerrar",
+                             "Cierra lo que tengas abierto\nantes de terminar el viaje,\no se perderia.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    viaje_finalizar_cb(e);   /* el mismo cartel de confirmacion de siempre */
+}
+
+/* --- Las siete pantallas --------------------------------------------------
+ *
+ * Geometria (480x320): la franja se come 26, quedan 294; con PAN_PAD de 12 por
+ * lado el cuerpo util es 456 x 270. De ahi salen los tamanos:
+ *
+ *   rejilla de 3 columnas: (456 - 2*10)/3 = 145 de ancho
+ *   rejilla de 2 columnas: (456 - 10)/2   = 223
+ *   dos filas:             (270 - 10)/2   = 130 de alto
+ *
+ * No van en porcentaje: en LVGL el hueco entre celdas NO se descuenta del
+ * porcentaje y la tercera columna se caeria de fila (ver el bloque del menu
+ * viejo, mismo motivo).
+ */
+#define CEL3_W  145
+#define CEL2_W  223
+
+static void crear_menus(lv_obj_t *parent)
+{
+    lv_obj_t *body, *f;
+
+    /* --- 1. Principal: sin salida en marcha --- */
+    body = pantalla_crear(parent, PAN_PRINCIPAL, NULL, -1);
+    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    boton_grande(body, LV_SYMBOL_PLUS, "NUEVA SALIDA", "viaje o gestion suelta",
+                 COL_ACCION_OK, ir_a_cb, (void *)(uintptr_t)PAN_TIPO);
+    boton_chico(body, "Configuracion", COL_AJUSTES, 160, ajustes_click_cb, NULL);
+
+    /* --- 2. Tipo de salida --- */
+    body = pantalla_crear(parent, PAN_TIPO, "TIPO DE SALIDA", PAN_PRINCIPAL);
+    f = fila(body);
+    /* Las dos del mismo tamano: ninguna manda sobre la otra. */
+    casilla(f, LV_SYMBOL_GPS, "VIAJE", "varios dias\ncon carpeta propia",
+            COL_VIAJE, CEL2_W, lv_pct(100), viaje_iniciar_cb, NULL);
+    casilla(f, LV_SYMBOL_CHARGE, "PUNTUAL", "repostar, ITV,\nbombona o taller",
+            COL_BOMBONA, CEL2_W, lv_pct(100), puntual_cb, NULL);
+
+    /* --- 3. Menu de salida: el principal mientras dure el viaje --- */
+    body = pantalla_crear(parent, PAN_SALIDA, NULL, -1);
+    s_salida_tira = lv_label_create(body);
+    lv_label_set_text(s_salida_tira, "");
+    lv_obj_set_style_text_font(s_salida_tira, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(s_salida_tira, lv_color_hex(COL_LABEL), 0);
+    lv_label_set_long_mode(s_salida_tira, LV_LABEL_LONG_DOT);
+    lv_obj_set_width(s_salida_tira, lv_pct(100));
+
+    boton_grande(body, LV_SYMBOL_PLUS, "ANADIR PARADA", NULL,
+                 COL_ACCION_OK, ir_a_cb, (void *)(uintptr_t)PAN_TIPOS);
+
+    /* Los dos secundarios comparten fila: entre los dos gastan lo que gastaria
+     * uno solo, y asi el grande se queda con el sitio. */
+    f = fila(body);
+    lv_obj_set_flex_grow(f, 0);
+    lv_obj_set_height(f, 46);
+    lv_obj_set_flex_grow(boton_chico(f, "Terminar salida", COL_ACCION_STOP, 0,
+                                     terminar_salida_cb, NULL), 1);
+    lv_obj_set_flex_grow(boton_chico(f, "Configuracion", COL_AJUSTES, 0,
+                                     ajustes_click_cb, NULL), 1);
+
+    /* --- 4. Las seis cosas que se anotan en un viaje --- */
+    body = pantalla_crear(parent, PAN_TIPOS, "QUE ANOTAS?", PAN_SALIDA);
+    f = fila(body);
+    casilla(f, LV_SYMBOL_GPS,      "Parada",    NULL, COL_ACCION_OK,
+            CEL3_W, lv_pct(100), ir_a_cb, (void *)(uintptr_t)PAN_MOTIVO);
+    casilla(f, LV_SYMBOL_TINT,     "Aguas",     NULL, COL_VIAJE,
+            CEL3_W, lv_pct(100), declarar_cb, DECL(EV_AGUAS, 0, 0));
+    casilla(f, LV_SYMBOL_CHARGE,   "Repostaje", NULL, COL_BOMBONA,
+            CEL3_W, lv_pct(100), declarar_cb, DECL(EV_REPOSTAJE, 0, 0));
+    f = fila(body);
+    /* El peaje es la excepcion: se paga con el motor en marcha y lo rellena el
+     * copiloto en el momento, asi que abre su formulario y no un evento. */
+    casilla(f, LV_SYMBOL_LIST,     "Peaje",     NULL, COL_PEAJE,
+            CEL3_W, lv_pct(100), icon_click_cb, (void *)(uintptr_t)CAT_PEAJE);
+    casilla(f, LV_SYMBOL_REFRESH,  "Bombona",   NULL, COL_AJUSTES,
+            CEL3_W, lv_pct(100), declarar_cb, DECL(EV_BOMBONA, 0, 0));
+    casilla(f, LV_SYMBOL_SETTINGS, "Averia",    NULL, COL_AJUSTES,
+            CEL3_W, lv_pct(100), declarar_cb, DECL(EV_AVERIA, 0, 0));
+
+    /* --- 5. Las cuatro de una salida puntual --- */
+    body = pantalla_crear(parent, PAN_PUNTUAL, "SALIDA PUNTUAL", PAN_COUNT);
+    f = fila(body);
+    casilla(f, LV_SYMBOL_CHARGE,   "Repostaje", NULL, COL_BOMBONA,
+            CEL2_W, lv_pct(100), declarar_cb, DECL(EV_REPOSTAJE, 0, 0));
+    casilla(f, LV_SYMBOL_REFRESH,  "Bombona",   NULL, COL_AJUSTES,
+            CEL2_W, lv_pct(100), declarar_cb, DECL(EV_BOMBONA, 0, 0));
+    f = fila(body);
+    casilla(f, LV_SYMBOL_FILE,     "ITV",       NULL, COL_VIAJE,
+            CEL2_W, lv_pct(100), declarar_cb, DECL(EV_ITV, 0, 0));
+    casilla(f, LV_SYMBOL_SETTINGS, "Averia/Mant.", NULL, COL_AJUSTES,
+            CEL2_W, lv_pct(100), declarar_cb, DECL(EV_AVERIA, 0, 0));
+
+    /* --- 6. Por que paras --- */
+    body = pantalla_crear(parent, PAN_MOTIVO, "POR QUE PARAS?", PAN_TIPOS);
+    f = fila(body);
+    casilla(f, NULL, "Visita",   NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
+            declarar_cb, DECL(EV_PARADA, MOTIVO_VISITA, 0));
+    casilla(f, NULL, "Descanso", NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
+            declarar_cb, DECL(EV_PARADA, MOTIVO_DESCANSO, 0));
+    casilla(f, NULL, "Comer",    NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
+            declarar_cb, DECL(EV_PARADA, MOTIVO_COMER, 0));
+    f = fila(body);
+    casilla(f, NULL, "Cenar",    NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
+            declarar_cb, DECL(EV_PARADA, MOTIVO_CENAR, 0));
+    casilla(f, NULL, "Compras",  NULL, COL_AJUSTES, CEL3_W, lv_pct(100),
+            declarar_cb, DECL(EV_PARADA, MOTIVO_COMPRAS, 0));
+    /* Pernocta va en verde y no en gris como las otras cinco: es la unica que
+     * lleva cola -- donde, servicios, precio y valoracion -- y no debe
+     * pulsarse por error creyendo que es un descanso. */
+    casilla(f, NULL, "PERNOCTA", NULL, COL_ACCION_OK, CEL3_W, lv_pct(100),
+            ir_a_cb, (void *)(uintptr_t)PAN_SITIO);
+
+    /* --- 7. Donde pasas la noche --- */
+    body = pantalla_crear(parent, PAN_SITIO, "DONDE DUERMES?", PAN_MOTIVO);
+    f = fila(body);
+    /* Verde gratis, ambar de pago: el color dice si esto va a costar dinero
+     * antes de leer nada, y es lo que decide que se preguntara al marcharse. */
+    casilla(f, NULL, "Parking", "gratis",  COL_ACCION_OK, CEL3_W, lv_pct(100),
+            declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_PARKING_GRATIS));
+    casilla(f, NULL, "Parking", "de pago", COL_BOMBONA,   CEL3_W, lv_pct(100),
+            declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_PARKING_PAGO));
+    casilla(f, NULL, "Area",    "gratis",  COL_ACCION_OK, CEL3_W, lv_pct(100),
+            declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_AREA_GRATIS));
+    f = fila(body);
+    casilla(f, NULL, "Area",    "de pago", COL_BOMBONA,   CEL3_W, lv_pct(100),
+            declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_AREA_PAGO));
+    /* El camping ocupa lo que dos: sobra sitio y es el que mas se pulsa de los
+     * de pago. 145 + 10 + 300 = 455, los 456 utiles. */
+    casilla(f, NULL, "Camping", "de pago", COL_BOMBONA,   300, lv_pct(100),
+            declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_CAMPING));
 }
 
 void view_registro_create(lv_obj_t *parent)
@@ -2205,35 +2790,10 @@ void view_registro_create(lv_obj_t *parent)
     lv_obj_set_style_pad_all(parent, 0, 0);
     lv_obj_set_style_border_width(parent, 0, 0);
 
-    /* --- Grid de iconos --- */
-    s_grid = lv_obj_create(parent);
-    lv_obj_set_size(s_grid, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_opa(s_grid, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(s_grid, 0, 0);
-    lv_obj_clear_flag(s_grid, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(s_grid, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(s_grid, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(s_grid, MENU_PAD, 0);
-    lv_obj_set_style_pad_gap(s_grid, MENU_GAP, 0);
-
-    /* 3 + 3. El salto de fila lo hace solo el ROW_WRAP: 3*146 + 2*10 = 458
-     * cabe en los 460 utiles y la cuarta ya no. */
-    lv_obj_t *tile_viaje =
-        make_icon_button(s_grid, LV_SYMBOL_GPS,  "Viaje",         COL_VIAJE,
-                         icon_click_cb, (void *)(uintptr_t)CAT_VIAJE);
-    /* Hijo 1 = el rotulo (el 0 es el icono, ver make_icon_button). Pasa a decir
-     * "Viaje en curso" mientras haya viaje, para verlo sin entrar. */
-    s_tile_viaje_lbl = lv_obj_get_child(tile_viaje, 1);
-    make_icon_button(s_grid, LV_SYMBOL_TINT,     "Repostaje",     COL_REPOSTAJE,
-                     icon_click_cb, (void *)(uintptr_t)CAT_REPOSTAJE);
-    make_icon_button(s_grid, LV_SYMBOL_LIST,     "Peaje",         COL_PEAJE,
-                     icon_click_cb, (void *)(uintptr_t)CAT_PEAJE);
-    make_icon_button(s_grid, LV_SYMBOL_REFRESH,  "Bombona",       COL_BOMBONA,
-                     icon_click_cb, (void *)(uintptr_t)CAT_BOMBONA);
-    make_icon_button(s_grid, LV_SYMBOL_SETTINGS, "Mantenimiento", COL_MANTENIMIENTO,
-                     icon_click_cb, (void *)(uintptr_t)CAT_MANTENIMIENTO);
-    make_icon_button(s_grid, LV_SYMBOL_WIFI,     "Wi-Fi",         COL_AJUSTES,
-                     ajustes_click_cb, NULL);
+    /* --- Menus de la salida ---
+     * Se crean ANTES que los formularios para que estos queden por encima en
+     * el orden de dibujo. Cual se ve lo decide volver_al_menu(), al final. */
+    crear_menus(parent);
 
     /* --- Formularios (ocultos hasta que se elige un icono) --- */
     s_forms[CAT_VIAJE] = make_form_container(parent);
@@ -2285,4 +2845,13 @@ void view_registro_create(lv_obj_t *parent)
      * queda por encima de los formularios en el orden de dibujo. */
     entry_screen_init(parent);
     confirm_screen_init(parent);
+
+    /* Hora y puntos de la franja, una pasada por segundo. */
+    lv_timer_create(barra_timer_cb, 1000, NULL);
+
+    /* El menu de partida sale del ESTADO, no de un valor por defecto: si se
+     * fue la luz en mitad de un viaje, se vuelve al menu de salida y no a la
+     * pantalla principal. */
+    volver_al_menu();
+    s_ui_lista = true;
 }
