@@ -202,14 +202,61 @@ repostar, compras una bombona y pagas un peaje.
 **Hace falta la P4 encendida** para declarar: el apunte lleva su hora de inicio y
 esta pantalla no tiene reloj propio. Si no está, avisa y no anota.
 
+### Al volver a dar el contacto: cerrar lo que dejaste abierto
+
+Al encender se te pregunta por lo que quedó abierto, **en orden de cuándo lo
+declaraste**. De momento se saben cerrar dos cosas: la **parada** y el
+**repostaje**. Los demás (aguas, bombona, avería, ITV) se saltan y siguen
+esperando su formulario.
+
+Solo se pregunta una vez por encendido, y solo cuando la P4 ya ha dicho la hora
+—sin ella no hay nada que calcular.
+
+#### La parada
+
+```
+        Parada en curso
+        Descanso
+        desde las 19:40  -  2 h 15 min
+
+        [ Prolongar ]        [ Terminarla ]
+```
+
+- **Prolongar** no pregunta nada y **no toca la hora de inicio**: sigues ahí, y
+  la parada sigue contando desde el principio. Se te volverá a preguntar la
+  próxima vez.
+- **Terminarla** la cierra y la manda a la P4 con **su hora de entrada y de
+  salida reales**, no tecleadas, más los minutos que duró.
+
+> **La pernocta, a medias todavía.** Se cierra y se guarda el sitio y las noches,
+> pero **aún no te pide servicios ni precio**. El cartel lo dice antes de que
+> confirmes.
+
+#### El repostaje
+
+```
+        FINALIZAR REPOSTAJE
+        Lo anotaste a las 19:02.
+        Ahora ya sabes el importe,
+        los litros y los kilómetros.
+
+        [ Luego ]          [ Rellenarlo ]
+```
+
+**Rellenarlo** abre el formulario. **Luego** no descarta nada: sigue abierto y se
+vuelve a preguntar — rellenarlo con el surtidor delante no siempre se puede.
+
+Al guardar, el apunte va a la P4 **con el mismo número que se le reservó al
+declararlo**, así que aunque se reintente no se duplica.
+
 ### Borrar algo que anotaste antes
 
 La tira de arriba, cuando hay algo abierto, pone **«2 sin cerrar ›»**. **Tócala**
 y sale la lista de lo que tienes pendiente: qué es, a qué hora lo anotaste y los
 botones de cada uno:
 
-- **Terminar** (verde) — solo en las **paradas**, que es lo único que hoy se sabe
-  cerrar. Saca la misma pregunta de prolongar o terminarla.
+- **Terminar** (verde) — en las **paradas** y los **repostajes**, que es lo que
+  hoy se sabe cerrar. Saca la misma pregunta que al dar el contacto.
 - **Borrar** (rojo) — en todos. Pide confirmación, y al borrar el último te
   devuelve al menú.
 
@@ -394,6 +441,17 @@ enlacen antes de anotar la parada.
 > volver a dar el contacto**, cuando se conecte esa parte.
 
 ### Repostaje
+
+Importe (con su moneda), **litros** y **kilómetros**. Abajo, calculado solo: el
+**precio por litro** y, si hay un repostaje anterior, los **litros a los cien**.
+
+> **Los kilómetros son nuevos.** Con ellos salen solos el consumo y el coste por
+> kilómetro. Se piden desde el primer día a propósito: los repostajes viejos ya
+> no los van a tener nunca.
+>
+> El consumo solo sale si el número tiene sentido — hay repostaje anterior, el
+> cuentakilómetros va hacia delante y el salto no es absurdo. Antes que una cifra
+> inventada, no se dice nada.
 Moneda · **Importe** y **Litros** en la misma línea · **Precio/litro**, que se
 calcula solo mientras escribes.
 
@@ -512,13 +570,11 @@ llama por lo que es: **`historico.tar`**.
 
 Para no llevarse sorpresas:
 
-1. **De lo declarado, solo la parada se cierra.** Al volver a dar el contacto te
-   pregunta por la parada (prolongar o terminarla). Del resto —aguas, repostaje,
+1. **De lo declarado, se cierran la parada y el repostaje.** Del resto —aguas,
    bombona, avería, ITV— todavía no te pide los números: se quedan en la lista
-   («2 sin cerrar») esperando a que esa parte esté hecha. Y de la **pernocta** se
-   guarda el sitio y las noches, pero aún no los servicios ni el precio. Lo único
-   que se guarda entero de principio a fin es el **peaje**, que se rellena en el
-   momento.
+   («2 sin cerrar») esperando su formulario. Y de la **pernocta** se guarda el
+   sitio y las noches, pero aún no los servicios ni el precio. El **peaje** se
+   guarda entero desde el principio, porque se rellena en el momento.
 2. **No hay kilómetros.** La P4 no tiene GPS ni cuentakilómetros todavía, así
    que el resumen no puede decir cuánto recorriste. Lo dice explícitamente en
    vez de callarlo, para que no parezca un viaje de 0 km. Cuando llegue el GPS,

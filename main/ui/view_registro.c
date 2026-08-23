@@ -64,6 +64,13 @@ typedef enum {
 
 
 static lv_obj_t *s_forms[CAT_COUNT];
+
+/* Que evento se esta CERRANDO ahora mismo, o -1. Un formulario abierto desde
+ * el menu crea un apunte nuevo; abierto para cerrar un evento, tiene que
+ * llevar el id que se reservo AL DECLARARLO (de eso vive la deduplicacion de
+ * la P4) y sacarlo de la cola al guardarlo. */
+static int      s_cerrando = -1;
+static uint32_t s_cerrando_id;
 /* Puesto a true al final de view_registro_create(). view_registro_reset()
  * puede llegar antes de que la vista exista (el carrusel la crea perezosa). */
 static bool      s_ui_lista;
@@ -244,6 +251,7 @@ static lv_obj_t *s_bombona_currency_dd;
 
 static lv_obj_t *s_repo_importe_ta;
 static lv_obj_t *s_repo_litros_ta;
+static lv_obj_t *s_repo_km_ta;
 static lv_obj_t *s_repo_currency_dd;
 static lv_obj_t *s_repo_preciolitro_lbl;
 
@@ -309,6 +317,9 @@ static void mostrar_menu(pantalla_t p);
  * decide volver_al_menu(). */
 static void show_grid(void)
 {
+    /* Salir del formulario sin guardar deja el evento como estaba: abierto y
+     * en la lista. Lo unico que se descarta es la intencion de cerrarlo. */
+    s_cerrando = -1;
     clear_forms();
     for (int i = 0; i < CAT_COUNT; i++) {
         lv_obj_add_flag(s_forms[i], LV_OBJ_FLAG_HIDDEN);
@@ -1131,9 +1142,9 @@ static void build_resumen(categoria_t cat)
     switch (cat) {
         case CAT_REPOSTAJE:
             snprintf(s_resumen, sizeof(s_resumen),
-                     "Importe:  %s %s\nLitros:  %s\nPrecio/L:  %s",
+                     "Importe:  %s %s\nLitros:  %s\nKm:  %s\n%s",
                      val_or_dash(s_repo_importe_ta), currency_of(s_repo_currency_dd),
-                     val_or_dash(s_repo_litros_ta),
+                     val_or_dash(s_repo_litros_ta), val_or_dash(s_repo_km_ta),
                      lv_label_get_text(s_repo_preciolitro_lbl));
             break;
         case CAT_PEAJE:
@@ -1374,14 +1385,19 @@ static void apunte_encolar(categoria_t cat)
      * medias (ver la cabecera de apunte.c). Queda margen para los dos campos de
      * posicion que traera el GPS de la P4. */
     char b[640];
-    size_t u = apunte_cabecera(b, sizeof(b), next_trip_seq(), CAT_CLAVE[cat]);
+    /* El id: el reservado al declarar el evento si se esta cerrando uno, o uno
+     * nuevo si el apunte nace aqui (peaje, o los formularios del menu). */
+    size_t u = apunte_cabecera(b, sizeof(b),
+                               s_cerrando >= 0 ? s_cerrando_id : next_trip_seq(),
+                               CAT_CLAVE[cat]);
 
     switch (cat) {
         case CAT_REPOSTAJE:
             u = apunte_campo_txt(b, sizeof(b), u, "moneda", currency_of(s_repo_currency_dd));
             u = apunte_campo_txt(b, sizeof(b), u, "importe", lv_textarea_get_text(s_repo_importe_ta));
             u = apunte_campo_txt(b, sizeof(b), u, "litros",  lv_textarea_get_text(s_repo_litros_ta));
-            u = apunte_campo_txt(b, sizeof(b), u, "precio_litro", lv_label_get_text(s_repo_preciolitro_lbl));
+            u = apunte_campo_txt(b, sizeof(b), u, "km",      lv_textarea_get_text(s_repo_km_ta));
+            u = apunte_campo_txt(b, sizeof(b), u, "calculado", lv_label_get_text(s_repo_preciolitro_lbl));
             break;
         case CAT_PEAJE:
             u = apunte_campo_txt(b, sizeof(b), u, "moneda", currency_of(s_peaje_currency_dd));
@@ -1473,22 +1489,32 @@ static void do_save(void *user_data)
 {
     categoria_t cat = (categoria_t)(uintptr_t)user_data;
 
-    /* Sin viaje en marcha no hay carpeta donde escribirlo, asi que se queda
-     * solo en la pantalla. Se avisa en vez de callarse: guardar un repostaje
-     * que no va a ninguna parte y no decirlo es justo lo que hace que te fies
-     * de un dato que no existe. */
-    if (!s_viaje_activo) {
-        ESP_LOGW(TAG, "'%s' NO se manda: no hay viaje en marcha", CAT_NOMBRE[cat]);
-        if (cat == CAT_PARADA) parada_abrir_si_procede();
+    /* Basta con que haya SALIDA, no viaje: los apuntes de una salida puntual
+     * van al historial del vehiculo en la P4 (/sdcard/vehiculo). Antes se
+     * exigia viaje y un repostaje camino del taller no se podia guardar. */
+    if (!salida_hay()) {
+        ESP_LOGW(TAG, "'%s' NO se manda: no hay ninguna salida en marcha", CAT_NOMBRE[cat]);
         confirm_screen_aviso("Guardado solo aqui",
-                             "No hay ningun viaje en marcha,\nasi que esto no se guarda en\nla P4. Inicia un viaje antes.",
+                             "No hay ninguna salida en\nmarcha, asi que esto no se\nguarda. Empieza una antes.",
                              COL_ACCION_STOP, "Entendido");
         show_grid();
         return;
     }
 
     apunte_encolar(cat);
-    if (cat == CAT_PARADA) parada_abrir_si_procede();
+
+    /* El cuentakilometros del repostaje se guarda para el SIGUIENTE: es lo que
+     * permite sacar los litros a los cien sin tener el historico delante. */
+    if (cat == CAT_REPOSTAJE) {
+        long km = atol(lv_textarea_get_text(s_repo_km_ta));
+        if (km > 0) save_ultimo_km((uint32_t)km);
+    }
+
+    /* Guardado y entregado a la cola: el evento deja de estar abierto. */
+    if (s_cerrando >= 0) {
+        salida_evento_borrar(s_cerrando);
+        ESP_LOGI(TAG, "evento cerrado con el formulario de %s", CAT_NOMBRE[cat]);
+    }
     show_grid();
 }
 
@@ -1804,11 +1830,23 @@ static void repo_recalc_cb(lv_event_t *e)
     uint16_t cur_idx = lv_dropdown_get_selected(s_repo_currency_dd);
     const char *cur = cur_idx < (sizeof(CURRENCY_CODES) / sizeof(CURRENCY_CODES[0]))
                        ? CURRENCY_CODES[cur_idx] : "EUR";
-    char buf[24];
+    char buf[40];
+    int u = 0;
     if (litros > 0.0f) {
-        snprintf(buf, sizeof(buf), "%.3f %s/L", importe / litros, cur);
+        u = snprintf(buf, sizeof(buf), "%.3f %s/L", importe / litros, cur);
     } else {
-        snprintf(buf, sizeof(buf), "--");
+        u = snprintf(buf, sizeof(buf), "--");
+    }
+
+    /* Los litros a los cien salen solos comparando con el cuentakilometros del
+     * repostaje ANTERIOR. Solo si el numero tiene sentido: sin km previo, con
+     * el cuentakilometros hacia atras (se tecleo mal) o con un salto absurdo,
+     * es mejor no decir nada que decir una cifra inventada. */
+    long km  = atol(lv_textarea_get_text(s_repo_km_ta));
+    long ant = (long)load_ultimo_km();
+    if (litros > 0.0f && ant > 0 && km > ant && (km - ant) < 5000) {
+        snprintf(buf + u, sizeof(buf) - (size_t)u, "  -  %.1f L/100",
+                 litros * 100.0f / (float)(km - ant));
     }
     lv_label_set_text(s_repo_preciolitro_lbl, buf);
 }
@@ -1911,16 +1949,22 @@ static void build_repostaje(lv_obj_t *form)
     /* Sin coordenada GPS ni hora a peticion del usuario (20-ago-2026): tecleadas
      * a mano no aportan nada y estorban en el surtidor. Cuando se abra la Fase 4
      * las pone la P4 al recibir el evento, que ya sabe donde y cuando esta. */
-    /* Moneda arriba a lo ancho, y debajo importe y litros compartiendo linea:
-     * asi los dos numeros caben en letra 32 en vez de 24. */
-    s_repo_currency_dd = make_currency_row(form, "Moneda");
-    make_dual_number_row(form, "Importe", &s_repo_importe_ta,
-                               "Litros",  &s_repo_litros_ta);
+    /* El importe lleva su moneda DENTRO de la fila, en vez de una fila propia
+     * para la moneda: hacen falta tres numeros (importe, litros y km) y con la
+     * moneda aparte no caben los seis renglones en 320 px.
+     *
+     * Los KILOMETROS son nuevos del rediseno del 23-ago: con ellos salen solos
+     * los litros a los cien y el coste por kilometro. Si no se piden desde el
+     * primer dia, los repostajes viejos no los tendran nunca. */
+    s_repo_importe_ta = make_money_field(form, "Importe", &s_repo_currency_dd);
+    make_dual_number_row(form, "Litros",     &s_repo_litros_ta,
+                               "Kilometros", &s_repo_km_ta);
     lv_obj_add_event_cb(s_repo_importe_ta, repo_recalc_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s_repo_litros_ta, repo_recalc_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_repo_km_ta, repo_recalc_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s_repo_currency_dd, repo_recalc_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    s_repo_preciolitro_lbl = make_readonly_row(form, "Precio/litro (calculado)");
+    s_repo_preciolitro_lbl = make_readonly_row(form, "Calculado");
 
     make_save_button(form, "Guardar repostaje", save_generic_cb, (void *)(uintptr_t)CAT_REPOSTAJE);
 }
@@ -2235,6 +2279,7 @@ static lv_obj_t *s_ab_fin[SALIDA_EVENTOS_MAX];
 static void mostrar_menu(pantalla_t p);
 static void puntual_cancelar_cb(lv_event_t *e);
 static void deshacer_ultimo(void *ud);
+static bool cierre_sabe(uint8_t tipo);
 static void volver_al_menu(void);
 
 /* --- La franja de arriba -------------------------------------------------
@@ -2644,7 +2689,7 @@ static void abiertos_refresh(void)
         snprintf(linea, sizeof(linea), "anotado a las %s", h);
         lv_label_set_text(s_ab_hora[i], linea);
         if (s_ab_fin[i]) {
-            if (ev->tipo == EV_PARADA) lv_obj_clear_flag(s_ab_fin[i], LV_OBJ_FLAG_HIDDEN);
+            if (cierre_sabe(ev->tipo)) lv_obj_clear_flag(s_ab_fin[i], LV_OBJ_FLAG_HIDDEN);
             else                       lv_obj_add_flag(s_ab_fin[i], LV_OBJ_FLAG_HIDDEN);
         }
     }
@@ -2846,17 +2891,6 @@ static const char *const SITIO_CLAVE[SITIO_COUNT] = {
 static char s_parada_txt[192];
 static bool s_parada_ya_preguntada;   /* una sola vez por encendido */
 
-/* El primer EV_PARADA de la cola, o -1. */
-static int parada_idx(void)
-{
-    int n = salida_eventos_abiertos();
-    for (int i = 0; i < n; i++) {
-        const salida_evento_t *e = salida_evento_en(i);
-        if (e && e->tipo == EV_PARADA) return i;
-    }
-    return -1;
-}
-
 /* "45 min" o "2 h 15 min". Las horas sueltas se leen mucho peor en minutos. */
 static void duracion_texto(uint32_t seg, char *buf, size_t n)
 {
@@ -2957,12 +2991,69 @@ static bool parada_preguntar_en(int idx)
     return true;
 }
 
-/* La del arranque: la primera de la cola. */
+/* --- Cerrar un evento rellenando su formulario ---------------------------- */
+
+/* Abre el formulario EN MODO CIERRE: lo que se guarde llevara el id del evento
+ * y lo sacara de la cola. */
+static void cierre_empezar(int idx, categoria_t cat)
+{
+    const salida_evento_t *ev = salida_evento_en(idx);
+    if (!ev) return;
+    s_cerrando    = idx;
+    s_cerrando_id = ev->id;
+    show_form(cat);
+}
+
+static void repostaje_rellenar(void *ud)
+{
+    cierre_empezar((int)(intptr_t)ud, CAT_REPOSTAJE);
+}
+
+/* El repostaje es el caso que da nombre a todo el diseno: pulsas al llegar al
+ * surtidor y los numeros te los pide despues, que es cuando los sabes. */
+static bool repostaje_preguntar_en(int idx)
+{
+    const salida_evento_t *ev = salida_evento_en(idx);
+    if (!ev) return true;
+    if (reloj_p4() == 0) return false;
+
+    char h[8];
+    hora_corta(ev->epoch_ini, h, sizeof(h));
+    snprintf(s_parada_txt, sizeof(s_parada_txt),
+             "Lo anotaste a las %s.\nAhora ya sabes el importe,\nlos litros y los kilometros.", h);
+    /* El "no" no descarta nada: el repostaje sigue abierto y se vuelve a
+     * preguntar. Rellenarlo con el surtidor delante no siempre se puede. */
+    confirm_screen_open("Finalizar repostaje", s_parada_txt, COL_REPOSTAJE,
+                        "Rellenarlo", "Luego", repostaje_rellenar,
+                        (void *)(intptr_t)idx);
+    return true;
+}
+
+/* Lo que hoy se sabe cerrar. Los demas tipos siguen esperando su formulario. */
+static bool cierre_sabe(uint8_t tipo)
+{
+    return tipo == EV_PARADA || tipo == EV_REPOSTAJE;
+}
+
+static bool cierre_preguntar_en(int idx)
+{
+    const salida_evento_t *ev = salida_evento_en(idx);
+    if (!ev) return true;
+    if (ev->tipo == EV_REPOSTAJE) return repostaje_preguntar_en(idx);
+    return parada_preguntar_en(idx);
+}
+
+/* La del arranque: el PRIMERO de la cola que se sepa cerrar. En orden de
+ * apertura, que es como manda el diseno; los que no se saben cerrar todavia se
+ * saltan en vez de bloquear a los de detras. */
 static bool parada_preguntar(void)
 {
-    int idx = parada_idx();
-    if (idx < 0) return true;            /* no hay ninguna: nada que preguntar */
-    return parada_preguntar_en(idx);
+    int n = salida_eventos_abiertos();
+    for (int i = 0; i < n; i++) {
+        const salida_evento_t *ev = salida_evento_en(i);
+        if (ev && cierre_sabe(ev->tipo)) return cierre_preguntar_en(i);
+    }
+    return true;                          /* nada que preguntar */
 }
 
 /* El boton de la lista. A diferencia del aviso del arranque, aqui lo has
@@ -2971,17 +3062,27 @@ static bool parada_preguntar(void)
 static void ab_terminar_cb(lv_event_t *e)
 {
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
-    if (parada_preguntar_en(idx)) return;
+    if (cierre_preguntar_en(idx)) return;
     confirm_screen_aviso("Sin la P4",
-                         "No se que hora es, asi que\nno puedo cerrar la parada.",
+                         "No se que hora es, asi que\nno puedo cerrarlo.",
                          COL_ACCION_STOP, "Entendido");
 }
 
 /* Al encender: esperar a que la P4 diga la hora y preguntar UNA vez. Cada 2 s,
  * que la fecha llega a 1 Hz y no hay ninguna prisa. */
+static bool hay_algo_que_cerrar(void)
+{
+    int n = salida_eventos_abiertos();
+    for (int i = 0; i < n; i++) {
+        const salida_evento_t *ev = salida_evento_en(i);
+        if (ev && cierre_sabe(ev->tipo)) return true;
+    }
+    return false;
+}
+
 static void parada_boot_timer_cb(lv_timer_t *t)
 {
-    if (s_parada_ya_preguntada || parada_idx() < 0) { lv_timer_del(t); return; }
+    if (s_parada_ya_preguntada || !hay_algo_que_cerrar()) { lv_timer_del(t); return; }
     if (parada_preguntar()) { s_parada_ya_preguntada = true; lv_timer_del(t); }
 }
 
@@ -3361,7 +3462,7 @@ void view_registro_create(lv_obj_t *parent)
      * en segundo plano hasta que la P4 diga la hora y preguntar entonces. El
      * dialogo se muda solo a la pantalla que este activa (ver
      * confirm_screen.c). Cada 2 s: la fecha llega a 1 Hz y no hay prisa. */
-    if (parada_idx() >= 0) {
+    if (hay_algo_que_cerrar()) {
         lv_timer_create(parada_boot_timer_cb, 2000, NULL);
     }
 

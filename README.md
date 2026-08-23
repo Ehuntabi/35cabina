@@ -199,12 +199,28 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   Cuatro porque en una estancia larga conviven parada, repostaje, bombona y
   peaje. Marca de vida cada 10 min para saber a qué hora se fue la luz.
 
-  ⏳ **Lo que falta del rediseño**: las pantallas de **al arrancar** — rellenar
-  lo que quedó abierto, prolongar/finalizar parada y el aviso de «estuviste
-  parado desde las 19:40». Hoy se declara y el apunte se queda abierto (la tira
-  del menú dice cuántos). El **peaje** es el único que se guarda entero, porque
-  se rellena en el momento. Mientras tanto, deshacer se puede de dos maneras:
-  en el propio cartel de «Anotado» y en la pantalla de lo que queda sin cerrar.
+  **Al volver a dar el contacto** se pregunta por lo que quedó abierto, en orden
+  de apertura: la **parada** (prolongar / terminarla) y el **repostaje** (abre su
+  formulario). El apunte lleva el id que se reservó al declararlo, así que un
+  reintento no duplica. El temporizador espera a que la P4 diga la hora, y solo
+  pregunta una vez por encendido.
+
+  El **repostaje pide kilómetros** y saca solo el precio/litro y los litros a los
+  cien (guarda el cuentakilómetros anterior en NVS). En la P4, los apuntes **sin
+  viaje van a `/sdcard/vehiculo`** en vez de dar 409, que dejaba a la cola
+  reintentando para siempre en una salida puntual.
+
+  El aviso de que queda algo se ve **en la pantalla de datos**, no solo en el
+  cuaderno: comparte pastilla con «N sin enviar» y **se toca** para ir a la lista.
+
+  ⏳ **Lo que falta del rediseño**: cerrar aguas, bombona, avería e ITV; los
+  servicios y el precio de una **pernocta**; y el aviso de «estuviste parado
+  desde las 19:40». Deshacer se puede de dos maneras: en el cartel de «Anotado»
+  y en la pantalla de lo que queda sin cerrar.
+
+  🧹 Pendiente de limpieza: el modelo VIEJO de parada (namespace `parada` de NVS)
+  ya no se usa —se suelta al arrancar— y deja `parada_abrir_si_procede()` y
+  `make_currency_row()` sin llamar. Salen como aviso del compilador.
 
   **Mantenimiento** usa **casillas, no un desplegable**: con el mismo
   kilometraje puedes haber hecho varias cosas (el aceite Y su filtro es el

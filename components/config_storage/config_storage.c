@@ -18,6 +18,7 @@
 #define SALIDA_NAMESPACE      "salida"
 #define SALIDA_ESTADO_KEY     "estado"
 #define SALIDA_VIDA_KEY       "vida"
+#define SALIDA_KM_KEY         "ult_km"
 #define TILT_NAMESPACE        "tilt"
 #define TILT_PITCH_KEY        "pitch_off"
 #define TILT_ROLL_KEY         "roll_off"
@@ -279,6 +280,27 @@ esp_err_t clear_salida_blob(void)
     if (err != ESP_OK) return err;
     err = nvs_erase_key(h, SALIDA_ESTADO_KEY);
     if (err == ESP_ERR_NVS_NOT_FOUND) err = ESP_OK;   /* ya no estaba: bien */
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+uint32_t load_ultimo_km(void)
+{
+    nvs_handle_t h;
+    uint32_t v = 0;
+    if (nvs_open(SALIDA_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return 0;
+    nvs_get_u32(h, SALIDA_KM_KEY, &v);
+    nvs_close(h);
+    return v;
+}
+
+esp_err_t save_ultimo_km(uint32_t km)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(SALIDA_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_u32(h, SALIDA_KM_KEY, km);
     if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
     return err;

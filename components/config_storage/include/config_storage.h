@@ -124,6 +124,12 @@ esp_err_t clear_salida_blob(void);
 uint32_t  load_salida_vida(void);
 esp_err_t save_salida_vida(uint32_t epoch_local);
 
+/* Cuentakilometros del ULTIMO repostaje. Sirve para sacar los litros a los
+ * cien: sin el, cada repostaje es un dato suelto y el consumo no se puede
+ * calcular hasta tener el historico entero delante. 0 = todavia no hay. */
+uint32_t load_ultimo_km(void);
+esp_err_t save_ultimo_km(uint32_t km);
+
 // Calibracion de nivel del ADXL345 (NVS namespace: "tilt").
 // Offsets en centesimas de grado (deg*100), se restan de cada lectura.
 // Si no hay calibracion guardada devuelve 0/0 (sin error).
