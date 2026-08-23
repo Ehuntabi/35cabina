@@ -296,7 +296,10 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(fila, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_align(fila, LV_ALIGN_CENTER, 0, 8);
+    /* Desplazada 10 px a la izquierda del centro: centrada del todo, la columna
+     * de agua limpia con sus fracciones quedaba metida hacia dentro de la
+     * tarjeta. Peticion del usuario, 23-ago-2026. */
+    lv_obj_align(fila, LV_ALIGN_CENTER, -10, 8);
 
     /* Columna de segmentos de agua limpia, cada uno con su fraccion al lado */
     lv_obj_t *col_limpia = lv_obj_create(fila);
