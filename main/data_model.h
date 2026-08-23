@@ -56,6 +56,10 @@ typedef struct {
      * para contar noches (dividiendo entre 86400 sale el dia) y periodos de
      * 24 h (restando). Ver mini_proto.h. */
     uint32_t epoch_local;
+
+    /* Estado del GPS de la P4: 0=sin datos, 1=buscando, 2=posicion fijada.
+     * Esta pantalla NO recibe la posicion, solo si la hay (ver mini_proto.h). */
+    uint8_t  gps_estado;
 } mini_data_t;
 
 void data_model_init(void);

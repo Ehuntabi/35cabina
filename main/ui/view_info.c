@@ -69,6 +69,7 @@ static lv_obj_t   *s_frigo_val;
 static lv_obj_t   *s_frigo_trend;  /* flecha de tendencia */
 static lv_obj_t   *s_ext_trend;
 static lv_obj_t   *s_pendientes;      /* pastilla "N sin enviar", oculta si 0 */
+static lv_obj_t   *s_gps;             /* indicador de GPS de la P4 */
 static lv_obj_t   *s_frigo_fan;
 static lv_obj_t   *s_ext_val;
 static lv_timer_t *s_refresh_timer;
@@ -270,11 +271,11 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     s_water_card = card;
 
     lv_obj_t *dot = lv_obj_create(card);
-    lv_obj_set_size(dot, 8, 8);
+    lv_obj_set_size(dot, 12, 12);
     lv_obj_set_style_bg_color(dot, COL_CONN_NONE, 0);
     lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(dot, 0, 0);
-    lv_obj_set_style_radius(dot, 4, 0);
+    lv_obj_set_style_radius(dot, 6, 0);
     lv_obj_set_style_pad_all(dot, 0, 0);
     lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(dot, LV_ALIGN_TOP_LEFT, 2, 2);
@@ -596,6 +597,13 @@ static void refresh_cb(lv_timer_t *t)
     refresh_tendencia(&t_frigo, s_frigo_trend, d.frigo_has_data, d.frigo_temp_centi);
     refresh_temp(s_ext_val, d.exterior_has_data, d.exterior_temp_centi, false);
     refresh_tendencia(&t_ext, s_ext_trend, d.exterior_has_data, d.exterior_temp_centi);
+
+    if (s_gps) {
+        uint32_t c = (d.gps_estado == 2) ? 0x4CD964    /* fijado  */
+                   : (d.gps_estado == 1) ? 0xFF9800    /* buscando */
+                                         : 0x666666;   /* sin datos */
+        lv_obj_set_style_text_color(s_gps, lv_color_hex(c), 0);
+    }
     lv_label_set_text(s_frigo_fan, frigo_secondary);
     refresh_aguas(&d);
     update_conn_dots(&d);
@@ -621,11 +629,11 @@ static lv_obj_t *make_card(lv_obj_t *grid, lv_color_t border, const char *titulo
 
     if (dot_out) {
         lv_obj_t *dot = lv_obj_create(card);
-        lv_obj_set_size(dot, 8, 8);
+        lv_obj_set_size(dot, 12, 12);
         lv_obj_set_style_bg_color(dot, COL_CONN_NONE, 0);
         lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(dot, 0, 0);
-        lv_obj_set_style_radius(dot, 4, 0);
+        lv_obj_set_style_radius(dot, 6, 0);
         lv_obj_set_style_pad_all(dot, 0, 0);
         lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
         lv_obj_align(dot, LV_ALIGN_TOP_RIGHT, 0, 2);
@@ -816,6 +824,27 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_border_color(s_pendientes, lv_color_hex(0x000000), 0);
     lv_obj_set_style_border_width(s_pendientes, 3, 0);
     lv_obj_align(s_pendientes, LV_ALIGN_BOTTOM_MID, 0, -6);
+
+    /* Indicador del GPS de la P4. Arriba a la izquierda, justo detras del punto
+     * de conexion: la cabecera de la tarjeta de bateria lleva el titulo
+     * CENTRADO, asi que ese hueco esta libre y no le quita sitio a ningun dato.
+     *
+     * Tres colores, los mismos que en la P4: gris no llega nada, naranja
+     * buscando, verde posicion fijada. Un GPS recien encendido tarda un par de
+     * minutos, y ver "buscando" en vez de "no hay" evita ir a mirar el cable
+     * cuando lo unico que hay que hacer es esperar. */
+    s_gps = lv_label_create(parent);
+    lv_obj_add_flag(s_gps, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_label_set_text(s_gps, LV_SYMBOL_GPS);
+    /* Rejilla 4 de margen + tarjeta 2 de borde y 8 de relleno: el contenido de
+     * la tarjeta de bateria empieza en la pantalla a (14, 14). El icono va casi
+     * pegado a esa esquina porque AHI NO HAY NADA -- el punto de conexion de
+     * esta tarjeta esta arriba a la DERECHA (make_card lo alinea TOP_RIGHT; el
+     * de la izquierda es el de la tarjeta de aguas) y el titulo va centrado.
+     * Antes estaba en y=1 con letra 14, por encima del borde de la tarjeta. */
+    lv_obj_set_style_text_font(s_gps, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(s_gps, lv_color_hex(0x666666), 0);
+    lv_obj_align(s_gps, LV_ALIGN_TOP_LEFT, 20, 11);
 
     s_refresh_timer = lv_timer_create(refresh_cb, 500, NULL);
 }

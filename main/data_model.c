@@ -92,6 +92,7 @@ void data_model_update_from_msg(const struct mini_msg *msg)
     /* Reloj de la P4. Se copia tal cual, incluido el 0 = "aun no tiene hora
      * buena": el que lo use ya distingue. */
     tmp.epoch_local = msg->epoch_local;
+    tmp.gps_estado  = msg->gps_estado;
 
     tmp.last_update_ms = now;
 
