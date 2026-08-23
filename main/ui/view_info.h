@@ -27,6 +27,14 @@ void view_info_create(lv_obj_t *parent);
  * visible todo el rato mientras quede algo, no saltar "al apagar". */
 void view_info_set_pendientes(size_t pendientes);
 
+/* Cuantos apuntes quedan ABIERTOS (declarados y sin cerrar). Comparte pastilla
+ * con los "sin enviar" -- ver el comentario de pendientes_aplicar().
+ *
+ * Va aqui y no solo en la pantalla de registros porque esta es la que esta
+ * puesta mientras conduces: si el aviso solo vive en la otra, hay que acordarse
+ * de ir a mirarlo, que es justo lo que no se hace. */
+void view_info_set_sin_cerrar(size_t sin_cerrar);
+
 #ifdef __cplusplus
 }
 #endif

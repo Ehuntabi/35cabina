@@ -64,6 +64,19 @@ static void gesture_cb(lv_event_t *e)
     lv_scr_load_anim(s_screens[s_current], anim, NAV_ANIM_MS, 0, false);
 }
 
+void nav_ir_a_sin_cerrar(void)
+{
+    /* Ya estando en registros no se recarga la pantalla: solo se cambia de
+     * menu. Recargarla haria una animacion de "cambio de pagina" hacia la
+     * misma pagina, que se ve como un parpadeo sin motivo. */
+    if (s_current != NAV_REGISTRO) {
+        s_current = NAV_REGISTRO;
+        lv_scr_load_anim(s_screens[NAV_REGISTRO], LV_SCR_LOAD_ANIM_MOVE_LEFT,
+                         NAV_ANIM_MS, 0, false);
+    }
+    view_registro_abrir_sin_cerrar();
+}
+
 void nav_init(void)
 {
     for (int i = 0; i < NAV_COUNT; i++) {

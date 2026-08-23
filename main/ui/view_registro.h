@@ -23,6 +23,11 @@ void view_registro_create(lv_obj_t *parent);
  * tecleado a medias se pierde, que es lo que se quiere -- te habias ido. */
 void view_registro_reset(void);
 
+/* Abre directamente la lista de lo que queda sin cerrar. La usa la pastilla de
+ * la pantalla de datos: el aviso se ve mientras conduces, y desde el se llega
+ * de un toque a lo que hay que hacer. No hace nada si no hay nada abierto. */
+void view_registro_abrir_sin_cerrar(void);
+
 #ifdef __cplusplus
 }
 #endif

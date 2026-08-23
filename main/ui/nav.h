@@ -17,6 +17,10 @@ void nav_init(void);
 /* Abre la pantalla de Ajustes (Wi-Fi) por encima del carrusel. */
 void nav_open_ajustes(void);
 
+/* Lleva el carrusel a la pagina de registros y abre la lista de lo que queda
+ * sin cerrar. Lo llama la pastilla de la pantalla de datos. */
+void nav_ir_a_sin_cerrar(void);
+
 /* Vuelve del carrusel a la pantalla de info. */
 void nav_close_ajustes(void);
 

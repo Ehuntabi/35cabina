@@ -26,6 +26,7 @@
 #include "nav.h"
 #include "entry_screen.h"
 #include "confirm_screen.h"
+#include "view_info.h"
 #include "config_storage.h"
 #include "p4_api.h"
 #include "viaje_cola.h"
@@ -361,6 +362,14 @@ static void back_click_cb(lv_event_t *e)
     int dest = (int)(intptr_t)lv_event_get_user_data(e) - 1;
     if (dest < 0) show_grid();
     else          show_form(dest);
+}
+
+void view_registro_abrir_sin_cerrar(void)
+{
+    if (!s_ui_lista || salida_eventos_abiertos() == 0) return;
+    entry_screen_close();
+    confirm_screen_close();
+    mostrar_menu(PAN_ABIERTOS);
 }
 
 void view_registro_reset(void)
@@ -1537,24 +1546,6 @@ static bool parada_pregunta_fin(void)
     return true;
 }
 
-/* Al arrancar: espera a que la P4 diga la hora y pregunta, una sola vez.
- * Contestar que NO deja la parada abierta y no se vuelve a preguntar sola --
- * para eso esta el boton de la pantalla de Viaje, que la cierra cuando tu
- * quieras.
- *
- * Si la P4 no aparece (apagada o fuera de alcance) no se pregunta nada y el
- * temporizador sigue mirando: mas vale callar que inventarse las noches. */
-static void parada_fin_timer_cb(lv_timer_t *t)
-{
-    parada_abierta_t p;
-    load_parada_abierta(&p);
-    if (!p.abierta) {          /* se cerro, o nunca la hubo */
-        lv_timer_del(t);
-        return;
-    }
-    if (parada_pregunta_fin()) lv_timer_del(t);
-}
-
 /* El boton de la pantalla de Viaje. A diferencia del aviso del arranque, aqui
  * lo has pedido tu: si no se puede, hay que decir por que en vez de no hacer
  * nada, que parece que el boton esta roto. */
@@ -2223,13 +2214,18 @@ static lv_obj_t *s_bar_wifi[PAN_COUNT];
  * de una salida la llevan: la de viaje y la de puntual. */
 #define TIRA_SALIDA   0
 #define TIRA_PUNTUAL  1
-static lv_obj_t *s_tiras[2];
+static lv_obj_t *s_tiras[2];        /* el texto: nombre y dia */
+static lv_obj_t *s_tira_chip[2];    /* la etiqueta de "N sin cerrar" */
+static lv_obj_t *s_tira_chip_lbl[2];
 
 /* Filas de PAN_ABIERTOS: se crean las cuatro y se ocultan las que sobren, que
  * es mas simple y mas seguro que crearlas y destruirlas cada vez. */
 static lv_obj_t *s_ab_fila[SALIDA_EVENTOS_MAX];
 static lv_obj_t *s_ab_tipo[SALIDA_EVENTOS_MAX];
 static lv_obj_t *s_ab_hora[SALIDA_EVENTOS_MAX];
+/* Boton "Terminar" de la fila. Solo sale en las paradas: es lo unico que hoy se
+ * sabe cerrar. Los demas tipos esperan a tener su formulario. */
+static lv_obj_t *s_ab_fin[SALIDA_EVENTOS_MAX];
 
 #define BAR_H     26
 #define PAN_PAD   12
@@ -2489,6 +2485,60 @@ static lv_obj_t *casilla(lv_obj_t *padre, const char *icono, const char *texto,
     return b;
 }
 
+/* Casilla de la pantalla de donde duermes.
+ *
+ * Aqui el color dice el SITIO y no el precio, al reves que en la primera
+ * version. Con verde/ambar las cinco casillas eran dos colores repetidos y con
+ * los rotulos casi iguales ("Parking", "Parking", "Area", "Area"): habia que
+ * LEERLAS para acertar, que es justo lo que no se puede hacer con la
+ * autocaravana en marcha. Con un color por sitio, la mano va sola.
+ *
+ * El precio no se pierde: va en una etiqueta, y la de pago en NEGATIVO -- fondo
+ * negro y letra blanca -- para que se vea antes de leerse. */
+static lv_obj_t *casilla_sitio(lv_obj_t *padre, const char *nombre, bool de_pago,
+                               uint32_t color, lv_coord_t w,
+                               lv_event_cb_t cb, void *ud)
+{
+    lv_obj_t *b = lv_btn_create(padre);
+    lv_obj_set_size(b, w, lv_pct(100));
+    lv_obj_set_style_bg_color(b, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_color(b, lv_color_darken(lv_color_hex(color), LV_OPA_30),
+                              LV_STATE_PRESSED);
+    lv_obj_set_style_radius(b, 12, 0);
+    lv_obj_set_style_pad_all(b, 4, 0);
+    lv_obj_set_flex_flow(b, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(b, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(b, 8, 0);
+    if (cb) lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, ud);
+
+    lv_obj_t *l = lv_label_create(b);
+    lv_label_set_text(l, nombre);
+    lv_obj_set_style_text_color(l, lv_color_hex(COL_TILE_FG), 0);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_22, 0);
+
+    lv_obj_t *tag = lv_obj_create(b);
+    lv_obj_remove_style_all(tag);
+    lv_obj_set_size(tag, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_hor(tag, 8, 0);
+    lv_obj_set_style_pad_ver(tag, 3, 0);
+    lv_obj_set_style_radius(tag, 9, 0);
+    lv_obj_clear_flag(tag, LV_OBJ_FLAG_SCROLLABLE);
+    /* Sin esto la etiqueta se come el toque y la casilla no responde en el
+     * centro, que es justo donde se pulsa. */
+    lv_obj_clear_flag(tag, LV_OBJ_FLAG_CLICKABLE);
+    if (de_pago) {
+        lv_obj_set_style_bg_color(tag, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(tag, LV_OPA_COVER, 0);
+    }
+
+    lv_obj_t *t = lv_label_create(tag);
+    lv_label_set_text(t, de_pago ? "DE PAGO" : "gratis");
+    lv_obj_set_style_text_font(t, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(t, lv_color_hex(de_pago ? 0xFFFFFF : COL_TILE_FG), 0);
+    if (!de_pago) lv_obj_set_style_text_opa(t, LV_OPA_70, 0);
+    return b;
+}
+
 /* Fila elastica para repartir casillas a lo ancho. */
 static lv_obj_t *fila(lv_obj_t *padre)
 {
@@ -2540,7 +2590,10 @@ static void salida_tira_refresh(void)
 {
     const salida_vista_t *s = salida_get();
     char txt[SALIDA_NOMBRE_MAX + 32];
-    int  n = snprintf(txt, sizeof(txt), "%s", s->nombre);
+    /* Una salida puntual no tiene nombre, y dejar el hueco en blanco hacia que
+     * la tira empezase por un guion suelto. */
+    int  n = snprintf(txt, sizeof(txt), "%s",
+                      s->tipo == SALIDA_PUNTUAL ? "Salida puntual" : s->nombre);
     /* snprintf devuelve lo que HABRIA escrito: si truncase, txt+n se saldria
      * del buffer. Con los tamanos de ahora no llega a pasar, pero el dia que
      * el nombre crezca esto seria una pisada de memoria muy dificil de ver. */
@@ -2553,13 +2606,24 @@ static void salida_tira_refresh(void)
         if (n < 0 || (size_t)n >= sizeof(txt)) return;
     }
     int abiertos = salida_eventos_abiertos();
-    if (abiertos > 0) {
-        /* La flecha no es adorno: avisa de que la tira se puede tocar, que es
-         * por donde se llega a borrar un apunte puesto por error. */
-        snprintf(txt + n, sizeof(txt) - (size_t)n, "  -  %d sin cerrar  >", abiertos);
-    }
+    /* Y que se entere la pantalla de datos, que es la que esta puesta mientras
+     * conduces. Aqui, porque por esta funcion pasan TODOS los cambios: abrir,
+     * deshacer, borrar, cerrar una parada y terminar la salida. */
+    view_info_set_sin_cerrar((size_t)abiertos);
+    /* La flecha no es adorno: avisa de que la etiqueta se toca, que es por
+     * donde se llega a borrar un apunte puesto por error. */
+    char chip[32];
+    snprintf(chip, sizeof(chip), "%d sin cerrar  >", abiertos);
+
     for (int i = 0; i < 2; i++) {
         if (s_tiras[i]) lv_label_set_text(s_tiras[i], txt);
+        if (!s_tira_chip[i]) continue;
+        if (abiertos > 0) {
+            lv_label_set_text(s_tira_chip_lbl[i], chip);
+            lv_obj_clear_flag(s_tira_chip[i], LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(s_tira_chip[i], LV_OBJ_FLAG_HIDDEN);
+        }
     }
 }
 
@@ -2579,6 +2643,10 @@ static void abiertos_refresh(void)
         char linea[32];
         snprintf(linea, sizeof(linea), "anotado a las %s", h);
         lv_label_set_text(s_ab_hora[i], linea);
+        if (s_ab_fin[i]) {
+            if (ev->tipo == EV_PARADA) lv_obj_clear_flag(s_ab_fin[i], LV_OBJ_FLAG_HIDDEN);
+            else                       lv_obj_add_flag(s_ab_fin[i], LV_OBJ_FLAG_HIDDEN);
+        }
     }
     (void)n;
 }
@@ -2749,6 +2817,174 @@ static void viaje_p4_descartar_cb(lv_event_t *e)
                         viaje_p4_descartar, NULL);
 }
 
+/* === La parada, al volver a dar el contacto ==============================
+ *
+ * Declaras al llegar y rellenas al salir: aqui esta la segunda mitad. Al
+ * encender, si quedo una parada abierta, se pregunta si sigues ahi o si ya te
+ * vas. La hora de fin es la de AHORA, real y no tecleada, que es de lo que va
+ * todo el diseno.
+ *
+ * "Prolongar" no pregunta nada y no toca la hora de inicio: prolongar
+ * significa justo que sigue contando desde el principio.
+ *
+ * Nombres de pantalla y CLAVES del CSV van separados a proposito, por lo mismo
+ * que el resto del fichero: la redaccion de un rotulo puede cambiar, y si las
+ * columnas fueran los rotulos ese cambio partiria el historico en dos. */
+static const char *const MOTIVO_NOMBRE[MOTIVO_COUNT] = {
+    "Visita", "Descanso", "Comer", "Cenar", "Compras", "Pernocta"
+};
+static const char *const MOTIVO_CLAVE[MOTIVO_COUNT] = {
+    "visita", "descanso", "comer", "cenar", "compras", "pernocta"
+};
+static const char *const SITIO_NOMBRE[SITIO_COUNT] = {
+    "Parking gratis", "Parking de pago", "Area gratis", "Area de pago", "Camping"
+};
+static const char *const SITIO_CLAVE[SITIO_COUNT] = {
+    "parking_gratis", "parking_pago", "area_gratis", "area_pago", "camping"
+};
+
+static char s_parada_txt[192];
+static bool s_parada_ya_preguntada;   /* una sola vez por encendido */
+
+/* El primer EV_PARADA de la cola, o -1. */
+static int parada_idx(void)
+{
+    int n = salida_eventos_abiertos();
+    for (int i = 0; i < n; i++) {
+        const salida_evento_t *e = salida_evento_en(i);
+        if (e && e->tipo == EV_PARADA) return i;
+    }
+    return -1;
+}
+
+/* "45 min" o "2 h 15 min". Las horas sueltas se leen mucho peor en minutos. */
+static void duracion_texto(uint32_t seg, char *buf, size_t n)
+{
+    uint32_t m = seg / 60;
+    if (m < 60) snprintf(buf, n, "%u min", (unsigned)m);
+    else        snprintf(buf, n, "%u h %u min", (unsigned)(m / 60), (unsigned)(m % 60));
+}
+
+static void parada_terminar(void *ud)
+{
+    int idx = (int)(intptr_t)ud;
+    const salida_evento_t *ev = salida_evento_en(idx);
+    if (!ev) return;
+
+    uint32_t ahora = reloj_p4();
+    if (!ahora) {
+        confirm_screen_aviso("Sin la P4",
+                             "No se que hora es, asi que\nno puedo cerrar la parada.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+
+    uint8_t motivo = ev->sub  < MOTIVO_COUNT ? ev->sub  : MOTIVO_VISITA;
+    uint8_t sitio  = ev->sub2 < SITIO_COUNT  ? ev->sub2 : 0;
+    bool    noche  = (motivo == MOTIVO_PERNOCTA);
+
+    char hi[8], hf[8];
+    hora_corta(ev->epoch_ini, hi, sizeof(hi));
+    hora_corta(ahora,         hf, sizeof(hf));
+
+    char cuerpo[384];
+    size_t u = apunte_cabecera(cuerpo, sizeof(cuerpo), ev->id, "parada");
+    u = apunte_campo_txt(cuerpo, sizeof(cuerpo), u, "motivo", MOTIVO_CLAVE[motivo]);
+    if (noche) u = apunte_campo_txt(cuerpo, sizeof(cuerpo), u, "sitio", SITIO_CLAVE[sitio]);
+    u = apunte_campo_txt(cuerpo, sizeof(cuerpo), u, "inicio", hi);
+    u = apunte_campo_txt(cuerpo, sizeof(cuerpo), u, "fin", hf);
+    u = apunte_campo_num(cuerpo, sizeof(cuerpo), u, "minutos",
+                         (long)((ahora - ev->epoch_ini) / 60));
+    if (noche) {
+        u = apunte_campo_num(cuerpo, sizeof(cuerpo), u, "noches",
+                             (long)salida_noches(ev->epoch_ini, ahora));
+    }
+
+    char resumen[96];
+    if (noche) {
+        snprintf(resumen, sizeof(resumen), "Pernocta en %s, %s a %s",
+                 SITIO_NOMBRE[sitio], hi, hf);
+    } else {
+        snprintf(resumen, sizeof(resumen), "Parada: %s, %s a %s",
+                 MOTIVO_NOMBRE[motivo], hi, hf);
+    }
+    u = apunte_cerrar(cuerpo, sizeof(cuerpo), u, resumen);
+
+    /* u == 0 significa que el JSON no cabia y quedo cortado: NO se manda. */
+    if (!u || !viaje_cola_push(cuerpo)) {
+        confirm_screen_aviso("No he podido apuntarlo",
+                             "La parada NO se ha guardado\ny sigue abierta. Enciende la\nP4 para vaciar la cola.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+
+    salida_evento_borrar(idx);
+    ESP_LOGI(TAG, "parada cerrada: %s", resumen);
+    volver_al_menu();
+}
+
+/* Arma y saca la pregunta. false si ahora mismo no se puede -- sin la hora de
+ * la P4 no hay nada que calcular -- para que quien llama vuelva a intentarlo. */
+static bool parada_preguntar_en(int idx)
+{
+    uint32_t ahora = reloj_p4();
+    if (!ahora) return false;
+
+    const salida_evento_t *ev = salida_evento_en(idx);
+    uint8_t motivo = ev->sub  < MOTIVO_COUNT ? ev->sub  : MOTIVO_VISITA;
+    uint8_t sitio  = ev->sub2 < SITIO_COUNT  ? ev->sub2 : 0;
+
+    char hi[8], dur[24];
+    hora_corta(ev->epoch_ini, hi, sizeof(hi));
+    duracion_texto(ahora - ev->epoch_ini, dur, sizeof(dur));
+
+    if (motivo == MOTIVO_PERNOCTA) {
+        uint32_t noches = salida_noches(ev->epoch_ini, ahora);
+        snprintf(s_parada_txt, sizeof(s_parada_txt),
+                 "%s\ndesde las %s  -  %u noche%s\n\n"
+                 "Todavia no se pedir servicios\nni precio: se guarda el sitio.",
+                 SITIO_NOMBRE[sitio], hi, (unsigned)noches, noches == 1 ? "" : "s");
+    } else {
+        snprintf(s_parada_txt, sizeof(s_parada_txt), "%s\ndesde las %s  -  %s",
+                 MOTIVO_NOMBRE[motivo], hi, dur);
+    }
+
+    /* El "no" no es corregir nada: es que sigues ahi. La parada se queda
+     * abierta y se vuelve a preguntar en el siguiente contacto. */
+    confirm_screen_open("Parada en curso", s_parada_txt, COL_VIAJE,
+                        "Terminarla", "Prolongar", parada_terminar,
+                        (void *)(intptr_t)idx);
+    return true;
+}
+
+/* La del arranque: la primera de la cola. */
+static bool parada_preguntar(void)
+{
+    int idx = parada_idx();
+    if (idx < 0) return true;            /* no hay ninguna: nada que preguntar */
+    return parada_preguntar_en(idx);
+}
+
+/* El boton de la lista. A diferencia del aviso del arranque, aqui lo has
+ * pedido tu: si no se puede, hay que decir por que en vez de no hacer nada,
+ * que parece que el boton esta roto. */
+static void ab_terminar_cb(lv_event_t *e)
+{
+    int idx = (int)(intptr_t)lv_event_get_user_data(e);
+    if (parada_preguntar_en(idx)) return;
+    confirm_screen_aviso("Sin la P4",
+                         "No se que hora es, asi que\nno puedo cerrar la parada.",
+                         COL_ACCION_STOP, "Entendido");
+}
+
+/* Al encender: esperar a que la P4 diga la hora y preguntar UNA vez. Cada 2 s,
+ * que la fecha llega a 1 Hz y no hay ninguna prisa. */
+static void parada_boot_timer_cb(lv_timer_t *t)
+{
+    if (s_parada_ya_preguntada || parada_idx() < 0) { lv_timer_del(t); return; }
+    if (parada_preguntar()) { s_parada_ya_preguntada = true; lv_timer_del(t); }
+}
+
 /* Deshacer lo que se acaba de anotar: el ultimo de la cola. */
 static void deshacer_ultimo(void *ud)
 {
@@ -2842,18 +3078,51 @@ static void terminar_salida_cb(lv_event_t *e)
 /* La tira de estado de un menu de salida. Es un rotulo, pero se TOCA: es la
  * puerta a la lista de lo que queda abierto. Area de toque generosa por lo de
  * siempre -- 16 px de alto no se aciertan con el vehiculo en marcha. */
-static lv_obj_t *tira_crear(lv_obj_t *body)
+static lv_obj_t *tira_crear(lv_obj_t *body, int idx)
 {
-    lv_obj_t *l = lv_label_create(body);
+    lv_obj_t *fila_t = lv_obj_create(body);
+    lv_obj_remove_style_all(fila_t);
+    lv_obj_set_width(fila_t, lv_pct(100));
+    lv_obj_set_height(fila_t, LV_SIZE_CONTENT);
+    lv_obj_clear_flag(fila_t, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(fila_t, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(fila_t, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(fila_t, 8, 0);
+    lv_obj_add_flag(fila_t, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(fila_t, 10);
+    lv_obj_add_event_cb(fila_t, tira_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *l = lv_label_create(fila_t);
     lv_label_set_text(l, "");
     lv_obj_set_style_text_font(l, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(COL_LABEL), 0);
     lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(l, lv_pct(100));
-    lv_obj_add_flag(l, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_ext_click_area(l, 12);
-    lv_obj_add_event_cb(l, tira_cb, LV_EVENT_CLICKED, NULL);
-    return l;
+    lv_obj_set_flex_grow(l, 1);
+    s_tiras[idx] = l;
+
+    /* "1 sin cerrar" en AMBAR y no en gris con el resto. Escrito como texto
+     * corrido no se veia: 16 px grises arriba del todo, encima de dos casillas
+     * de color, no son un aviso -- son ruido. Es lo unico de esta pantalla que
+     * reclama algo del usuario, asi que se pinta como tal. */
+    lv_obj_t *chip = lv_obj_create(fila_t);
+    lv_obj_remove_style_all(chip);
+    lv_obj_set_size(chip, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_hor(chip, 10, 0);
+    lv_obj_set_style_pad_ver(chip, 4, 0);
+    lv_obj_set_style_radius(chip, 10, 0);
+    lv_obj_set_style_bg_color(chip, lv_color_hex(COL_BOMBONA), 0);
+    lv_obj_set_style_bg_opa(chip, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(chip, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(chip, LV_OBJ_FLAG_CLICKABLE);   /* el toque es de la fila */
+    lv_obj_add_flag(chip, LV_OBJ_FLAG_HIDDEN);
+    s_tira_chip[idx] = chip;
+
+    lv_obj_t *cl = lv_label_create(chip);
+    lv_label_set_text(cl, "");
+    lv_obj_set_style_text_font(cl, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(cl, lv_color_hex(COL_TILE_FG), 0);
+    s_tira_chip_lbl[idx] = cl;
+    return fila_t;
 }
 
 /* Una fila de la lista de lo abierto: que es, a que hora se anoto, y Borrar. */
@@ -2884,7 +3153,12 @@ static void abiertos_fila_crear(lv_obj_t *body, int idx)
     lv_obj_set_style_text_font(s_ab_hora[idx], &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(s_ab_hora[idx], lv_color_hex(COL_LABEL), 0);
 
-    boton_chico(f, "Borrar", COL_ACCION_STOP, 120, borrar_cb, (void *)(intptr_t)idx);
+    /* Terminar antes que Borrar y en verde: es lo que se quiere hacer casi
+     * siempre. Borrar es para el dedo equivocado. */
+    s_ab_fin[idx] = boton_chico(f, "Terminar", COL_ACCION_OK, 120,
+                                ab_terminar_cb, (void *)(intptr_t)idx);
+    lv_obj_add_flag(s_ab_fin[idx], LV_OBJ_FLAG_HIDDEN);
+    boton_chico(f, "Borrar", COL_ACCION_STOP, 110, borrar_cb, (void *)(intptr_t)idx);
 }
 
 static void crear_menus(lv_obj_t *parent)
@@ -2910,7 +3184,7 @@ static void crear_menus(lv_obj_t *parent)
 
     /* --- 3. Menu de salida: el principal mientras dure el viaje --- */
     body = pantalla_crear(parent, PAN_SALIDA, NULL, -1);
-    s_tiras[TIRA_SALIDA] = tira_crear(body);
+    tira_crear(body, TIRA_SALIDA);
 
     boton_grande(body, LV_SYMBOL_PLUS, "ANADIR PARADA", NULL,
                  COL_ACCION_OK, ir_a_cb, (void *)(uintptr_t)PAN_TIPOS);
@@ -2946,7 +3220,7 @@ static void crear_menus(lv_obj_t *parent)
 
     /* --- 5. Las cuatro de una salida puntual --- */
     body = pantalla_crear(parent, PAN_PUNTUAL, "SALIDA PUNTUAL", PAN_CANCELA_PUNTUAL);
-    s_tiras[TIRA_PUNTUAL] = tira_crear(body);
+    tira_crear(body, TIRA_PUNTUAL);
     f = fila(body);
     casilla(f, LV_SYMBOL_CHARGE,   "Repostaje", NULL, COL_BOMBONA,
             CEL2_W, lv_pct(100), declarar_cb, DECL(EV_REPOSTAJE, 0, 0));
@@ -2981,21 +3255,19 @@ static void crear_menus(lv_obj_t *parent)
     /* --- 7. Donde pasas la noche --- */
     body = pantalla_crear(parent, PAN_SITIO, "DONDE DUERMES?", PAN_MOTIVO);
     f = fila(body);
-    /* Verde gratis, ambar de pago: el color dice si esto va a costar dinero
-     * antes de leer nada, y es lo que decide que se preguntara al marcharse. */
-    casilla(f, NULL, "Parking", "gratis",  COL_ACCION_OK, CEL3_W, lv_pct(100),
-            declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_PARKING_GRATIS));
-    casilla(f, NULL, "Parking", "de pago", COL_BOMBONA,   CEL3_W, lv_pct(100),
-            declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_PARKING_PAGO));
-    casilla(f, NULL, "Area",    "gratis",  COL_ACCION_OK, CEL3_W, lv_pct(100),
-            declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_AREA_GRATIS));
+    casilla_sitio(f, "Parking", false, COL_VIAJE,         CEL3_W,
+                  declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_PARKING_GRATIS));
+    casilla_sitio(f, "Parking", true,  COL_VIAJE,         CEL3_W,
+                  declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_PARKING_PAGO));
+    casilla_sitio(f, "Area",    false, COL_MANTENIMIENTO, CEL3_W,
+                  declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_AREA_GRATIS));
     f = fila(body);
-    casilla(f, NULL, "Area",    "de pago", COL_BOMBONA,   CEL3_W, lv_pct(100),
-            declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_AREA_PAGO));
-    /* El camping ocupa lo que dos: sobra sitio y es el que mas se pulsa de los
-     * de pago. 145 + 10 + 300 = 455, los 456 utiles. */
-    casilla(f, NULL, "Camping", "de pago", COL_BOMBONA,   300, lv_pct(100),
-            declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_CAMPING));
+    casilla_sitio(f, "Area",    true,  COL_MANTENIMIENTO, CEL3_W,
+                  declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_AREA_PAGO));
+    /* El camping ocupa lo que dos: sobra sitio y no tiene pareja gratis -- no
+     * hay campings gratis. 145 + 10 + 300 = 455, los 456 utiles. */
+    casilla_sitio(f, "Camping", true,  COL_PEAJE,         300,
+                  declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_CAMPING));
 
     /* --- 8. Lo que queda sin cerrar ---
      * Se llega tocando la tira. Existe para PODER DESHACER: hasta que estén
@@ -3071,16 +3343,26 @@ void view_registro_create(lv_obj_t *parent)
     viaje_refresh();
     parada_refresh_extras();
 
-    /* Si quedo una parada sin cerrar, vigilar en segundo plano hasta que la P4
-     * diga que dia es y preguntar entonces. El dialogo se muda solo a la
-     * pantalla que este activa (ver confirm_screen.c), que al arrancar es la
-     * principal. Cada 2 s: la fecha llega a 1 Hz y no hay ninguna prisa. */
+    /* La parada del modelo VIEJO (namespace "parada" de NVS) ya no existe: el
+     * cuaderno se organiza por salidas y las paradas son eventos de salida.c.
+     * Si quedo una marcada de antes, se suelta aqui y no se pregunta por ella;
+     * dejarla puesta sacaria DOS dialogos de fin de parada al encender, uno por
+     * modelo, y el viejo no sabe cerrar nada que exista hoy. */
     parada_abierta_t pendiente;
     load_parada_abierta(&pendiente);
-    s_parada_abierta = pendiente.abierta;
-    viaje_refresh();           /* con el dato ya cargado: saca su boton */
-    if (s_parada_abierta) {
-        lv_timer_create(parada_fin_timer_cb, 2000, NULL);
+    if (pendiente.abierta) {
+        ESP_LOGW(TAG, "habia una parada del modelo viejo sin cerrar: la suelto");
+        clear_parada_abierta();
+    }
+    s_parada_abierta = false;
+    viaje_refresh();
+
+    /* Si quedo una parada abierta de VERDAD (un evento de la salida), vigilar
+     * en segundo plano hasta que la P4 diga la hora y preguntar entonces. El
+     * dialogo se muda solo a la pantalla que este activa (ver
+     * confirm_screen.c). Cada 2 s: la fecha llega a 1 Hz y no hay prisa. */
+    if (parada_idx() >= 0) {
+        lv_timer_create(parada_boot_timer_cb, 2000, NULL);
     }
 
     /* --- Editor de campo --- */

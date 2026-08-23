@@ -67,6 +67,15 @@ cuanto la P4 vuelva, y **no se pierden al quitar el contacto**. Está siempre a
 la vista mientras quede algo, porque esta pantalla no puede saber que vas a
 apagar — se queda sin corriente y ya.
 
+> **El aviso de «sin cerrar» se ve aquí, no solo en el cuaderno.** Si dejaste
+> algo declarado, abajo al centro sale una pastilla naranja **«2 sin cerrar ›»**.
+> Es la pantalla que está puesta mientras conduces, así que es donde tiene que
+> verse. **Se toca** y te lleva derecho a la lista para cerrarlo o borrarlo.
+>
+> Comparte sitio con el aviso de «N sin enviar» (apuntes que aún no han llegado
+> a la P4); si hay de los dos, salen juntos. Ese no se toca: se arregla solo en
+> cuanto la P4 aparezca.
+
 ---
 
 ## 3. Pantalla de Inclinación (nivelar)
@@ -196,9 +205,16 @@ esta pantalla no tiene reloj propio. Si no está, avisa y no anota.
 ### Borrar algo que anotaste antes
 
 La tira de arriba, cuando hay algo abierto, pone **«2 sin cerrar ›»**. **Tócala**
-y sale la lista de lo que tienes pendiente: qué es, a qué hora lo anotaste y un
-**Borrar** al lado de cada uno. Pide confirmación, y al borrar el último te
-devuelve al menú.
+y sale la lista de lo que tienes pendiente: qué es, a qué hora lo anotaste y los
+botones de cada uno:
+
+- **Terminar** (verde) — solo en las **paradas**, que es lo único que hoy se sabe
+  cerrar. Saca la misma pregunta de prolongar o terminarla.
+- **Borrar** (rojo) — en todos. Pide confirmación, y al borrar el último te
+  devuelve al menú.
+
+A la lista también se llega **desde la pantalla de datos**, tocando la pastilla
+naranja de «N sin cerrar» (apartado 2).
 
 Es la red de seguridad mientras no estén las pantallas de cerrar apuntes: sin
 ella, un toque equivocado se quedaría ahí para siempre.
@@ -496,10 +512,13 @@ llama por lo que es: **`historico.tar`**.
 
 Para no llevarse sorpresas:
 
-1. **Lo declarado todavía no se cierra solo.** Al volver a dar el contacto aún no te pregunta
-   por lo que dejaste abierto: el apunte se queda en la lista («2 sin cerrar»)
-   esperando a que esa parte esté hecha. Lo único que se guarda entero de
-   principio a fin es el **peaje**, que se rellena en el momento.
+1. **De lo declarado, solo la parada se cierra.** Al volver a dar el contacto te
+   pregunta por la parada (prolongar o terminarla). Del resto —aguas, repostaje,
+   bombona, avería, ITV— todavía no te pide los números: se quedan en la lista
+   («2 sin cerrar») esperando a que esa parte esté hecha. Y de la **pernocta** se
+   guarda el sitio y las noches, pero aún no los servicios ni el precio. Lo único
+   que se guarda entero de principio a fin es el **peaje**, que se rellena en el
+   momento.
 2. **No hay kilómetros.** La P4 no tiene GPS ni cuentakilómetros todavía, así
    que el resumen no puede decir cuánto recorriste. Lo dice explícitamente en
    vez de callarlo, para que no parezca un viaje de 0 km. Cuando llegue el GPS,

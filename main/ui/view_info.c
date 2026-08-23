@@ -24,6 +24,7 @@
  * lucecitas.
  */
 #include "view_info.h"
+#include "nav.h"
 #include "../data_model.h"
 #include "esp_timer.h"
 #include <stdio.h>
@@ -68,6 +69,10 @@ static lv_obj_t   *s_frigo_val;
 static lv_obj_t   *s_frigo_trend;  /* flecha de tendencia */
 static lv_obj_t   *s_ext_trend;
 static lv_obj_t   *s_pendientes;      /* pastilla "N sin enviar", oculta si 0 */
+
+/* Definidas abajo, con el resto de la pastilla. */
+static void pendientes_aplicar(void *arg);
+static void pendientes_click_cb(lv_event_t *e);
 static lv_obj_t   *s_gps;             /* indicador de GPS de la P4 */
 static lv_obj_t   *s_frigo_fan;
 static lv_obj_t   *s_ext_val;
@@ -830,6 +835,14 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_border_color(s_pendientes, lv_color_hex(0x000000), 0);
     lv_obj_set_style_border_width(s_pendientes, 3, 0);
     lv_obj_align(s_pendientes, LV_ALIGN_BOTTOM_MID, 0, -6);
+    /* Se TOCA cuando hay algo que cerrar: lleva derecho a la lista. Un aviso
+     * que solo avisa obliga a acordarse de a donde hay que ir. */
+    lv_obj_add_flag(s_pendientes, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(s_pendientes, 10);
+    lv_obj_add_event_cb(s_pendientes, pendientes_click_cb, LV_EVENT_CLICKED, NULL);
+    /* La pantalla de registros puede haberse creado antes y haber contado ya lo
+     * que quedo abierto; sin esto, ese aviso no saldria hasta el primer cambio. */
+    pendientes_aplicar(NULL);
 
     /* Indicador del GPS de la P4. Arriba a la izquierda, justo detras del punto
      * de conexion: la cabecera de la tarjeta de bateria lleva el titulo
@@ -861,22 +874,54 @@ void view_info_create(lv_obj_t *parent)
  * se aplaza con lv_async_call: tocar un widget desde otra tarea corrompe la
  * lista de objetos y el fallo aparece mucho despues y en otro sitio. */
 static size_t s_pend_valor;
+static size_t s_sin_cerrar;
 
+/* UNA sola pastilla para las dos cosas, y no dos: son avisos distintos pero
+ * comparten el unico hueco de la pantalla donde no tapan un numero. Dos
+ * pastillas se pisarian, y moverlas de sitio segun cual haya se ve peor que
+ * leerlas juntas. */
 static void pendientes_aplicar(void *arg)
 {
     (void)arg;
     if (!s_pendientes) return;
-    if (s_pend_valor == 0) {
+    if (s_pend_valor == 0 && s_sin_cerrar == 0) {
         lv_obj_add_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
         return;
     }
-    lv_label_set_text_fmt(s_pendientes, "%u sin enviar", (unsigned)s_pend_valor);
+    /* Primero lo que pide algo de ti (cerrar un apunte); despues lo que se
+     * arregla solo en cuanto la P4 aparezca. */
+    /* La flecha solo cuando el toque lleva a algun sitio: "sin enviar" no se
+     * arregla tocando nada, se arregla encendiendo la P4. */
+    if (s_sin_cerrar && s_pend_valor) {
+        lv_label_set_text_fmt(s_pendientes, "%u sin cerrar - %u sin enviar  >",
+                              (unsigned)s_sin_cerrar, (unsigned)s_pend_valor);
+    } else if (s_sin_cerrar) {
+        lv_label_set_text_fmt(s_pendientes, "%u sin cerrar  >", (unsigned)s_sin_cerrar);
+    } else {
+        lv_label_set_text_fmt(s_pendientes, "%u sin enviar", (unsigned)s_pend_valor);
+    }
     lv_obj_clear_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
     lv_obj_align(s_pendientes, LV_ALIGN_BOTTOM_MID, 0, -6);
+}
+
+static void pendientes_click_cb(lv_event_t *e)
+{
+    (void)e;
+    if (s_sin_cerrar == 0) return;   /* "sin enviar" no lleva a ningun sitio */
+    nav_ir_a_sin_cerrar();
 }
 
 void view_info_set_pendientes(size_t pendientes)
 {
     s_pend_valor = pendientes;
+    lv_async_call(pendientes_aplicar, NULL);
+}
+
+void view_info_set_sin_cerrar(size_t sin_cerrar)
+{
+    /* Esta llega DESDE LVGL (la pantalla de registros), pero se aplaza igual:
+     * asi las dos entradas hacen lo mismo y no hay que acordarse de cual es
+     * cual el dia que se toque. */
+    s_sin_cerrar = sin_cerrar;
     lv_async_call(pendientes_aplicar, NULL);
 }
