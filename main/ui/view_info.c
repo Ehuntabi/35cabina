@@ -625,17 +625,17 @@ static void refresh_cb(lv_timer_t *t)
          * todavia, last_update_ms vale 0 y la resta daria "fresco". */
         bool fresco = d.last_update_ms != 0 &&
                       (ms - d.last_update_ms < CONN_TIMEOUT_MS);
-        /* CIAN para "buscando", y no el naranja de antes: el icono vive pegado
-         * al marco de la tarjeta de bateria, que es naranja (COL_BORDER_BAT,
-         * 0xFF9800) -- o sea, EXACTAMENTE el mismo color. Mirandolo no habia
-         * forma de saber si estaba buscando o apagado (usuario, 24-ago-2026:
-         * "esta gris o un naranja raro, no se parece nada").
-         *
-         * Los tres estados quedan en colores que no se tocan entre si ni con lo
-         * que tienen al lado: gris apagado, cian buscando, verde fijado. */
+        /* LOS MISMOS COLORES QUE LA P4, que es donde tambien se mira este
+         * estado: gris apagado, ambar buscando, verde fijado. Se probo el cian
+         * un rato para "buscando" creyendo que el naranja se confundia con el
+         * marco de la tarjeta de bateria (que es ese mismo 0xFF9800), pero el
+         * problema no era el color: el icono estaba gris de verdad, colgado del
+         * shunt. Y el rotulo BATERIA, naranja y pegado al mismo marco, se lee
+         * perfectamente. Dos pantallas diciendo lo mismo de dos colores
+         * distintos confunde mas que un naranja junto a otro. */
         uint32_t c = !fresco             ? 0x666666    /* sin enlace */
                    : (d.gps_estado == 2) ? 0x4CD964    /* fijado   */
-                   : (d.gps_estado == 1) ? 0x4FC3F7    /* buscando */
+                   : (d.gps_estado == 1) ? 0xFF9800    /* buscando */
                                          : 0x666666;   /* la P4 no ve el GPS */
         lv_obj_set_style_text_color(s_gps, lv_color_hex(c), 0);
     }
