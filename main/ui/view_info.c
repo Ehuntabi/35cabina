@@ -610,9 +610,17 @@ static void refresh_cb(lv_timer_t *t)
          * 5 s; faltaba aplicarlo en el lado que recibe. */
         uint32_t ms = (uint32_t)(esp_timer_get_time() / 1000);
         bool fresco = d.has_data && (ms - d.last_update_ms < CONN_TIMEOUT_MS);
+        /* CIAN para "buscando", y no el naranja de antes: el icono vive pegado
+         * al marco de la tarjeta de bateria, que es naranja (COL_BORDER_BAT,
+         * 0xFF9800) -- o sea, EXACTAMENTE el mismo color. Mirandolo no habia
+         * forma de saber si estaba buscando o apagado (usuario, 24-ago-2026:
+         * "esta gris o un naranja raro, no se parece nada").
+         *
+         * Los tres estados quedan en colores que no se tocan entre si ni con lo
+         * que tienen al lado: gris apagado, cian buscando, verde fijado. */
         uint32_t c = !fresco             ? 0x666666    /* sin enlace */
-                   : (d.gps_estado == 2) ? 0x4CD964    /* fijado  */
-                   : (d.gps_estado == 1) ? 0xFF9800    /* buscando */
+                   : (d.gps_estado == 2) ? 0x4CD964    /* fijado   */
+                   : (d.gps_estado == 1) ? 0x4FC3F7    /* buscando */
                                          : 0x666666;   /* la P4 no ve el GPS */
         lv_obj_set_style_text_color(s_gps, lv_color_hex(c), 0);
     }

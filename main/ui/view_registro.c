@@ -2547,7 +2547,9 @@ static void barra_timer_cb(lv_timer_t *t)
     uint32_t c_wifi = fresco ? 0x4CD964 : 0x666666;
     uint32_t c_gps  = !fresco ? 0x666666
                               : (d.gps_estado == 2) ? 0x4CD964
-                              : (d.gps_estado == 1) ? 0xFF9800 : 0x666666;
+                              /* Cian, como en la pantalla de datos: el naranja
+                               * se confundia con el marco de la bateria. */
+                              : (d.gps_estado == 1) ? 0x4FC3F7 : 0x666666;
 
     char hora[8] = "--:--";
     uint32_t ahora;
