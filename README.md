@@ -518,13 +518,27 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   como un temblor permanente de 3-4 px. Se ataca por los dos lados, en `tilt.c`:
   **`BW_RATE` a 12,5 Hz** (de fábrica arranca a 100 Hz, o sea 50 Hz de ancho de
   banda y todo el ruido dentro; parada no hay nada que medir por encima de unos
-  pocos hercios) y **media exponencial α=0,2 sobre el VECTOR de gravedad**, no
+  pocos hercios) y **media exponencial α=0,12 sobre el VECTOR de gravedad**, no
   sobre los ángulos — promediar después de la arcotangente deforma cerca de los
   extremos. Dos salvaguardas: **salto** (si la lectura se aleja más de 0,03 g,
   ~1,7°, el filtro se tira al valor nuevo de golpe, así que subir a una rampa se
   ve al instante) y **olvido** (si hace más de 1 s que nadie lee, empieza de
   cero: si no, la inclinación que se guarda al aparcar —una sola lectura cada
   muchas horas— saldría mezclada con la de la última vez que se miró el nivel).
+
+  **Con el filtro solo no bastó** (probado en la placa, 24-ago: "ahora es menor,
+  pero sigue moviéndose"). El resto de ruido que sobrevive sigue siendo suficiente
+  para mover el dibujo, porque una centésima de grado ya es un cuarto de píxel. Lo
+  que lo deja quieto del todo es la **zona muerta de 3 px** en `view_inclinacion.c`:
+  la bola no se redibuja hasta que su sitio nuevo está a 3 px o más (0,17°, muy por
+  debajo del círculo verde de 1°). La zona muerta decide **cuándo** se redibuja, no
+  dónde: al moverse va a la posición exacta, no a saltos de 3. Los grados escritos
+  llevan lo mismo con 0,08° de histéresis, o la última cifra bailaba sola cuando el
+  valor caía entre dos décimas.
+
+  Lección: **el ruido se quita donde se ve**. Filtrar más y más en el sensor añade
+  retardo y nunca llega a cero; un umbral en el dibujo cuesta cuatro líneas y es
+  el que cierra el asunto.
 
   Estado real: con el ADXL345 cableado a IO17/IO18 el arranque dice
   `tilt: ADXL345 OK` y **el mapeo de ejes está comprobado** — cabeceo y

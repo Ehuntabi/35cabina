@@ -137,7 +137,10 @@ static bool read_raw_g(float *ax, float *ay, float *az)
  * Sin eso, la inclinacion que se guarda al aparcar (view_registro la pide una
  * sola vez, cada muchas horas) saldria mezclada con la de donde estabas la
  * ultima vez que se miro el nivel. */
-#define TILT_ALFA        0.20f
+/* 0,12 y no 0,20: con 0,20 (probado en la placa el 24-ago) el temblor bajaba
+ * pero seguia viendose. Constante de tiempo ~1,5 s leyendo cada 200 ms. Lo que
+ * salva la respuesta es TILT_SALTO_G, no el alfa. */
+#define TILT_ALFA        0.12f
 #define TILT_SALTO_G     0.03f
 #define TILT_OLVIDO_US   (1000 * 1000)
 
