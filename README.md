@@ -281,6 +281,17 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   estimado a propósito: en julio una estimación de "ronda los 300" para la parada
   (que eran 505) costó una auditoría y apuntes perdidos en silencio.
 
+  **El color de los botones va con lo que HACEN, no con dónde están**
+  (24-ago-2026, a raíz de mirarlo en la placa). El diálogo pintaba siempre el de
+  la derecha —el de la acción— en verde y el de la izquierda en rojo, así que en
+  los cinco casos donde el «sí» es lo destructivo salía al revés de lo que dice
+  el color: «Anotado» enseñaba *Vale* en rojo y *Deshacer* en verde. Ahora
+  `confirm_screen_ok_destructivo()`, llamado justo después de abrir, los cruza;
+  cada apertura vuelve al reparto normal, así que no hay que deshacerlo. Los
+  cinco: Anotado, borrar un apunte, finalizar un viaje, apartarlo y descartar
+  apuntes abiertos. El título de «Anotado» pasa además a verde: es una buena
+  noticia y en rojo parecía un error.
+
   ⏳ **Lo que falta del rediseño**: el aviso de «estuviste parado desde las
   19:40». Deshacer se puede de dos maneras: en el cartel de «Anotado» y en la
   pantalla de lo que queda sin cerrar.

@@ -197,7 +197,9 @@ no perder el apunte sin decírtelo.
 
 ### Qué pasa cuando declaras algo
 
-Sale un **«Anotado»** con dos botones: **Vale** y **Deshacer** (en rojo). Se abre
+Sale un **«Anotado»** con dos botones: **Vale** (verde) y **Deshacer** (rojo).
+En las preguntas, **el color va con lo que hace el botón, no con dónde está**:
+rojo lo que borra o deshace, verde lo demás. Se abre
 de un toque, así que un dedo equivocado tiene que tener vuelta atrás. El apunte queda **abierto** y guardado en la
 memoria interna, así que **sobrevive a que se apague la pantalla** — que es
 justo lo que va a pasar en cuanto quites el contacto.

@@ -2222,6 +2222,7 @@ static void viaje_finalizar_cb(lv_event_t *e)
     (void)e;
     confirm_screen_open("Finalizar el viaje?", NULL, COL_ACCION_STOP,
                         "Si, finalizar", "Cancelar", viaje_do_finalizar, NULL);
+    confirm_screen_ok_destructivo();
 }
 
 static lv_obj_t *make_save_button(lv_obj_t *parent, const char *text, lv_event_cb_t cb, void *user_data)
@@ -3348,8 +3349,11 @@ static void declarar(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
     snprintf(cuerpo, sizeof(cuerpo),
              "Queda abierto: %s.\nCuando vuelvas a dar el\ncontacto te pedire los datos.",
              EV_NOMBRE[tipo]);
-    confirm_screen_open("Anotado", cuerpo, COL_ACCION_STOP,
+    /* El titulo en VERDE: "Anotado" es una buena noticia, y en rojo parecia que
+     * algo habia salido mal. */
+    confirm_screen_open("Anotado", cuerpo, COL_ACCION_OK,
                         "Deshacer", "Vale", deshacer_ultimo, NULL);
+    confirm_screen_ok_destructivo();
     volver_al_menu();
 }
 
@@ -3400,6 +3404,7 @@ static void borrar_cb(lv_event_t *e)
     confirm_screen_open("Borrar el apunte?", s_borrar_txt, COL_ACCION_STOP,
                         "Si, borrar", "No, dejarlo", borrar_do,
                         (void *)(intptr_t)idx);
+    confirm_screen_ok_destructivo();
 }
 
 /* --- El viaje que la P4 tiene abierto y esta pantalla no --------------------
@@ -3457,6 +3462,7 @@ static void viaje_p4_descartar_cb(lv_event_t *e)
     confirm_screen_open("Apartar el viaje?", "Su carpeta pasa a llamarse\nDESCARTADO_... y deja de\ncontar. No se borra nada.",
                         COL_ACCION_STOP, "Si, apartarlo", "Cancelar",
                         viaje_p4_descartar, NULL);
+    confirm_screen_ok_destructivo();
 }
 
 /* === La parada, al volver a dar el contacto ==============================
@@ -3791,6 +3797,7 @@ static bool avisa_de_lo_abierto(const char *titulo, confirm_cb_t si)
              n, n == 1 ? "" : "s", n == 1 ? "" : "n");
     confirm_screen_open(titulo, s_perder_txt, COL_ACCION_STOP,
                         "Si, descartar", "No, dejarlo", si, NULL);
+    confirm_screen_ok_destructivo();
     return true;
 }
 

@@ -38,6 +38,19 @@ void confirm_screen_open(const char *title, const char *body,
                          uint32_t color, const char *ok_text, const char *no_text,
                          confirm_cb_t cb, void *user_data);
 
+/* Pinta el boton del SI en ROJO y el del NO en VERDE. Para los dialogos donde
+ * lo destructivo es decir que si: "Anotado" (cuyo si es Deshacer), borrar un
+ * apunte, finalizar o apartar un viaje, descartar apuntes abiertos.
+ *
+ * Existe porque el color iba pegado a la POSICION y no a lo que hace el boton:
+ * el de la derecha siempre verde y el de la izquierda siempre rojo. En esos
+ * cinco dialogos eso pintaba de verde lo que borra y de rojo lo inofensivo --
+ * "Vale" en rojo y "Deshacer" en verde, justo al reves de lo que dice el color.
+ *
+ * Llamar DESPUES de confirm_screen_open(); cada apertura vuelve a los colores
+ * normales, asi que no hay que deshacerlo. */
+void confirm_screen_ok_destructivo(void);
+
 /* Cierra sin confirmar. Lo llama view_registro_reset() cuando el usuario se va
  * de la pagina con un gesto. */
 void confirm_screen_close(void);

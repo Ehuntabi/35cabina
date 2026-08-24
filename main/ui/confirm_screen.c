@@ -60,15 +60,22 @@ static void no_cb(lv_event_t *e)
     close_overlay();
 }
 
+/* El color de un boton, con su tono de pulsado. Aparte porque los dos botones
+ * cambian de color segun el dialogo (ver confirm_screen_ok_destructivo). */
+static void btn_color(lv_obj_t *btn, uint32_t color)
+{
+    lv_obj_set_style_bg_color(btn, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_color(btn, lv_color_darken(lv_color_hex(color), LV_OPA_30),
+                              LV_STATE_PRESSED);
+}
+
 static lv_obj_t *make_btn(lv_obj_t *parent, uint32_t color, lv_event_cb_t cb,
                            lv_align_t align, lv_obj_t **lbl_out)
 {
     lv_obj_t *btn = lv_btn_create(parent);
     lv_obj_set_size(btn, CONF_BTN_W, CONF_BTN_H);
     lv_obj_set_style_radius(btn, 12, 0);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(color), 0);
-    lv_obj_set_style_bg_color(btn, lv_color_darken(lv_color_hex(color), LV_OPA_30),
-                              LV_STATE_PRESSED);
+    btn_color(btn, color);
     lv_obj_align(btn, align, align == LV_ALIGN_BOTTOM_LEFT ? 8 : -8, -8);
     lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
 
@@ -134,6 +141,11 @@ void confirm_screen_open(const char *title, const char *body,
 
     lv_label_set_text(s_title, title ? title : "");
     lv_obj_set_style_text_color(s_title, lv_color_hex(color), 0);
+    /* Colores normales: la accion en verde y el "no" en rojo. Quien necesite lo
+     * contrario llama a confirm_screen_ok_destructivo() justo despues. Se
+     * rehace en CADA apertura porque el dialogo es uno solo y se reutiliza. */
+    btn_color(s_ok_btn, COL_OK);
+    btn_color(s_no_btn, COL_NO);
     /* Puede venir oculto de un aviso anterior. */
     lv_obj_clear_flag(s_no_btn, LV_OBJ_FLAG_HIDDEN);
     /* La letra del cuerpo se ajusta a lo que hay que contar. Entre el titulo y
@@ -176,6 +188,13 @@ void confirm_screen_aviso(const char *title, const char *body,
     confirm_screen_open(title, body, color, ok_text ? ok_text : "Entendido",
                         NULL, NULL, NULL);
     if (s_no_btn) lv_obj_add_flag(s_no_btn, LV_OBJ_FLAG_HIDDEN);
+}
+
+void confirm_screen_ok_destructivo(void)
+{
+    if (!s_ok_btn || !s_no_btn) return;
+    btn_color(s_ok_btn, COL_NO);
+    btn_color(s_no_btn, COL_OK);
 }
 
 void confirm_screen_close(void)
