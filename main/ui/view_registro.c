@@ -1394,7 +1394,12 @@ static const char *val_or_dash(lv_obj_t *ta)
 
 /* Buffer del resumen. Estatico porque el dialogo lo sigue leyendo despues de
  * que save_generic_cb() haya terminado. */
-static char s_resumen[256];
+/* 320 y no 256: la pernocta con todo puesto -- sitio, noches, precio de la
+ * noche, los seis servicios con su importe, la nota y las cuatro pegas -- ronda
+ * los 225 caracteres, y 256 dejaba un margen que no daba para nada. Lo que va al
+ * apunte se recorta aparte a 96 (ver apunte_encolar); el desglose de verdad va
+ * en columnas, no en esta linea. */
+static char s_resumen[320];
 
 /* Los servicios marcados, en una linea y con su nombre entero: el dialogo baja
  * la letra si hace falta (confirm_screen.c) y "Vaciado grises" se entiende sin
@@ -1412,8 +1417,20 @@ static void serv_lista_txt(char *buf, size_t n)
     for (uint8_t i = 0; i < SERV_COUNT; i++) {
         if (!lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED)) continue;
         marcados++;
-        int w = snprintf(buf + used, n - used, "%s%s", used ? ", " : "",
+        /* Cada uno con LO QUE COSTO pegado a su nombre, no todo sumado al final
+         * (usuario, 24-ago-2026): un total no dice si lo caro fue el agua o la
+         * luz, que es justo lo que se repasa antes de aceptar. El que no lleva
+         * importe es que fue gratis, y va con su nombre a secas: poner "gratis"
+         * seis veces llenaria la linea de nada. */
+        const char *p = lv_textarea_get_text(s_serv_precio_ta[i]);
+        int w;
+        if (p && p[0]) {
+            w = snprintf(buf + used, n - used, "%s%s %s", used ? ", " : "",
+                         SERV_OPCIONES[i], p);
+        } else {
+            w = snprintf(buf + used, n - used, "%s%s", used ? ", " : "",
                          SERV_OPCIONES[i]);
+        }
         if (w < 0 || (size_t)w >= n - used) return;
         used += (size_t)w;
     }
@@ -1633,7 +1650,10 @@ static void build_resumen(categoria_t cat)
              * repasar -- pero la de servicios si: un parking gratis con agua es
              * justo lo que interesa recordar. */
             uint32_t noches = salida_noches(s_pern_ini, s_pern_fin);
-            char serv[160];
+            /* 224: con los seis servicios marcados y su importe, mas la nota y
+             * las cuatro pegas, la lista se va a ~185 caracteres. Con 160 se
+             * cortaba justo por las pegas. */
+            char serv[224];
             serv_lista_txt(serv, sizeof(serv));
 
             char precio[64];
@@ -1644,15 +1664,15 @@ static void build_resumen(categoria_t cat)
                          val_or_dash(s_pern_precio_ta),
                          currency_of(s_pern_currency_dd));
             }
-            /* Lo que costaron, DETRAS de la lista: primero el concepto y
-             * luego el precio, como en el resto de la pantalla (usuario,
-             * 24-ago-2026). El desglose no cabe aqui y tampoco hace falta --
-             * va entero en el apunte. */
-            char extras[48];
+            /* La moneda, UNA vez al final. Los importes van pegados a su
+             * servicio (ver serv_lista_txt), asi que aqui solo falta decir en
+             * que se paga -- y repetirlo seis veces no cabria. En un sitio de
+             * pago ya sale arriba con el precio de la noche, pero en uno gratis
+             * esta es la unica linea que lo dice. */
+            char extras[16];
             extras[0] = '\0';
-            float st = serv_total();
-            if (st > 0.005f) {
-                snprintf(extras, sizeof(extras), "  -  %.2f %s", st,
+            if (serv_total() > 0.005f) {
+                snprintf(extras, sizeof(extras), "  (%s)",
                          currency_of(s_pern_currency_dd));
             }
             snprintf(s_resumen, sizeof(s_resumen), "%s  -  %u noche%s\n%sServicios:  %s%s",
