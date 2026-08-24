@@ -567,10 +567,17 @@ static void refresh_aguas(const mini_data_t *d)
 static void update_conn_dots(const mini_data_t *d)
 {
     /* Un unico frame UDP 1Hz trae todo el paquete -> mismo estado de
-     * enlace para todas las cards (igual que en el mini). */
+     * enlace para todas las cards (igual que en el mini).
+     *
+     * Lo que se mira es el ENLACE, o sea last_update_ms, que se sella con cada
+     * mensaje valido. Antes se exigia ademas d->has_data, que NO significa "hay
+     * enlace" sino "el SmartShunt esta mandando SoC": en un banco de pruebas sin
+     * shunt, el punto salia GRIS con la P4 hablando a 1 Hz, diciendo "no hay
+     * conexion" cuando la habia (24-ago-2026). Mismo fallo que tenia el icono
+     * del GPS y por el mismo motivo. */
     lv_color_t col;
-    if (!d->has_data) {
-        col = COL_CONN_NONE;
+    if (d->last_update_ms == 0) {
+        col = COL_CONN_NONE;          /* todavia no ha llegado NADA */
     } else {
         uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
         col = (now - d->last_update_ms < CONN_TIMEOUT_MS) ? COL_CONN_OK : COL_CONN_LOST;
