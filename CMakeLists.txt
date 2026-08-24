@@ -7,7 +7,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 #
 #  1. ESP-IDF hace `git describe --tags` SIN filtro, asi que cualquier etiqueta
 #     que no sea de version (las `sdkconfig-known-good-*` de los proyectos
-#     hermanos) se colaria en el About. Con --match solo cuentan las v*.*.*
+#     hermanos) se colaria en el About. El patron es "v*.*" y NO "v*.*.*":
+#     desde el 24-ago-2026 las versiones llevan DOS numeros (v1.10). El comodin
+#     de git abarca tambien el punto, asi que encuentra igual las nuevas que
+#     las viejas de tres, y las sdkconfig siguen fuera por no empezar por v.
 #  2. Lo calcula al CONFIGURAR, no al compilar, asi que se congela: compilas y
 #     grabas, y el About sigue enseñando la version de hace veinte commits.
 #     Miente con autoridad -- creerias tener instalada la publicada (24-ago-2026:
@@ -16,7 +19,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 #     Ojo: un fichero tocado y SIN anadir no lo dispara, asi que el sufijo
 #     `-dirty` puede tardar en aparecer.
 execute_process(
-    COMMAND git describe --always --tags --dirty --match "v*.*.*"
+    COMMAND git describe --always --tags --dirty --match "v*.*"
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     OUTPUT_VARIABLE PROJECT_VER
     OUTPUT_STRIP_TRAILING_WHITESPACE

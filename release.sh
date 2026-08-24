@@ -2,12 +2,12 @@
 #
 # release.sh — publica una versión de la 3,5" de cabina.
 #
-# Uso:  ./release.sh X.Y.Z  ["mensaje del tag"]
+# Uso:  ./release.sh X.Y  ["mensaje del tag"]
 #   ej: ./release.sh 1.9.8 "El icono del GPS ya no cuelga del shunt"
 #
 # Qué hace:
 #   1. Exige el árbol limpio (lo que se publica tiene que ser lo que hay).
-#   2. Crea el tag vX.Y.Z, o reutiliza el que ya esté EN ESTE MISMO commit.
+#   2. Crea el tag vX.Y, o reutiliza el que ya esté EN ESTE MISMO commit.
 #   3. Reconfigura y compila -- el reconfigure no es opcional: la versión se
 #      calcula al CONFIGURAR, no al compilar, así que sin él se publicaría un
 #      binario con la versión anterior dentro.
@@ -26,8 +26,18 @@ IDF_EXPORT="$HOME/.espressif/esp-idf-5.4/export.sh"
 RELDIR="$HOME/joint-releases"
 APP_BIN="build/35cabina.bin"
 
-[ $# -ge 1 ] || { echo "Uso: ./release.sh X.Y.Z [\"mensaje\"]"; exit 1; }
-VER="$1"; TAG="v$VER"
+[ $# -ge 1 ] || { echo "Uso: ./release.sh X.Y [\"mensaje\"]"; exit 1; }
+VER="${1#v}"                                  # quita una 'v' inicial si la hay
+# DOS numeros, no tres (24-ago-2026, mismo criterio que el proyecto hermano de
+# la P4). Con tres se acababa gastando un numero por commit; con dos, una
+# version es una TANDA de trabajo. Aqui ANTES NO SE VALIDABA NADA: colaba
+# cualquier cosa como version, incluido un dedazo.
+if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+$'; then
+    echo "ERROR: '$1' no tiene el formato X.Y (ej: 1.10)."
+    echo "       Desde el 24-ago-2026 las versiones llevan DOS numeros, no tres."
+    exit 1
+fi
+TAG="v$VER"
 MSG="${2:-Release $TAG}"
 
 # ── 1) el árbol, limpio ─────────────────────────────────────────────────────
