@@ -18,8 +18,7 @@ Se reutiliza:
   `lv_port.c/h`, `display.h`) — pantalla QSPI, táctil, bus I2C compartido,
   LVGL. Estabilidad heredada de la saga del hang cerrada 18-may-2026 (mismo
   `sdkconfig`).
-- La **arquitectura de red y datos** del satélite `victron_mini`
-  (`~/joint/victron_mini`, ESP32-C6): recepción UDP broadcast del AP
+- La **arquitectura de red y datos**: recepción UDP broadcast del AP
   de la P4 (**`ESP_DC078D`**, no `VictronConfig`: ese es sólo el valor de
   fábrica del código de la P4, y lo que manda es lo guardado en su NVS —
   comprobado en su log el 21-ago-2026), protocolo `mini_msg_t` (36 bytes,
@@ -113,7 +112,7 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
    │  ├─ view_inclinacion.c/h         # izquierda: burbuja de nivel (Fase 3)
    │  └─ view_ajustes.c/h             # SSID/password de la P4, editable sin reflashear
    └─ net/
-      ├─ mini_proto.h                 # protocolo compartido con la P4 (el mini C6 ya no cuenta)
+      ├─ mini_proto.h                 # protocolo compartido con la P4, byte a byte
       └─ udp_rx.c/h                   # STA + receptor UDP :4242 (Fase 1)
 ```
 
@@ -656,8 +655,7 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 ## Trabajo multi-equipo (`./empiezo` / `./termino`)
 
 Para trabajar indistintamente en PC y portátil manteniendo el repo
-siempre sincronizado (mismo patrón que `~/joint/victron` y
-`~/joint/victron_mini`):
+siempre sincronizado (mismo patrón que `~/joint/victron`):
 
 - **`./empiezo`** — al sentarte: aparta cambios locales (stash), `git
   pull --rebase`, recupera tus cambios y abre Claude Code. `--no-claude`
@@ -695,15 +693,9 @@ Reused:
   (`esp_bsp.c/h`, `lv_port.c/h`, `display.h`) — QSPI display, touch, shared
   I2C bus, LVGL. Stability inherited from the "hang saga" closed on
   2026-05-18 (same `sdkconfig`).
-- The **network/data architecture** of the `victron_mini` satellite
-  (ESP32-C6): UDP broadcast reception from the P4's Soft-AP (`ESP_DC078D`),
-  `mini_msg_t` protocol (36 bytes, version 3, port 4242).
-
-> **The C6 is retired (2026-08-20): this display replaces it.**
-> `mini_proto.h` is now kept in sync with `~/joint/victron` only, and the
-> protocol is free to grow beyond the inherited 32 bytes. Caveat while the
-> C6 is still plugged in: bumping `MINI_PROTO_VERSION` silences it, since it
-> rejects versions it doesn't know.
+- The **network/data architecture**: UDP broadcast reception from the P4's
+  Soft-AP (`ESP_DC078D`), `mini_msg_t` protocol (36 bytes, version 3, port
+  4242).
 
 See the roadmap above (Fases 0-4) for what's implemented vs. planned.
 
