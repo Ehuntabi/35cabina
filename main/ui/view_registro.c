@@ -1510,9 +1510,32 @@ static void build_resumen(categoria_t cat)
  * incontestable. */
 static uint32_t reloj_p4(void)
 {
+    /* OJO CON LO QUE HABIA AQUI (arreglado el 24-ago-2026): devolvia
+     * d.epoch_local TAL CUAL, o sea el ultimo valor recibido, CONGELADO. Con la
+     * P4 callada un rato -- se apaga, se sale del alcance, se reinicia -- esta
+     * pantalla creia que seguian siendo las 19:40 de cuando dejo de hablar.
+     * Cerrar una parada entonces la fechaba en ESE instante: hora de fin
+     * equivocada, duracion equivocada y noches mal contadas, sin que nada
+     * chirriara.
+     *
+     * reloj.c existe justo para esto: guarda la hora CON el esp_timer de cuando
+     * la supo y le suma lo transcurrido. Los nueve sitios que llaman aqui
+     * preguntan lo mismo -- "¿se que hora es?" -- y esa pregunta se contesta
+     * bien aunque la P4 no este delante. */
+    uint32_t ahora = 0;
+    return reloj_ahora(&ahora) ? ahora : 0;
+}
+
+/* Distinto de lo de arriba: aqui se pregunta si la P4 esta AHORA a la escucha.
+ * Solo importa para iniciar un viaje, que va directo por HTTP y sin ella no hay
+ * carpeta donde meter nada -- y no tiene sentido hacer teclear el destino para
+ * luego no poder empezar. */
+static bool p4_a_la_escucha(void)
+{
     mini_data_t d;
     data_model_get(&d);
-    return d.epoch_local;     /* 0 = la P4 aun no ha dicho la hora */
+    uint32_t ms = (uint32_t)(esp_timer_get_time() / 1000);
+    return d.last_update_ms != 0 && (ms - d.last_update_ms) < 5000;
 }
 
 /* Monta el apunte de la categoria y lo mete en la cola.
@@ -1854,7 +1877,7 @@ static void viaje_iniciar_cb(lv_event_t *e)
     /* Se exige la P4 ANTES de teclear nada: la carpeta del viaje lleva la fecha
      * en el nombre y este aparato no tiene reloj propio. Preguntar el destino
      * para luego no poder empezar seria hacer teclear en balde. */
-    if (reloj_p4() == 0) {
+    if (!p4_a_la_escucha()) {
         confirm_screen_aviso("Enciende la P4 primero",
                              "Sin ella no se que dia es,\ny la carpeta del viaje lleva\nla fecha en el nombre.",
                              COL_ACCION_STOP, "Entendido");

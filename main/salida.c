@@ -104,6 +104,22 @@ void salida_init(void)
         s_st.tipo    = SALIDA_NINGUNA;
     }
 
+    /* Lo que sale de la NVS no se da por bueno aunque la version y el tamano
+     * cuadren. Tres saneos que cuestan tres lineas:
+     *  - Los textos, terminados a la fuerza: uno sin terminador se leeria mas
+     *    alla de su sitio (aqui mismo se imprimen con %s, y el nombre acaba en
+     *    la ruta de la carpeta del viaje en la SD de la P4).
+     *  - El tipo, dentro del enum: un valor cualquiera haria creer que hay una
+     *    salida en curso que no existe, y salida_hay() solo mira que no sea
+     *    NINGUNA.
+     *  - El numero de eventos, acotado, o los bucles leerian fuera del array. */
+    s_st.nombre[SALIDA_NOMBRE_MAX - 1]   = '\0';
+    s_st.carpeta[SALIDA_CARPETA_MAX - 1] = '\0';
+    if (s_st.tipo > (uint8_t)SALIDA_PUNTUAL) {
+        ESP_LOGW(TAG, "tipo de salida guardado fuera de rango (%u): lo descarto",
+                 (unsigned)s_st.tipo);
+        s_st.tipo = SALIDA_NINGUNA;
+    }
     if (s_st.n_eventos > SALIDA_EVENTOS_MAX) s_st.n_eventos = SALIDA_EVENTOS_MAX;
 
     refrescar_vista();
