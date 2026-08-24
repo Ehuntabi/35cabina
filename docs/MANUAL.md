@@ -678,7 +678,18 @@ GASTOS (EUR)
   Precio medio del litro: 1.520 EUR
 
 Paradas anotadas: 6
+
+ENERGIA
+  Cargados ......     8420 Wh
+  Gastados ......     7160 Wh
+  De la placa ...     6180 Wh   (31.4 h de sol)
+
+Kilometros: no disponibles (la P4 aun no tiene GPS).
 ```
+
+El apartado **ENERGIA es de este viaje y de ninguno más**: los contadores de la
+P4 se ponen a cero solos cuando declaras el viaje, y se cierran cuando lo
+finalizas. No tienes que tocar nada en la pantalla de atrás.
 
 Y mientras dura el viaje, **sin que hagas nada**, va guardando cada 5 minutos la
 batería, el solar, las temperaturas y las aguas, y cada hora un recuento de
