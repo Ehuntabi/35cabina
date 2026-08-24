@@ -242,6 +242,14 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   en singular a propósito, porque la P4 escribe `<tipo>s.csv` y con «aguas»
   saldría un `aguass.csv`.
 
+  ⚠️ **Cerrar un apunte tiene que LLEVARTE a la página de registros**
+  (`nav_ir_a_registros()` desde `cierre_empezar()`). El cartel de la pregunta se
+  muda a la pantalla activa (`confirm_screen.c`), así que salta encima de la
+  página de datos —la que se ve al dar el contacto—, pero el formulario vive en
+  la de registros. Sin ese salto, "Rellenarlo" abría el formulario en una página
+  que no se ve y parecía que el botón cerraba el cartel sin hacer nada. Visto en
+  la placa el 24-ago-2026.
+
   ⏳ **Lo que falta del rediseño**: los servicios y el precio de una
   **pernocta**; y el aviso de «estuviste parado desde las 19:40». Deshacer se
   puede de dos maneras: en el cartel de «Anotado» y en la pantalla de lo que

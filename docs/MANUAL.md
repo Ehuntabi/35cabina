@@ -247,8 +247,12 @@ abierto, se vuelve a preguntar).
         [ Luego ]          [ Rellenarlo ]
 ```
 
-**Rellenarlo** abre el formulario. **Luego** no descarta nada: sigue abierto y se
-vuelve a preguntar — rellenarlo con el surtidor delante no siempre se puede.
+**Rellenarlo** abre el formulario **y te lleva a la página del cuaderno**, que es
+donde vive. La pregunta aparece encima de la pantalla que estés mirando —
+normalmente la de datos, que es la que sale al dar el contacto—, así que si no te
+llevara parecería que el botón no hace nada. **Luego** no descarta nada: sigue
+abierto y se vuelve a preguntar — rellenarlo con el surtidor delante no siempre
+se puede.
 
 Al guardar, el apunte va a la P4 **con el mismo número que se le reservó al
 declararlo**, así que aunque se reintente no se duplica.

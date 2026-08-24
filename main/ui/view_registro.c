@@ -3299,6 +3299,14 @@ static void cierre_empezar(int idx, categoria_t cat)
     if (!ev) return;
     s_cerrando    = idx;
     s_cerrando_id = ev->id;
+    /* AL CARRUSEL PRIMERO. El formulario vive en la pagina de registros, pero la
+     * pregunta del arranque salta encima de la pagina que estes mirando (el
+     * dialogo se muda a la pantalla activa, ver confirm_screen.c). Sin esto,
+     * "Rellenarlo" abria el formulario en una pagina que no se ve y parecia que
+     * el boton cerraba el cartel sin hacer nada. Visto en la placa el
+     * 24-ago-2026 con las aguas; le pasaba igual al repostaje, la bombona y la
+     * averia. */
+    nav_ir_a_registros();
     show_form(cat);
 }
 
