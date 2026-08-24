@@ -745,10 +745,11 @@ Para no llevarse sorpresas:
    valoración), aguas, repostaje, bombona, avería e ITV. El **peaje** se guarda
    entero desde el principio, porque se rellena en el momento y no queda
    abierto.
-2. **No hay kilómetros.** La P4 no tiene GPS ni cuentakilómetros todavía, así
-   que el resumen no puede decir cuánto recorriste. Lo dice explícitamente en
-   vez de callarlo, para que no parezca un viaje de 0 km. Cuando llegue el GPS,
-   también se guardará **dónde** ocurrió cada cosa.
+2. **Los apuntes no dicen dónde.** La P4 **ya tiene GPS** (desde el 24-ago-2026)
+   y con él pone su reloj en hora sola, pero **la posición todavía no viaja**
+   hasta esta pantalla, así que ningún apunte guarda el lugar. Tampoco hay
+   kilómetros en el resumen: no hay cuentakilómetros, y el fichero lo dice
+   explícitamente en vez de callarlo, para que no parezca un viaje de 0 km.
 3. **Las monedas no se convierten.** Si el viaje cruza a Suiza, sumar euros con
    francos daría un total que no significa nada. El resumen **avisa** cuando ha
    habido más de una moneda y te manda a los CSV, que llevan cada uno la suya.

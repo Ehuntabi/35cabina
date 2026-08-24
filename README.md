@@ -389,9 +389,15 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   **Ningún formulario pide coordenada GPS ni hora** (se quitaron el
   20-ago-2026). Tecleadas a mano no aportan y estorban en el surtidor; cuando
   se abra la Fase 4 la fecha y la hora las pone **la P4 al recibir el evento**,
-  que es quien tiene el reloj bueno. Ojo: **no hay GPS en ningún aparato del
-  sistema** — ni en esta pantalla ni en la P4 — así que hoy la posición no
-  puede registrarla nadie; haría falta un módulo GPS de verdad.
+  que es quien tiene el reloj bueno.
+
+  **La P4 YA tiene GPS** desde el 24-ago-2026 (u-blox NEO-M9N por UART2, ver su
+  README): pone su reloj en hora sola y manda el estado —sin datos / buscando /
+  fijado— en el byte `gps_estado` del protocolo, que es lo que pinta el icono de
+  esta pantalla. Lo que **sigue sin viajar es la POSICIÓN**: el protocolo no la
+  lleva, así que los apuntes no dicen dónde ocurrió cada cosa. Sellarla al
+  recibir no vale —el vehículo se ha movido— y por eso hace falta mandarla con
+  su antigüedad, como ya se hace con la hora.
 
   Selector de moneda en los campos de importe (EUR por defecto, contempla
   otras monedas europeas — GBP/CHF/SEK/NOK/DKK/PLN/CZK/HUF/RON), **solo con
@@ -503,6 +509,17 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   apaga con el contacto y al encender no sabe ni qué día es. Por eso el
   protocolo lleva `epoch_local` desde la versión 3 (ver arriba). **Sin ese dato
   no se abre parada**: más vale no contar que inventarse las noches.
+
+  ⚠️ Pero ojo con CÓMO se lee ese dato, que costó un fallo feo (24-ago-2026):
+  `reloj_p4()` devolvía `d.epoch_local` **tal cual**, o sea el último valor
+  recibido, CONGELADO. Con la P4 callada un rato —se apaga, se sale de alcance,
+  se reinicia— esta pantalla creía que seguían siendo las 19:40 de cuando dejó
+  de hablar, y cerrar una parada entonces la fechaba en ESE instante: hora de
+  fin equivocada, duración equivocada y **noches mal contadas**. Ahora lo
+  contesta `reloj.c`, que guarda la hora CON el `esp_timer` de cuando la supo y
+  le suma lo transcurrido — que es justo para lo que se escribió. Iniciar viaje
+  es el único que pregunta otra cosa ("¿está la P4 AHORA a la escucha?"), porque
+  va directo por HTTP, y usa la frescura del enlace.
 
   Pero **eso se dice, no se calla** (`confirm_screen_aviso()`, un cartel de una
   sola salida sin el botón de "No, corregir"). Antes se guardaba la parada, la
