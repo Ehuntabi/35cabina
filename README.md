@@ -224,7 +224,10 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   momento. **Aguas** son tres filas de «casilla + importe» (vaciar grises,
   vaciar wc, llenar agua) y una moneda para las tres: marcado y sin importe
   significa **gratis**, que en las aguas es lo normal, y por eso hace falta la
-  casilla además del precio. Un importe **por cada cosa** y no uno total porque
+  casilla además del precio. **Escribir un precio marca su casilla**
+  (`agua_precio_cb`, solo marca, nunca desmarca): un importe en una línea sin
+  marcar no se guardaba y el resumen decía «todo gratis», lo contrario de lo
+  recién tecleado. Un importe **por cada cosa** y no uno total porque
   en muchas áreas el vaciado es gratis y el agua se paga. **ITV** pide
   resultado, kilómetros y precio; los tres resultados son los nombres oficiales
   (favorable / desfavorable / negativa) y no un «pasada / no pasada», porque con
@@ -273,7 +276,10 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   "¿Es correcto?" con dos botones grandes. Viaje también pregunta, sin
   resumen — ahí importa más que en ningún sitio, porque finalizar un viaje
   por un roce cierra el registro en curso de la P4. Los campos vacíos salen
-  como `--`, para que se vea que faltan antes de aceptar.
+  como `--`, para que se vea que faltan antes de aceptar. La excepción es
+  **aguas sin ninguna casilla marcada**, que sale como «todo gratis» (decisión del
+  usuario en la placa, 24-ago): ahí lo que se mira es el dinero, y el `--` se
+  leía como un dato que falta. A cambio, ese apunte no dice qué se hizo.
 
   **Fondos claros con el contenido en negro**, no al revés: la primera versión
   usaba la familia Material 800 con texto blanco y daba 3,8-6,4:1 de contraste,

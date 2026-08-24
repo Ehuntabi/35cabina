@@ -270,9 +270,14 @@ importe al lado:
         [    Guardar aguas    ]
 ```
 
-**Marcas lo que hiciste y solo pones precio a lo que pagaste.** Marcado y sin
+**Marcas lo que hiciste y solo pones precio a lo que pagaste**, y **si escribes
+un precio, la casilla se marca sola** — un importe en una línea sin marcar no se
+guardaría, así que no hay manera de perderlo por ese despiste. Marcado y sin
 importe significa **gratis**, y así lo dice la confirmación — que es lo normal
-en las aguas, y por eso no sale como un dato que falta. Un precio por cada cosa
+en las aguas, y por eso no sale como un dato que falta. Y si **no marcas nada**, la
+confirmación pone directamente *«todo gratis»*: en las aguas lo que se mira es el
+dinero, y no haber puesto ningún importe quiere decir que la parada no costó
+nada. (Eso sí: el apunte no dirá entonces qué hiciste, sólo que fue gratis.) Un precio por cada cosa
 y no uno solo: en muchas áreas el vaciado es gratis y el agua se paga, y con un
 importe único no habría manera de saber cuál era cuál.
 

@@ -1475,9 +1475,15 @@ static void build_resumen(categoria_t cat)
                 if (w < 0 || (size_t)w >= sizeof(s_resumen) - used) break;
                 used += (size_t)w;
             }
-            /* Nada marcado: se ve el "--" en la confirmacion y da tiempo a
-             * volver, igual que en mantenimiento. */
-            if (!used) snprintf(s_resumen, sizeof(s_resumen), "--");
+            /* Nada marcado sale como "todo gratis" y no como el "--" del resto de
+             * formularios: decision del usuario viendolo en la placa
+             * (24-ago-2026). En las aguas lo que se mira es el dinero, y no
+             * haber puesto ningun importe significa que la parada no costo
+             * nada; el "--" ahi se leia como un dato que falta.
+             *
+             * A cambio, un apunte sin ninguna marca no dice QUE se hizo: en el
+             * CSV van las tres columnas a cero. Es lo que se pidio. */
+            if (!used) snprintf(s_resumen, sizeof(s_resumen), "todo gratis");
             break;
         }
         case CAT_ITV:
@@ -2275,6 +2281,20 @@ static void build_mantenimiento(lv_obj_t *form)
     make_save_button(form, "Guardar mantenimiento", save_generic_cb, (void *)(uintptr_t)CAT_MANTENIMIENTO);
 }
 
+/* Poner un precio MARCA su casilla. Sin esto, un importe tecleado en una linea
+ * sin marcar no contaba: no se guardaba y el resumen decia "todo gratis", que es
+ * justo lo contrario de lo que acababas de escribir. La casilla sigue mandando
+ * (es la que dice si se hizo), pero escribir lo que costo ya implica haberlo
+ * hecho.
+ *
+ * Solo MARCA, nunca desmarca: vaciar gratis es marcar la casilla y dejar el
+ * importe vacio, y ahi borrar el precio no puede deshacer la marca. */
+static void agua_precio_cb(lv_event_t *e)
+{
+    const char *t = lv_textarea_get_text(lv_event_get_target(e));
+    if (t && t[0]) lv_obj_add_state(lv_event_get_user_data(e), LV_STATE_CHECKED);
+}
+
 static void build_aguas(lv_obj_t *form)
 {
     add_header(form, "AGUAS", lv_color_hex(COL_VIAJE), BACK_TO_GRID);
@@ -2289,6 +2309,8 @@ static void build_aguas(lv_obj_t *form)
     for (uint8_t i = 0; i < AGUA_COUNT; i++) {
         make_check_money_row(form, AGUA_OPCIONES[i], &s_agua_chk[i],
                              &s_agua_precio_ta[i]);
+        lv_obj_add_event_cb(s_agua_precio_ta[i], agua_precio_cb,
+                            LV_EVENT_VALUE_CHANGED, s_agua_chk[i]);
     }
 
     /* Una moneda para los tres importes: es la misma parada y el mismo pais. */
