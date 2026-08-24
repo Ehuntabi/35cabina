@@ -703,6 +703,18 @@ batería, el solar, las temperaturas y las aguas, y cada hora un recuento de
 horas y energía. Si el viaje se corta a lo bruto —se queda sin batería, una
 avería— eso ya está escrito y no se pierde.
 
+**También va dejando el recorrido**, en un `ruta.csv` dentro de la carpeta del
+viaje: una línea cada 30 segundos con la posición y la altura, pero **solo
+cuando te mueves**. Parado no apunta nada, así que una semana en un camping no
+te deja miles de líneas repetidas. Al volver, ese fichero se abre en Google
+Earth o en cualquier programa de mapas y ves por dónde fuiste. Un mes de viaje
+ocupa medio mega.
+
+Los puntos se van juntando en la memoria de la P4 y bajan a la tarjeta cada
+cinco minutos, no uno a uno: así la tarjeta se desgasta diez veces menos. Si se
+corta la corriente a lo bruto puedes perder los últimos minutos de traza, nunca
+el viaje.
+
 ### Bajártelo por Wi-Fi
 
 Conéctate al Wi-Fi de la P4 desde el móvil o el portátil y entra en:
