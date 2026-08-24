@@ -390,6 +390,19 @@ static void clear_forms(void);
  * parada; el resumen y el apunte, que van antes en el fichero, las necesitan. */
 static uint8_t pern_cobro_actual(void);
 static void hora_corta(uint32_t epoch, char *buf, size_t n);
+static void parada_terminar(void *ud);
+
+/* --- La parada que NO se declaro -----------------------------------------
+ *
+ * Paras a comer, no tocas nada y quitas el contacto. Al volver, la pantalla ve
+ * un hueco en su marca de vida y lo ofrece: "estuviste parado desde las 14:10".
+ *
+ * Si dices que si, te lleva a la pantalla de motivos de siempre y el motivo que
+ * elijas se anota CON LA HORA DEL APAGON, no con la de ahora. Y como esa parada
+ * ya termino -- estas aqui, con el contacto puesto -- se cierra en el acto en
+ * vez de quedarse abierta. */
+static uint32_t s_olvido_ini;        /* cuando se fue la luz */
+static bool     s_olvido_anotando;   /* el proximo motivo es de ESA parada */
 static void valoracion_reset(void);
 
 /* Las pantallas de menu. La lista vive aqui arriba y no con su codigo porque
@@ -3407,6 +3420,13 @@ static void abiertos_refresh(void)
 
 static void mostrar_menu(pantalla_t p)
 {
+    /* Salirse de la eleccion de motivo CANCELA el aviso de "estuviste parado":
+     * si no, la marca se quedaria puesta y la siguiente parada que declarases
+     * -- horas despues y por tu cuenta -- se anotaria con la hora de aquel
+     * apagon. PAN_SITIO cuenta como parte de la eleccion: la pernocta pregunta
+     * el motivo y luego el sitio. */
+    if (p != PAN_MOTIVO && p != PAN_SITIO) s_olvido_anotando = false;
+
     salida_tira_refresh();
     if (p == PAN_ABIERTOS) abiertos_refresh();
     for (int i = 0; i < PAN_COUNT; i++) {
@@ -3449,6 +3469,22 @@ static void declarar(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
         confirm_screen_aviso("No he podido anotarlo",
                              "El apunte no se ha guardado.\nAvisa de esto, es un fallo\ndel programa.",
                              COL_ACCION_STOP, "Entendido");
+        return;
+    }
+
+    /* Viene del aviso de "estuviste parado": la parada no empieza ahora, empieza
+     * cuando se fue la luz, y ya ha terminado. Se le corrige la hora de inicio y
+     * se cierra en el acto -- para una pernocta eso abre su formulario, que es
+     * justo lo que hace falta.
+     *
+     * El indice es el ULTIMO de la cola porque acabamos de abrirlo. No se da por
+     * hecho que sea el primero: entre el aviso y el motivo se puede haber
+     * declarado otra cosa. */
+    if (s_olvido_anotando && tipo == EV_PARADA) {
+        int idx = salida_eventos_abiertos() - 1;
+        s_olvido_anotando = false;
+        salida_evento_set_inicio(idx, s_olvido_ini);
+        parada_terminar((void *)(intptr_t)idx);
         return;
     }
 
@@ -3855,10 +3891,64 @@ static bool hay_algo_que_cerrar(void)
     return false;
 }
 
+/* "Si" al aviso: a la pantalla de motivos, con la marca puesta para que lo que
+ * elijas se anote con la hora del apagon (ver declarar). */
+static void olvido_anotar(void *ud)
+{
+    (void)ud;
+    s_olvido_anotando = true;
+    nav_ir_a_registros();
+    mostrar_menu(PAN_MOTIVO);
+}
+
+/* false si no hay ningun hueco que ofrecer. */
+static bool olvido_preguntar(void)
+{
+    uint32_t seg = 0, desde = 0;
+    if (!salida_olvido_pendiente(&seg, &desde)) return false;
+
+    char h[8], dur[24];
+    hora_corta(desde, h, sizeof(h));
+    duracion_texto(seg, dur, sizeof(dur));
+    snprintf(s_parada_txt, sizeof(s_parada_txt),
+             "Estuviste parado desde las %s,\n%s.\n\n"
+             "Si fue una parada, dime de que\ny la anoto con esa hora.", h, dur);
+
+    s_olvido_ini = desde;
+    /* Preguntado queda: se conteste lo que se conteste, no se vuelve a sacar en
+     * este encendido. El "no" del dialogo no lleva callback, asi que la marca se
+     * pone aqui y no en la respuesta. */
+    salida_olvido_descartar();
+
+    confirm_screen_open("Estuviste parado?", s_parada_txt, COL_VIAJE,
+                        "Anotarlo", "No", olvido_anotar, NULL);
+    return true;
+}
+
+/* Cuantas veces se mira antes de rendirse. Cada 2 s, o sea cinco minutos: si en
+ * ese rato la P4 no ha dicho la hora, es que no esta, y sin hora no hay nada que
+ * ofrecer. Sin este tope el temporizador se quedaria vivo para siempre. */
+#define OLVIDO_INTENTOS_MAX  150
+
 static void parada_boot_timer_cb(lv_timer_t *t)
 {
-    if (s_parada_ya_preguntada || !hay_algo_que_cerrar()) { lv_timer_del(t); return; }
-    if (parada_preguntar()) { s_parada_ya_preguntada = true; lv_timer_del(t); }
+    static uint16_t intentos;
+
+    if (s_parada_ya_preguntada) { lv_timer_del(t); return; }
+
+    /* Primero lo que quedo abierto; el hueco solo se mira si no habia nada, que
+     * es ademas la condicion que pone salida_olvido_pendiente(). */
+    if (hay_algo_que_cerrar()) {
+        if (parada_preguntar()) { s_parada_ya_preguntada = true; lv_timer_del(t); }
+        return;
+    }
+
+    /* Sin la hora de la P4 no se sabe cuanto estuvo apagada: se espera. */
+    if (reloj_p4() == 0 && ++intentos < OLVIDO_INTENTOS_MAX) return;
+
+    olvido_preguntar();
+    s_parada_ya_preguntada = true;
+    lv_timer_del(t);
 }
 
 /* Deshacer lo que se acaba de anotar: el ultimo de la cola. */

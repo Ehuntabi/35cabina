@@ -322,9 +322,26 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   apuntes abiertos. El título de «Anotado» pasa además a verde: es una buena
   noticia y en rojo parecía un error.
 
-  ⏳ **Lo que falta del rediseño**: el aviso de «estuviste parado desde las
-  19:40». Deshacer se puede de dos maneras: en el cartel de «Anotado» y en la
-  pantalla de lo que queda sin cerrar.
+  **El aviso de «estuviste parado desde las 19:40» ya está** (24-ago-2026).
+  `salida_olvido_pendiente()` existía sin usar desde el 23; ahora lo pregunta el
+  temporizador del arranque, **después** de despachar lo que quedara abierto —
+  que además es la condición que el propio helper exige. Si dices que sí, te
+  lleva a la pantalla de motivos de siempre y **el motivo que elijas se anota con
+  la hora del apagón**, no con la de ahora (`salida_evento_set_inicio()`, que
+  pasa a ir **por índice**: entre el aviso y el motivo puedes haber declarado
+  otra cosa y entonces la parada ya no es la primera de la cola). Como esa parada
+  ya terminó —estás ahí, con el contacto puesto— se cierra en el acto; si dices
+  pernocta, eso abre su formulario, que es justo lo que hace falta.
+
+  Dos cabos que sí hay que atar: **irse de la pantalla de motivos cancela el
+  aviso** (`mostrar_menu()`), o la marca se quedaría puesta y la siguiente parada
+  que declarases horas después heredaría aquella hora; y el temporizador **se
+  rinde a los cinco minutos** si la P4 no dice la hora, en vez de quedarse vivo
+  para siempre.
+
+  ⏳ **Lo que falta del rediseño**: nada de la lista original. Deshacer se puede
+  de dos maneras: en el cartel de «Anotado» y en la pantalla de lo que queda sin
+  cerrar.
 
   🧹 Pendiente de limpieza: el modelo VIEJO de parada (namespace `parada` de NVS)
   ya no se usa —se suelta al arrancar— y deja `parada_abrir_si_procede()` y

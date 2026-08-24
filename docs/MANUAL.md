@@ -243,6 +243,31 @@ Solo se pregunta una vez por encendido, y solo cuando la P4 ya ha dicho la hora
 - **Terminarla** la cierra y la manda a la P4 con **su hora de entrada y de
   salida reales**, no tecleadas, más los minutos que duró.
 
+#### La parada que no declaraste
+
+Paras a comer, no tocas nada y quitas el contacto. Al volver, la pantalla se da
+cuenta del hueco y te lo ofrece:
+
+```
+        Estuviste parado?
+        Estuviste parado desde las 14:10,
+        1 h 35 min.
+
+        Si fue una parada, dime de que
+        y la anoto con esa hora.
+
+        [ No ]              [ Anotarlo ]
+```
+
+Si dices **Anotarlo**, te lleva a la pantalla de motivos de siempre y lo que
+elijas se guarda **con la hora en que se apagó la pantalla**, no con la de ahora.
+Si dices que fue una **pernocta**, te pedirá el sitio y luego el precio y los
+servicios, como cualquier otra.
+
+Solo aparece si estabas **de viaje**, la pantalla estuvo apagada **más de media
+hora** y no habías dejado nada anotado. Se pregunta **una sola vez** por
+encendido: si dices que no, no insiste.
+
 #### La pernocta, al terminarla
 
 Si la parada era una **pernocta**, «Terminarla» no la guarda todavía: abre una

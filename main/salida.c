@@ -359,12 +359,13 @@ void salida_evento_cerrar_primero(void)
     refrescar_vista();
 }
 
-void salida_evento_primero_set_inicio(uint32_t epoch_local)
+bool salida_evento_set_inicio(int idx, uint32_t epoch_local)
 {
-    if (s_st.n_eventos == 0) return;
-    s_st.eventos[0].epoch_ini = epoch_local;
+    if (idx < 0 || idx >= s_st.n_eventos) return false;
+    s_st.eventos[idx].epoch_ini = epoch_local;
     guardar();
     refrescar_vista();
+    return true;
 }
 
 /* ── La parada olvidada ──────────────────────────────────────────────────── */

@@ -154,12 +154,15 @@ bool salida_evento_borrar(int idx);
  * que queda abierto. */
 const salida_evento_t *salida_evento_en(int idx);
 
-/* Cambia la hora de inicio del primero. Lo usa "prolongar parada": la parada
- * sigue abierta pero no queremos reabrirla, solo dejar constancia. En realidad
- * NO se toca la hora -- prolongar significa justo que sigue contando desde el
- * principio -- asi que esto solo existe para el caso de la parada que se
- * anota a posteriori. */
-void salida_evento_primero_set_inicio(uint32_t epoch_local);
+/* Cambia la hora de inicio de un evento ya abierto. Existe para LA PARADA QUE
+ * SE ANOTA A POSTERIORI: al volver a dar el contacto, la pantalla puede haber
+ * estado apagada horas, y esa parada no empieza ahora sino cuando se fue la luz
+ * (ver salida_olvido_pendiente).
+ *
+ * Por indice y no "el primero" a proposito: entre que se ofrece anotarla y se
+ * elige el motivo puede haberse declarado otra cosa, y entonces la nuestra ya
+ * no es la primera de la cola. false si el indice no existe. */
+bool salida_evento_set_inicio(int idx, uint32_t epoch_local);
 
 /* --- La marca de vida y el olvido ---------------------------------------- */
 
