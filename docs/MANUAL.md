@@ -463,35 +463,18 @@ corte de corriente no lo pierde.
 
 ---
 
-## 6. Parada: el formulario del final
+## 6. Cómo se cuenta el precio de la noche
 
-> **Ojo, en obras.** Este formulario es el que se rellenará **al volver a dar el contacto**, al
-> cerrar una pernocta. Ahora mismo el menú nuevo (apartado 4) declara la parada
-> pero **todavía no abre este formulario**: el apunte se queda abierto. Lo que
-> sigue describe cómo es el formulario, que no ha cambiado.
+Al cerrar una pernocta (apartado 4) te pide el precio, y ahí hay un detalle que
+importa para la cuenta.
 
-Marca lo que hayas hecho:
-
-| Casilla | Nota |
-|---|---|
-| Vaciado | Se puede combinar con cualquiera |
-| Llenado | Se puede combinar con cualquiera |
-| Agua potable | Va aparte de "Llenado": puedes parar **solo** por una fuente |
-| Pernocta gratis | Sitio de parada — **excluyente** con Área y Camping |
-| Área | Sitio de parada — **excluyente**, y pide precio |
-| Camping | Sitio de parada — **excluyente**, y pide precio |
-
-⚠️ **Los tres sitios son excluyentes entre sí**: has parado en un sitio, no en dos
-a la vez. Marcar uno **desmarca automáticamente** el que hubiera. Y al
-cambiar entre área y camping **se borra el precio**, porque no es comparable.
-
-### Precio (solo Área y Camping)
+### Por noche o por 24 horas
 
 Aparece una fila con **importe + moneda + tipo de cobro** en la misma línea:
 
 - **Camping:** siempre **por noche**. El selector ni sale.
-- **Área:** eliges **"noche"** o **"24 h"**. Esto hay que decirlo **al llegar**,
-  que es cuando tienes el cartel delante y sabes cómo cobran.
+- **Área:** eliges **"noche"** o **"24 h"** — lo que ponga su cartel, que es lo
+  que leíste al entrar.
 
 > **La diferencia importa para la cuenta.** Por noche se cuentan cambios de día:
 > llegas el viernes por la tarde y te vas el sábado por la mañana = **1 noche**.

@@ -343,9 +343,6 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   de dos maneras: en el cartel de «Anotado» y en la pantalla de lo que queda sin
   cerrar.
 
-  🧹 Pendiente de limpieza: el modelo VIEJO de parada (namespace `parada` de NVS)
-  ya no se usa —se suelta al arrancar— y deja `parada_abrir_si_procede()` y
-  `make_currency_row()` sin llamar. Salen como aviso del compilador.
 
   **Mantenimiento** usa **casillas, no un desplegable**: con el mismo
   kilometraje puedes haber hecho varias cosas (el aceite Y su filtro es el
@@ -414,49 +411,27 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   por detrás — al volver te lo encontrabas abierto, de forma intermitente
   (solo si el dedo arrancaba encima de un widget).
 
-  **La pantalla de Viaje es contextual** (`viaje_refresh()`), porque
-  "Finalizar viaje" no tiene sentido si no has iniciado ninguno:
+  🧹 **Los formularios viejos de Viaje y Parada se han BORRADO** (24-ago-2026,
+  -563 líneas). Eran un bucle cerrado: a Parada solo se llegaba desde el botón
+  "Anotar parada" de Viaje, y a Viaje solo desde el "Volver" de Parada. Ningún
+  menú del rediseño abría ninguno de los dos, así que llevaban vivos solo en el
+  binario desde el 23-ago. Con ellos se van sus casillas (Vaciado · Llenado ·
+  Agua potable · Pernocta gratis · Área · Camping), `viaje_refresh()`, el
+  namespace `parada` de NVS y las dos funciones que ya avisaba el compilador.
 
-  - **Sin viaje**: el mensaje y un único botón grande, **Iniciar viaje**.
-  - **Con viaje en marcha**: el título pasa a `VIAJE EN CURSO`, el botón
-    grande es **Anotar parada** y **Finalizar viaje** queda **pequeño y
-    abajo** — la acción habitual se lleva la pantalla y la destructiva no se
-    toca de un roce. La celda del menú pasa a decir "Viaje en curso".
-  - **Con una parada abierta** aparece además **Finalizar parada**, pequeño y
-    en azul, encima del rojo: cerrar una parada es rutina y terminar el viaje
-    no, así que se distinguen por color y el destructivo queda el último. Sale
-    **haya viaje o no**: si el viaje se terminó con una parada sin cerrar,
-    sigue habiendo que cerrarla y éste es el único sitio desde donde hacerlo.
+  Tres piezas estaban DENTRO de ese código muerto y siguen vivas, así que hubo
+  que sacarlas antes: el campo invisible del **destino del viaje**
+  (`s_viaje_destino_ta`, que usa "Iniciar viaje" del menú nuevo y ahora se crea
+  en `view_registro_create()`), la fila de precio (`make_precio_row`, que usa la
+  pernocta) y la limpieza de servicios y valoración, que era parte de
+  `parada_clear_extras()` y pasa a llamarse `servicios_clear()`.
 
-  El estado lo lleva **la propia pantalla** y se guarda en NVS (namespace
-  `viaje`, `load_trip_active()`/`save_trip_active()`), así que un corte de
-  corriente en mitad de un viaje no devuelve el menú a "sin viaje". Ojo: la
-  P4 sigue siendo la dueña del viaje de verdad; esto es solo **lo que cree la
-  35cabina** hasta que la Fase 4 abra el canal de vuelta y pueda
-  preguntárselo. Si las dos se descoordinan, hoy no se enteran.
-
-  **Parada** (`build_parada`) cuelga de Viaje y su Volver regresa allí, no al
-  menú. Cinco casillas de dos clases distintas:
-
-  - **Lo que haces** — Vaciado · Llenado · Agua potable. Se marcan libremente
-    y a la vez: en un área sueles vaciar Y llenar en la misma parada. **Agua
-    potable va aparte de Llenado** porque se puede parar solo por eso: una
-    fuente al borde de la carretera no es ni un vaciado ni un área.
-  - **Dónde has parado** — Pernocta gratis · Área · Camping. Los tres son
-    **excluyentes**: al marcar uno se **desmarcan solos** los otros dos. Se
-    hace desmarcando y no poniéndolos en gris para que cambiar de idea sea un
-    único toque sobre el que quieres, sin acordarse de quitar el anterior.
-
-  **Área y Camping son las paradas que se pagan**, así que solo ellas sacan el
-  **precio** (con moneda) y el botón de **Servicios**; una pernocta gratis no
-  tiene ni lo uno ni lo otro. Aparecen y desaparecen igual que el contador de
-  ruedas del mantenimiento.
-
-  El precio es **por unidad de estancia**, no el total: es lo que se anuncia a
-  la entrada y lo único que permite calcular la cuenta cuando la parada acaba
-  días después. Y la unidad no siempre es la noche — **hay áreas que cobran
-  por periodos de 24 h desde que entras** —, así que junto al precio hay un
-  interruptor **`Noche` / `24 h`**, en la misma línea que el rótulo:
+  Lo que SÍ sobrevive de aquel modelo es cómo se cobra una noche, porque la
+  pernocta lo hereda: el precio es **por unidad de estancia**, no el total —es lo
+  que se anuncia a la entrada y lo único que permite calcular la cuenta cuando la
+  parada acaba días después—, y la unidad no siempre es la noche: **hay áreas que
+  cobran por periodos de 24 h desde que entras**, así que junto al precio hay un
+  interruptor **`Noche` / `24 h`** en la misma línea que el rótulo.
 
   - **Camping**: siempre por noches. El interruptor se esconde y el rótulo lo
     dice entero, "Precio por noche".

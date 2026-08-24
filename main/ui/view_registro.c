@@ -48,12 +48,10 @@ static const char *TAG = "view_registro";
  * (servicios). Van en la misma lista porque comparten todo el andamiaje --
  * contenedor oculto, cabecera con Volver, limpieza al salir. */
 typedef enum {
-    CAT_VIAJE = 0,
-    CAT_REPOSTAJE,
+    CAT_REPOSTAJE = 0,
     CAT_PEAJE,
     CAT_BOMBONA,
     CAT_MANTENIMIENTO,
-    CAT_PARADA,
     CAT_SERVICIOS,
     CAT_VALORACION,
     /* Los dos formularios de CIERRE que faltaban del rediseno del 23-ago-2026.
@@ -154,15 +152,8 @@ static lv_obj_t *s_peaje_currency_dd;
  * del viaje de verdad; esto es solo lo que cree la 35cabina hasta que la
  * Fase 4 abra el canal de vuelta y pueda preguntarselo. */
 static bool      s_viaje_activo;
-static lv_obj_t *s_viaje_title_lbl;      /* "VIAJE" / "VIAJE EN CURSO" */
-static lv_obj_t *s_viaje_msg;
-static lv_obj_t *s_viaje_btn_iniciar;
-static lv_obj_t *s_viaje_btn_parada;
-static lv_obj_t *s_viaje_btn_finalizar;
-static lv_obj_t *s_viaje_btn_fin_parada;  /* solo si hay una parada abierta */
 /* Copia en memoria de si hay parada abierta, para no leer la NVS cada vez que
  * se entra en la pantalla de Viaje. La NVS manda; esto solo la sigue. */
-static bool      s_parada_abierta;
 /* Campo oculto donde el editor a pantalla completa deja el destino tecleado. No
  * se ve nunca: el editor necesita un textarea al que volcar, y en la pantalla de
  * Viaje no hay formulario donde ponerlo. */
@@ -171,40 +162,15 @@ static char      s_viaje_destino[24];
 
 /* --- Parada: donde has parado y que has hecho ------------------------------
  * Varias a la vez: en un area sueles vaciar Y llenar en la misma parada. */
-#define PARADA_COUNT         6
-#define PARADA_IDX_PERNOCTA  3
-#define PARADA_IDX_AREA      4
-#define PARADA_IDX_CAMPING   5
-
-/* Los tres SITIOS son excluyentes entre si: has parado en un sitio de un tipo,
- * no en dos a la vez. Vaciado y llenado quedan fuera de esta lista a proposito
- * -- son cosas que HACES, y se pueden hacer en cualquiera de los tres. */
-static const uint8_t PARADA_LUGARES[] = {
-    PARADA_IDX_PERNOCTA, PARADA_IDX_AREA, PARADA_IDX_CAMPING
-};
-/* "Agua potable" va aparte de "Llenado" porque se puede parar SOLO por eso:
- * una fuente al borde de la carretera no es un vaciado ni un area. */
-static const char *const PARADA_OPCIONES[PARADA_COUNT] = {
-    "Vaciado", "Llenado", "Agua potable", "Pernocta gratis", "Area", "Camping"
-};
-/* Nombres cortos para el resumen de la confirmacion, por el mismo motivo que
- * SERV_CORTOS: alli caben ~25 caracteres por linea. */
-static const char *const PARADA_CORTOS[PARADA_COUNT] = {
-    "Vaciado", "Llenado", "Agua", "Pernocta", "Area", "Camping"
-};
-static lv_obj_t *s_parada_chk[PARADA_COUNT];
-static lv_obj_t *s_parada_precio_row;    /* oculto salvo area o camping */
-static lv_obj_t *s_parada_precio_lbl;    /* "Precio por" / "Precio por noche" */
-
-/* Como cobra el sitio. Un camping cobra por NOCHES; un area, segun cual: las
- * hay por noche y las hay por periodos de 24 h desde que entras, y eso hay que
- * decirlo al llegar, que es cuando tienes el cartel delante. */
+/* Como cobra el sitio de una pernocta. Lo que queda del modelo viejo de parada:
+ * el resto -- sus casillas, su formulario y su parada en NVS -- se fue con la
+ * limpieza del 24-ago-2026.
+ *
+  * Un camping cobra por NOCHES; un area, segun cual: las hay por noche y las hay
+ * por periodos de 24 h desde que entras, y eso hay que decirlo al llegar, que es
+ * cuando tienes el cartel delante. */
 #define PARADA_COBRO_NOCHE  0
 #define PARADA_COBRO_24H    1
-static lv_obj_t *s_parada_cobro_bm;      /* solo visible en area */
-static lv_obj_t *s_parada_precio_ta;
-static lv_obj_t *s_parada_currency_dd;
-static lv_obj_t *s_parada_servicios_btn; /* oculto salvo area */
 
 /* Servicios que ofrece el area, en su propia pantalla: las cinco casillas de
  * parada + el precio + estas seis no caben juntas en 320 px de alto. */
@@ -450,14 +416,9 @@ static void show_grid(void)
     volver_al_menu();
 }
 
-static void viaje_refresh(void);
 
 static void show_form(int idx)
 {
-    /* La pantalla de viaje tiene dos caras (con viaje y sin el); se pone al dia
-     * aqui para que valga igual venga del menu o de cerrar una parada. */
-    if (idx == CAT_VIAJE) viaje_refresh();
-
     ocultar_menus();
     for (int i = 0; i < CAT_COUNT; i++) {
         if (i == idx) {
@@ -609,24 +570,6 @@ static lv_obj_t *make_money_field_stacked(lv_obj_t *parent, const char *label_te
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
 
     return ta;
-}
-
-/* Selector de moneda suelto, a lo ancho y grande. Lo usan peaje y repostaje
- * encima de sus importes. */
-static lv_obj_t *make_currency_row(lv_obj_t *parent, const char *label_text)
-{
-    lv_obj_t *cont = make_field_row(parent);
-
-    lv_obj_t *lbl = lv_label_create(cont);
-    lv_label_set_text(lbl, label_text);
-    lv_obj_set_style_text_color(lbl, lv_color_hex(COL_LABEL), 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, 0);
-
-    lv_obj_t *dd = lv_dropdown_create(cont);
-    lv_dropdown_set_options(dd, CURRENCY_OPTIONS);
-    lv_obj_set_size(dd, lv_pct(100), MONEY_BIG_DD_H);
-    lv_obj_set_style_text_font(dd, &lv_font_montserrat_32, 0);
-    return dd;
 }
 
 /* Media fila: rotulo pequeno arriba y numero grande debajo. */
@@ -977,72 +920,11 @@ static void btnmatrix_reset(lv_obj_t *bm)
     lv_btnmatrix_set_btn_ctrl(bm, 0, LV_BTNMATRIX_CTRL_CHECKED);
 }
 
-/* Area y camping son las paradas que se PAGAN: solo ellas sacan el precio y la
- * lista de servicios. Una pernocta gratis no tiene ni lo uno ni lo otro.
- * Aparecen y desaparecen segun las casillas, igual que el contador de ruedas
- * del mantenimiento.
- *
- * Los servicios son el mismo dato con dos lecturas: en un area es lo que
- * OFRECE y en un camping lo que va INCLUIDO en el precio. Misma lista y misma
- * pantalla; lo unico que cambia es el rotulo que la explica. */
-static bool parada_es_de_pago(void)
+/* Vacia los servicios y la nota del sitio. Se llama al volver al menu: lo
+ * marcado era del sitio anterior, y arrastrarlo es como acabo el peaje
+ * guardandose el importe del apunte de antes. */
+static void servicios_clear(void)
 {
-    return lv_obj_has_state(s_parada_chk[PARADA_IDX_AREA], LV_STATE_CHECKED) ||
-           lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
-}
-
-/* Como se paga el sitio ahora mismo. El camping siempre por noches; el area,
- * lo que diga su interruptor. */
-static uint8_t parada_cobro_actual(void)
-{
-    if (lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED)) {
-        return PARADA_COBRO_NOCHE;
-    }
-    return (uint8_t)btnmatrix_checked(s_parada_cobro_bm, 2);
-}
-
-/* El precio es siempre POR UNIDAD DE ESTANCIA, no el total: es lo que se
- * anuncia a la entrada y lo unico que permite calcular la cuenta cuando la
- * parada acaba dias despues.
- *
- * En un camping la unidad es la noche y no hay nada que elegir, asi que el
- * interruptor se esconde y el rotulo lo dice entero. En un area sale el
- * interruptor y el rotulo se queda en "Precio por", que lo completa el boton
- * marcado: "Precio por [Noche|24 h]". */
-static void parada_refresh_extras(void)
-{
-    bool pago = parada_es_de_pago();
-    set_hidden(s_parada_precio_row, !pago);
-    set_hidden(s_parada_servicios_btn, !pago);
-
-    /* En un camping siempre se cobra por noches: el selector se esconde -- y los
-     * otros dos se reparten su hueco, que la fila es elastica -- y el rotulo lo
-     * dice entero. En un area lo dice el boton marcado del selector. */
-    bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
-    set_hidden(s_parada_cobro_bm, camping);
-    lv_label_set_text(s_parada_precio_lbl, camping ? "Precio por noche" : "Precio");
-
-    /* Titulo del editor a pantalla completa: ahi si cabe entero. Los dos son
-     * literales, viven toda la ejecucion y se pueden guardar tal cual. */
-    lv_obj_set_user_data(s_parada_precio_ta,
-                         (void *)(parada_cobro_actual() == PARADA_COBRO_24H
-                                  ? "Precio por 24 h" : "Precio por noche"));
-}
-
-static void parada_cobro_cb(lv_event_t *e)
-{
-    (void)e;
-    parada_refresh_extras();
-}
-
-/* Vacia lo que depende del SITIO: el precio y los servicios. Al pasar de area a
- * camping (o a pernocta gratis) lo tecleado era de la otra, y arrastrarlo es
- * como acabo el peaje guardandose el importe del anterior. */
-static void parada_clear_extras(void)
-{
-    lv_textarea_set_text(s_parada_precio_ta, "");
-    lv_dropdown_set_selected(s_parada_currency_dd, 0);
-    btnmatrix_reset(s_parada_cobro_bm);
     for (uint8_t i = 0; i < SERV_COUNT; i++) {
         lv_obj_clear_state(s_serv_chk[i], LV_STATE_CHECKED);
     }
@@ -1106,14 +988,7 @@ static void clear_forms(void)
     lv_textarea_set_text(s_itv_precio_ta, "");
     lv_dropdown_set_selected(s_itv_currency_dd, 0);
 
-    for (uint8_t i = 0; i < PARADA_COUNT; i++) {
-        lv_obj_clear_state(s_parada_chk[i], LV_STATE_CHECKED);
-    }
-    parada_clear_extras();
-    /* Vuelve a esconder el precio y el boton de servicios. NO se limpia el
-     * viaje en curso: eso no es un dato del formulario, es el estado del
-     * aparato y solo lo cambian Iniciar/Finalizar. */
-    parada_refresh_extras();
+    servicios_clear();
 }
 
 /* Al marcar/desmarcar Ruedas aparece o se esconde el contador de cuantas.
@@ -1313,8 +1188,8 @@ static lv_obj_t *add_header(lv_obj_t *form, const char *title, lv_color_t color,
 /* === Confirmacion antes de guardar ====================================== */
 
 static const char *CAT_NOMBRE[CAT_COUNT] = {
-    "viaje", "repostaje", "peaje", "bombona", "mantenimiento",
-    "parada", "servicios", "valoracion",
+    "repostaje", "peaje", "bombona", "mantenimiento",
+    "servicios", "valoracion",
     /* "agua" en SINGULAR y no "aguas": la P4 nombra el fichero "<tipo>s.csv"
      * (csv_por_tipo() en config_server_viaje.c), asi que con "aguas" saldria un
      * "aguass.csv". Con "agua" sale "aguas.csv", que es lo que se espera. */
@@ -1337,9 +1212,6 @@ static const char *CAT_NOMBRE[CAT_COUNT] = {
 static const char *const MANT_CLAVE[MANT_COUNT] = {
     "aceite", "filtro_aceite", "filtro_aire", "filtro_habitaculo",
     "correa", "ruedas"
-};
-static const char *const PARADA_CLAVE[PARADA_COUNT] = {
-    "vaciado", "llenado", "agua_potable", "pernocta_gratis", "area", "camping"
 };
 /* Solo los seis servicios; el septimo de SERV_OPCIONES es la puerta a la
  * pantalla de valoracion, no un servicio. */
@@ -1371,13 +1243,12 @@ static const char *const AGUA_PRECIO_CLAVE[AGUA_COUNT] = {
 static uint32_t cat_color(categoria_t c)
 {
     switch (c) {
-        case CAT_VIAJE:         return COL_VIAJE;
+
         case CAT_REPOSTAJE:     return COL_REPOSTAJE;
         case CAT_PEAJE:         return COL_PEAJE;
         case CAT_BOMBONA:       return COL_BOMBONA;
-        /* Parada y servicios cuelgan de Viaje: van con su azul para que se vea
-         * que son la misma rama. */
-        case CAT_PARADA:
+        /* Servicios y valoracion cuelgan de la pernocta: van con su azul para
+         * que se vea que son la misma rama. */
         case CAT_SERVICIOS:
         case CAT_VALORACION:    return COL_VIAJE;
         /* Aguas e ITV con el azul de sus casillas del menu, para que se vea que
@@ -1530,87 +1401,6 @@ static void build_resumen(categoria_t cat)
                      val_or_dash(s_mant_coste_ta));
             break;
         }
-        case CAT_PARADA: {
-            /* CUATRO lineas como mucho: el cuerpo va en letra 32 (unos 46 px
-             * por linea con el interlineado) y entre el titulo y los botones
-             * quedan ~184 px (ver el reparto en confirm_screen.c). De ahi los
-             * nombres cortos, aqui y en los servicios.
-             *
-             * Peor caso con los cortos: "Vaciado, Llenado, Agua, Pernocta" son
-             * 32 caracteres, o sea 2 lineas, mas precio (1) y servicios (1). */
-            tipo[0] = '\0';
-            size_t used = 0;
-            for (uint8_t i = 0; i < PARADA_COUNT; i++) {
-                if (!lv_obj_has_state(s_parada_chk[i], LV_STATE_CHECKED)) continue;
-                int w = snprintf(tipo + used, sizeof(tipo) - used, "%s%s",
-                                 used ? ", " : "", PARADA_CORTOS[i]);
-                if (w < 0 || (size_t)w >= sizeof(tipo) - used) break;
-                used += (size_t)w;
-            }
-
-            char extra[160];
-            extra[0] = '\0';
-            size_t e = 0;
-            /* Precio y servicios van juntos: los dos son cosa de las paradas
-             * que se pagan (area o camping) y en una pernocta gratis no se
-             * pintan ni el uno ni los otros. */
-            if (parada_es_de_pago()) {
-                /* "Precio/noche" y no "Precio por noche": la linea entera tiene
-                 * que caber en ~25 caracteres y "Precio por noche:  25.00 EUR"
-                 * son 28. En la pantalla, donde hay sitio, si va entero. */
-                int w = snprintf(extra, sizeof(extra), "\nPrecio/%s:  %s %s",
-                                 parada_cobro_actual() == PARADA_COBRO_24H
-                                 ? "24h" : "noche",
-                                 val_or_dash(s_parada_precio_ta),
-                                 currency_of(s_parada_currency_dd));
-                if (w > 0) e = (size_t)w;
-
-                /* Los servicios marcados, o su cuenta si la lista no cabe en
-                 * una linea: mas vale un "4 de 6" exacto que una linea partida
-                 * en dos que empuje los botones fuera de la pantalla. */
-                char serv[128];
-                serv[0] = '\0';
-                size_t s_used = 0;
-                uint8_t marcados = 0;
-                for (uint8_t i = 0; i < SERV_COUNT; i++) {
-                    if (!lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED)) continue;
-                    marcados++;
-                    /* En el sitio de "Valoracion" va la nota elegida, que es el
-                     * dato; la palabra sola no dice nada. */
-                    /* Con su nombre entero, no abreviados: el dialogo baja la
-                     * letra si hace falta y "Vaciado grises" se entiende sin
-                     * pensar, cosa que "Grises" no. En el sitio de "Valoracion"
-                     * va la nota elegida, que es el dato. */
-                    const char *nombre = SERV_OPCIONES[i];
-                    int n = snprintf(serv + s_used, sizeof(serv) - s_used, "%s%s",
-                                     s_used ? ", " : "", nombre);
-                    if (n < 0 || (size_t)n >= sizeof(serv) - s_used) break;
-                    s_used += (size_t)n;
-                }
-                /* Las pegas van detras de la nota y solo si hay valoracion:
-                 * viven dentro de esa pantalla y sin ella no se han podido
-                 * marcar. Aqui es donde se repasan antes de guardar, porque en
-                 * la casilla de servicios no caben. */
-                if (s_val_puesta) {
-                    for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
-                        if (!lv_obj_has_state(s_val_extra_chk[i], LV_STATE_CHECKED)) continue;
-                        marcados++;
-                        int n = snprintf(serv + s_used, sizeof(serv) - s_used, "%s%s",
-                                         s_used ? ", " : "", VAL_EXTRAS[i]);
-                        if (n < 0 || (size_t)n >= sizeof(serv) - s_used) break;
-                        s_used += (size_t)n;
-                    }
-                }
-                /* Se describen SIEMPRE, por largos que sean: el dialogo baja
-                 * la letra cuando hace falta (ver confirm_screen.c) y una lista
-                 * entera dice mucho mas que un "6 marcados" que obliga a
-                 * volver atras para saber cuales. */
-                snprintf(extra + e, sizeof(extra) - e, "\nServicios:  %s",
-                         marcados ? serv : "--");
-            }
-            snprintf(s_resumen, sizeof(s_resumen), "%s%s", used ? tipo : "--", extra);
-            break;
-        }
         case CAT_AGUAS: {
             /* Salen las TRES lineas siempre, tenga importe o no (usuario,
              * 24-ago-2026, en la placa). Lo que se repasa aqui es el DINERO: la
@@ -1725,88 +1515,6 @@ static uint32_t reloj_p4(void)
     return d.epoch_local;     /* 0 = la P4 aun no ha dicho la hora */
 }
 
-/* Cuanto se cobra de una parada, en noches o en periodos de 24 h.
- *
- * NOCHE: lo que se cuenta son cambios de dia de calendario. El reloj viene ya
- * en hora local (mini_proto.h), asi que la division entera da el dia directo.
- * Llegas el viernes por la tarde y te vas el sabado por la manana: una noche.
- *
- * 24 H: periodos desde que entras, REDONDEANDO HACIA ARRIBA -- 25 horas son 2.
- * Es como cobran ellos: pasado el plazo empieza otro, y mas vale que la cuenta
- * salga alta y no baja.
- *
- * Minimo 1 en los dos casos: si llegas y te vas el mismo dia la parada ha
- * existido igual, y se paga igual. */
-static unsigned parada_unidades(uint32_t inicio, uint32_t ahora, uint8_t cobro)
-{
-    if (ahora <= inicio) return 1;
-
-    unsigned n;
-    if (cobro == PARADA_COBRO_24H) {
-        uint32_t transcurrido = ahora - inicio;
-        n = (unsigned)((transcurrido + 86399u) / 86400u);
-    } else {
-        n = (unsigned)((ahora / 86400u) - (inicio / 86400u));
-    }
-    return n ? n : 1;
-}
-
-/* Cual de los tres sitios esta marcado, o -1 si la parada fue solo de vaciado,
- * llenado o agua: esas se acaban en el sitio y no dejan nada abierto. */
-static int parada_lugar_marcado(void)
-{
-    for (uint8_t i = 0; i < sizeof(PARADA_LUGARES); i++) {
-        if (lv_obj_has_state(s_parada_chk[PARADA_LUGARES[i]], LV_STATE_CHECKED)) {
-            return PARADA_LUGARES[i];
-        }
-    }
-    return -1;
-}
-
-/* Se llama con el formulario TODAVIA lleno: show_grid() lo vacia justo
- * despues. */
-static void parada_abrir_si_procede(void)
-{
-    int lugar = parada_lugar_marcado();
-    if (lugar < 0) return;
-
-    uint32_t ahora = reloj_p4();
-    if (ahora == 0) {
-        /* Callarse aqui era un fallo: guardabas la parada, la pantalla decia
-         * "guardado" y por dentro no apuntaba nada, asi que te ibas creyendo
-         * que se estaba contando la estancia. */
-        ESP_LOGW(TAG, "Parada guardada SIN abrir: la P4 no ha dado la hora "
-                      "todavia, no se podria contar el tiempo");
-        confirm_screen_aviso("Parada sin contar",
-                             "Sin la P4 no se que dia es,\nasi que no puedo contar\n"
-                             "los dias de esta parada.",
-                             COL_ACCION_STOP, "Entendido");
-        return;
-    }
-
-    parada_abierta_t p = {
-        .abierta      = true,
-        .lugar        = (uint8_t)lugar,
-        .epoch_inicio = ahora,
-        .cobro        = parada_cobro_actual(),
-        .moneda       = (uint8_t)lv_dropdown_get_selected(s_parada_currency_dd),
-    };
-    snprintf(p.precio, sizeof(p.precio), "%s",
-             lv_textarea_get_text(s_parada_precio_ta));
-
-    esp_err_t err = save_parada_abierta(&p);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "No se pudo guardar la parada abierta: %s", esp_err_to_name(err));
-        return;
-    }
-    s_parada_abierta = true;
-    viaje_refresh();
-    ESP_LOGI(TAG, "Parada ABIERTA en '%s' (cobro %s) en t=%lu",
-             PARADA_OPCIONES[lugar],
-             p.cobro == PARADA_COBRO_24H ? "24h" : "noche",
-             (unsigned long)ahora);
-}
-
 /* Monta el apunte de la categoria y lo mete en la cola.
  *
  * El resumen que va al diario del viaje se reaprovecha de s_resumen, el mismo
@@ -1860,36 +1568,6 @@ static void apunte_encolar(categoria_t cat)
             u = apunte_campo_txt(b, sizeof(b), u, "km",    lv_textarea_get_text(s_mant_km_ta));
             u = apunte_campo_txt(b, sizeof(b), u, "coste", lv_textarea_get_text(s_mant_coste_ta));
             break;
-        case CAT_PARADA: {
-            for (uint8_t i = 0; i < PARADA_COUNT; i++) {
-                u = apunte_campo_num(b, sizeof(b), u, PARADA_CLAVE[i],
-                                     lv_obj_has_state(s_parada_chk[i], LV_STATE_CHECKED) ? 1 : 0);
-            }
-            u = apunte_campo_txt(b, sizeof(b), u, "cobro",
-                                 parada_cobro_actual() == PARADA_COBRO_24H ? "24h" : "noche");
-            u = apunte_campo_txt(b, sizeof(b), u, "moneda", currency_of(s_parada_currency_dd));
-            u = apunte_campo_txt(b, sizeof(b), u, "precio", lv_textarea_get_text(s_parada_precio_ta));
-            for (uint8_t i = 0; i < SERV_COUNT; i++) {
-                u = apunte_campo_num(b, sizeof(b), u, SERV_CLAVE[i],
-                                     lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED) ? 1 : 0);
-            }
-            /* valoracion_elegida() y no VALORACION[s_val_nota]: sin haber
-             * tocado ningun boton NO hay nota, y guardar "Buena" por defecto
-             * seria inventarse el dato. Vacio significa "sin valorar". */
-            u = apunte_campo_txt(b, sizeof(b), u, "valoracion", valoracion_elegida());
-            for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
-                u = apunte_campo_num(b, sizeof(b), u, VAL_EXTRA_CLAVE[i],
-                                     lv_obj_has_state(s_val_extra_chk[i], LV_STATE_CHECKED) ? 1 : 0);
-            }
-            /* Como quedo aparcada. Es un dato DEL SITIO, no del momento: si un
-             * area tiene mucha pendiente, conviene saberlo antes de volver. */
-            float pitch = 0, roll = 0;
-            if (tilt_get(&pitch, &roll)) {
-                u = apunte_campo_num(b, sizeof(b), u, "cabeceo_centi", (long)(pitch * 100));
-                u = apunte_campo_num(b, sizeof(b), u, "balanceo_centi", (long)(roll * 100));
-            }
-            break;
-        }
         case CAT_AGUAS:
             /* Dos columnas por cosa: el 0/1 de si se hizo y su importe. Lo que
              * no se ha hecho deja el precio VACIO, que no es lo mismo que un
@@ -2033,97 +1711,12 @@ static void do_save(void *user_data)
     show_grid();
 }
 
-/* --- Fin de parada, al volver a encender ---------------------------------- */
-
-static char s_fin_resumen[96];
-
-static void parada_do_cerrar(void *ud)
-{
-    (void)ud;
-    ESP_LOGI(TAG, "CONFIRMADO fin de parada -- TODO Fase 4: enviar a la P4");
-    clear_parada_abierta();
-    s_parada_abierta = false;
-    viaje_refresh();
-}
-
-/* Arma y saca el cartel de fin de parada. Devuelve false si ahora mismo no se
- * puede: o no hay parada abierta, o la P4 todavia no ha dicho la hora y sin
- * ella no hay nada que calcular. */
-static bool parada_pregunta_fin(void)
-{
-    parada_abierta_t p;
-    load_parada_abierta(&p);
-    if (!p.abierta) return false;
-
-    uint32_t ahora = reloj_p4();
-    if (ahora == 0) return false;
-
-    unsigned n = parada_unidades(p.epoch_inicio, ahora, p.cobro);
-
-    const char *sitio = (p.lugar < PARADA_COUNT) ? PARADA_OPCIONES[p.lugar] : "Parada";
-    const char *moneda = (p.moneda < (sizeof(CURRENCY_CODES) / sizeof(CURRENCY_CODES[0])))
-                         ? CURRENCY_CODES[p.moneda] : "EUR";
-
-    /* "3 noches" o "3 x 24 h", segun como cobre el sitio. */
-    char cuanto[24];
-    if (p.cobro == PARADA_COBRO_24H) {
-        snprintf(cuanto, sizeof(cuanto), "%u x 24 h", n);
-    } else {
-        snprintf(cuanto, sizeof(cuanto), "%u noche%s", n, n == 1 ? "" : "s");
-    }
-
-    /* El total solo si hay precio: una pernocta gratis no lo lleva. */
-    if (p.precio[0]) {
-        snprintf(s_fin_resumen, sizeof(s_fin_resumen), "%s\n%s\nTotal:  %.2f %s",
-                 sitio, cuanto, atof(p.precio) * (double)n, moneda);
-    } else {
-        snprintf(s_fin_resumen, sizeof(s_fin_resumen), "%s\n%s", sitio, cuanto);
-    }
-
-    /* El "no" aqui no es corregir nada: es que sigues en el sitio otro dia
-     * mas. La parada se queda abierta y se volvera a preguntar. */
-    confirm_screen_open("Fin de la parada?", s_fin_resumen, COL_VIAJE,
-                        "Si, terminar", "No, continuar", parada_do_cerrar, NULL);
-    return true;
-}
-
-/* El boton de la pantalla de Viaje. A diferencia del aviso del arranque, aqui
- * lo has pedido tu: si no se puede, hay que decir por que en vez de no hacer
- * nada, que parece que el boton esta roto. */
-static void parada_fin_click_cb(lv_event_t *e)
-{
-    (void)e;
-    if (parada_pregunta_fin()) return;
-    confirm_screen_aviso("Sin la P4",
-                         "No se que dia es, asi que\nno puedo calcular lo que\n"
-                         "ha durado la parada.",
-                         COL_ACCION_STOP, "Entendido");
-}
-
 static void save_generic_cb(lv_event_t *e)
 {
     categoria_t cat = (categoria_t)(uintptr_t)lv_event_get_user_data(e);
     build_resumen(cat);
     confirm_screen_open("Es correcto?", s_resumen, cat_color(cat), "Si, guardar",
                         NULL, do_save, (void *)(uintptr_t)cat);
-}
-
-/* Pone al dia las dos caras de la pantalla de viaje y el texto de su casilla
- * en el menu. Sin viaje: mensaje + "Iniciar viaje" grande, y NADA de
- * finalizar -- no se puede terminar lo que no ha empezado. Con viaje:
- * "Anotar parada" grande y "Finalizar viaje" pequeno abajo, lejos del pulgar
- * que viene de anotar. */
-static void viaje_refresh(void)
-{
-    lv_label_set_text(s_viaje_title_lbl, s_viaje_activo ? "VIAJE EN CURSO" : "VIAJE");
-    set_hidden(s_viaje_msg,           s_viaje_activo);
-    set_hidden(s_viaje_btn_iniciar,   s_viaje_activo);
-    set_hidden(s_viaje_btn_parada,   !s_viaje_activo);
-    set_hidden(s_viaje_btn_finalizar, !s_viaje_activo);
-    /* La parada se puede cerrar SIEMPRE que este abierta, haya viaje o no: si
-     * el viaje se termino con una parada sin cerrar, sigue habiendo que
-     * cerrarla y este es el unico sitio desde donde hacerlo. */
-    set_hidden(s_viaje_btn_fin_parada, !s_parada_abierta);
 }
 
 static void viaje_set_activo(bool activo)
@@ -2135,7 +1728,6 @@ static void viaje_set_activo(bool activo)
          * se va la luz. Peor seria no dejar iniciarlo por un fallo de NVS. */
         ESP_LOGW(TAG, "No se pudo guardar el estado del viaje: %s", esp_err_to_name(err));
     }
-    viaje_refresh();
 }
 
 /* --- Envio a la P4 (Fase 4, fase 1) ---------------------------------------
@@ -2241,41 +1833,6 @@ static void viaje_do_finalizar(void *ud)
     show_grid();
 }
 
-/* "Anotar parada" y "Servicios del area" son navegacion, no guardado: van
- * directas a su pantalla, sin confirmacion. */
-static void parada_open_cb(lv_event_t *e)
-{
-    (void)e;
-    show_form(CAT_PARADA);
-}
-
-static void servicios_open_cb(lv_event_t *e)
-{
-    (void)e;
-    s_serv_desde = CAT_PARADA;
-    show_form(CAT_SERVICIOS);
-}
-
-/* Al marcar un sitio se desmarcan los otros dos, en vez de bloquearlos en gris:
- * asi cambiar de idea es UN toque sobre el que quieres, sin acordarse de quitar
- * antes el anterior -- que es lo que hace falta con el vehiculo parando.
- *
- * No se llama a si mismo en cadena: lv_obj_clear_state() no dispara
- * LV_EVENT_VALUE_CHANGED, solo lo hace el toque del usuario. */
-static void parada_lugar_cb(lv_event_t *e)
-{
-    lv_obj_t *target = lv_event_get_target(e);
-    if (lv_obj_has_state(target, LV_STATE_CHECKED)) {
-        for (uint8_t i = 0; i < sizeof(PARADA_LUGARES); i++) {
-            lv_obj_t *otro = s_parada_chk[PARADA_LUGARES[i]];
-            if (otro != target) lv_obj_clear_state(otro, LV_STATE_CHECKED);
-        }
-    }
-    /* Cambiar de sitio borra precio y servicios: eran del sitio anterior. */
-    parada_clear_extras();
-    parada_refresh_extras();
-}
-
 /* Se llama al aceptar el editor del destino. */
 static void viaje_destino_listo_cb(lv_event_t *e)
 {
@@ -2372,86 +1929,6 @@ static void repo_recalc_cb(lv_event_t *e)
  * usuario: pequeno y abajo, para que la accion habitual (anotar parada) se
  * lleve la pantalla y la destructiva no se toque de un roce. */
 #define VIAJE_BTN_PEQ_H  46
-
-static lv_obj_t *make_viaje_button(lv_obj_t *form, const char *text, uint32_t color,
-                                    lv_event_cb_t cb, bool grande)
-{
-    lv_obj_t *btn = lv_btn_create(form);
-    lv_obj_set_width(btn, lv_pct(100));
-    if (grande) {
-        lv_obj_set_height(btn, LV_SIZE_CONTENT);
-        lv_obj_set_style_min_height(btn, 70, 0);
-        lv_obj_set_flex_grow(btn, 1);
-    } else {
-        lv_obj_set_height(btn, VIAJE_BTN_PEQ_H);
-    }
-    lv_obj_set_style_radius(btn, 12, 0);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(color), 0);
-    lv_obj_set_style_bg_color(btn, lv_color_darken(lv_color_hex(color), LV_OPA_30),
-                              LV_STATE_PRESSED);
-    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t *lbl = lv_label_create(btn);
-    lv_label_set_text(lbl, text);
-    lv_obj_set_style_text_font(lbl, grande ? &lv_font_montserrat_24
-                                           : &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(lbl, lv_color_hex(COL_TILE_FG), 0);
-    lv_obj_center(lbl);
-    return btn;
-}
-
-static void build_viaje(lv_obj_t *form)
-{
-    s_viaje_title_lbl = add_header(form, "VIAJE", lv_color_hex(COL_VIAJE),
-                                   BACK_TO_GRID);
-
-    /* Sin campo de coordenada GPS manual aqui a proposito: cuando exista
-     * el GPS real (Fase 4 + modulo GPS de la P4) la posicion de
-     * inicio/fin se capturaria sola en el instante del toque, no tiene
-     * sentido pedirla a mano para una accion pensada como "un solo toque". */
-    /* Campo INVISIBLE para el destino: el editor a pantalla completa vuelca
-     * sobre un textarea, y aqui no hay formulario donde ponerlo. Fuera del
-     * layout y de tamano 0 para que no ocupe ni un pixel. */
-    s_viaje_destino_ta = lv_textarea_create(form);
-    lv_obj_add_flag(s_viaje_destino_ta, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(s_viaje_destino_ta, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_size(s_viaje_destino_ta, 0, 0);
-    lv_textarea_set_one_line(s_viaje_destino_ta, true);
-    /* 20 caracteres: es el limite del diseño, y la ruta en la SD de la P4 no
-     * debe crecer sin control. */
-    lv_textarea_set_max_length(s_viaje_destino_ta, 20);
-    /* SOLO ASCII, y no es un descuido: ver el bloque de monedas arriba -- las
-     * fuentes Montserrat compiladas no traen acentos ni la ñ, y saldrian
-     * cuadrados. Ademas esto acaba siendo un NOMBRE DE CARPETA, asi que los
-     * caracteres que romperian la ruta no se dejan ni teclear. La P4 vuelve a
-     * filtrar por su cuenta: no se fia de lo que le manden. */
-    lv_textarea_set_accepted_chars(s_viaje_destino_ta,
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -_");
-    lv_obj_add_event_cb(s_viaje_destino_ta, viaje_destino_listo_cb,
-                        LV_EVENT_VALUE_CHANGED, NULL);
-
-    s_viaje_msg = lv_label_create(form);
-    lv_label_set_text(s_viaje_msg, "Inicio y fin de viaje de la P4, desde aqui.");
-    lv_obj_set_style_text_color(s_viaje_msg, lv_color_hex(COL_LABEL), 0);
-    lv_obj_set_style_text_font(s_viaje_msg, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_align(s_viaje_msg, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(s_viaje_msg, lv_pct(100));
-
-    /* Los tres botones existen desde el arranque y se ocultan segun haya viaje
-     * o no (viaje_refresh): crearlos y destruirlos a cada entrada seria mas
-     * codigo y mas ocasiones de dejarse un puntero colgando. Solo se ve uno
-     * grande cada vez, asi que flex_grow le da toda la pantalla. */
-    s_viaje_btn_iniciar = make_viaje_button(form, LV_SYMBOL_PLAY "  Iniciar viaje",
-                                            COL_ACCION_OK, viaje_iniciar_cb, true);
-    s_viaje_btn_parada  = make_viaje_button(form, LV_SYMBOL_PLUS "  Anotar parada",
-                                            COL_VIAJE, parada_open_cb, true);
-    /* En azul y encima del rojo: cerrar una parada es rutina y terminar el viaje
-     * no, asi que se distinguen por color y el destructivo queda el ultimo. */
-    s_viaje_btn_fin_parada = make_viaje_button(form, "Finalizar parada",
-                                               COL_VIAJE, parada_fin_click_cb, false);
-    s_viaje_btn_finalizar = make_viaje_button(form, LV_SYMBOL_STOP "  Finalizar viaje",
-                                              COL_ACCION_STOP, viaje_finalizar_cb, false);
-}
 
 static void build_repostaje(lv_obj_t *form)
 {
@@ -2689,17 +2166,6 @@ static lv_obj_t *make_precio_row(lv_obj_t *parent, precio_row_t *o,
     return cont;
 }
 
-static lv_obj_t *make_parada_precio_row(lv_obj_t *parent)
-{
-    precio_row_t o;
-    lv_obj_t *cont = make_precio_row(parent, &o, parada_cobro_cb);
-    s_parada_precio_lbl  = o.lbl;
-    s_parada_precio_ta   = o.ta;
-    s_parada_currency_dd = o.dd;
-    s_parada_cobro_bm    = o.bm;
-    return cont;
-}
-
 /* Pantalla de parada. Se llega desde Viaje y su Volver regresa alli, no al
  * menu: es la vuelta natural de donde has venido.
  *
@@ -2803,47 +2269,6 @@ static void build_pernocta(lv_obj_t *form)
     lv_obj_t *guardar = make_save_button(acciones, "Guardar noche",
                                          save_generic_cb,
                                          (void *)(uintptr_t)CAT_PERNOCTA);
-    lv_obj_set_flex_grow(guardar, 2);
-}
-
-static void build_parada(lv_obj_t *form)
-{
-    add_header(form, "PARADA", lv_color_hex(COL_VIAJE), CAT_VIAJE);
-
-    make_check_grid(form, PARADA_OPCIONES, PARADA_COUNT, s_parada_chk, COL_VIAJE,
-                    CHK_GAP);
-    for (uint8_t i = 0; i < sizeof(PARADA_LUGARES); i++) {
-        lv_obj_add_event_cb(s_parada_chk[PARADA_LUGARES[i]], parada_lugar_cb,
-                            LV_EVENT_VALUE_CHANGED, NULL);
-    }
-
-    s_parada_precio_row = make_parada_precio_row(form);
-
-    lv_obj_t *acciones = lv_obj_create(form);
-    lv_obj_set_size(acciones, lv_pct(100), 50);
-    lv_obj_set_style_bg_opa(acciones, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(acciones, 0, 0);
-    lv_obj_set_style_pad_all(acciones, 0, 0);
-    lv_obj_set_style_pad_column(acciones, 8, 0);
-    lv_obj_clear_flag(acciones, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(acciones, LV_FLEX_FLOW_ROW);
-
-    s_parada_servicios_btn = lv_btn_create(acciones);
-    lv_obj_set_height(s_parada_servicios_btn, 50);
-    lv_obj_set_flex_grow(s_parada_servicios_btn, 1);
-    lv_obj_set_style_bg_color(s_parada_servicios_btn, lv_color_hex(COL_VIAJE), 0);
-    lv_obj_set_style_bg_color(s_parada_servicios_btn,
-                              lv_color_darken(lv_color_hex(COL_VIAJE), LV_OPA_30),
-                              LV_STATE_PRESSED);
-    lv_obj_add_event_cb(s_parada_servicios_btn, servicios_open_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *serv_lbl = lv_label_create(s_parada_servicios_btn);
-    lv_label_set_text(serv_lbl, "Servicios " LV_SYMBOL_RIGHT);
-    lv_obj_set_style_text_font(serv_lbl, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(serv_lbl, lv_color_hex(COL_TILE_FG), 0);
-    lv_obj_center(serv_lbl);
-
-    lv_obj_t *guardar = make_save_button(acciones, "Guardar parada",
-                                         save_generic_cb, (void *)(uintptr_t)CAT_PARADA);
     lv_obj_set_flex_grow(guardar, 2);
 }
 
@@ -4272,15 +3697,34 @@ void view_registro_create(lv_obj_t *parent)
     lv_obj_set_style_pad_all(parent, 0, 0);
     lv_obj_set_style_border_width(parent, 0, 0);
 
+    /* Campo INVISIBLE para el destino del viaje. Vivia dentro del formulario
+     * viejo de Viaje, que ya no existe; pero lo sigue usando "Iniciar viaje"
+     * del menu nuevo, porque el editor a pantalla completa vuelca sobre un
+     * textarea y aqui no hay formulario donde ponerlo. Fuera del layout y de
+     * tamano 0 para que no ocupe ni un pixel. */
+    s_viaje_destino_ta = lv_textarea_create(parent);
+    lv_obj_add_flag(s_viaje_destino_ta, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_viaje_destino_ta, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_size(s_viaje_destino_ta, 0, 0);
+    lv_textarea_set_one_line(s_viaje_destino_ta, true);
+    /* 20 caracteres: es el limite del diseno, y la ruta en la SD de la P4 no
+     * debe crecer sin control. */
+    lv_textarea_set_max_length(s_viaje_destino_ta, 20);
+    /* SOLO ASCII, y no es un descuido: las fuentes Montserrat compiladas no
+     * traen acentos ni la n con virgulilla, y saldrian cuadrados. Ademas esto
+     * acaba siendo un NOMBRE DE CARPETA, asi que los caracteres que romperian
+     * la ruta no se dejan ni teclear. La P4 vuelve a filtrar por su cuenta. */
+    lv_textarea_set_accepted_chars(s_viaje_destino_ta,
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -_");
+    lv_obj_add_event_cb(s_viaje_destino_ta, viaje_destino_listo_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+
     /* --- Menus de la salida ---
      * Se crean ANTES que los formularios para que estos queden por encima en
      * el orden de dibujo. Cual se ve lo decide volver_al_menu(), al final. */
     crear_menus(parent);
 
     /* --- Formularios (ocultos hasta que se elige un icono) --- */
-    s_forms[CAT_VIAJE] = make_form_container(parent);
-    build_viaje(s_forms[CAT_VIAJE]);
-
     s_forms[CAT_REPOSTAJE] = make_form_container(parent);
     build_repostaje(s_forms[CAT_REPOSTAJE]);
 
@@ -4302,9 +3746,6 @@ void view_registro_create(lv_obj_t *parent)
     s_forms[CAT_PERNOCTA] = make_form_container(parent);
     build_pernocta(s_forms[CAT_PERNOCTA]);
 
-    s_forms[CAT_PARADA] = make_form_container(parent);
-    build_parada(s_forms[CAT_PARADA]);
-
     s_forms[CAT_SERVICIOS] = make_form_container(parent);
     build_servicios(s_forms[CAT_SERVICIOS]);
 
@@ -4316,8 +3757,6 @@ void view_registro_create(lv_obj_t *parent)
      * casilla acordes; parada_refresh_extras() esconde el precio y el boton de
      * servicios, que solo salen al marcar area o camping. */
     load_trip_active(&s_viaje_activo);
-    viaje_refresh();
-    parada_refresh_extras();
 
     /* La parada del modelo VIEJO (namespace "parada" de NVS) ya no existe: el
      * cuaderno se organiza por salidas y las paradas son eventos de salida.c.
@@ -4330,8 +3769,6 @@ void view_registro_create(lv_obj_t *parent)
         ESP_LOGW(TAG, "habia una parada del modelo viejo sin cerrar: la suelto");
         clear_parada_abierta();
     }
-    s_parada_abierta = false;
-    viaje_refresh();
 
     /* Si quedo una parada abierta de VERDAD (un evento de la salida), vigilar
      * en segundo plano hasta que la P4 diga la hora y preguntar entonces. El
