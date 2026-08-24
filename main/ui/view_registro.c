@@ -1644,19 +1644,20 @@ static void build_resumen(categoria_t cat)
                          val_or_dash(s_pern_precio_ta),
                          currency_of(s_pern_currency_dd));
             }
-            /* Si los servicios han costado algo, va DELANTE de la lista: es lo
-             * que se repasa antes de aceptar. El desglose no cabe aqui y
-             * tampoco hace falta -- va entero en el apunte. */
+            /* Lo que costaron, DETRAS de la lista: primero el concepto y
+             * luego el precio, como en el resto de la pantalla (usuario,
+             * 24-ago-2026). El desglose no cabe aqui y tampoco hace falta --
+             * va entero en el apunte. */
             char extras[48];
             extras[0] = '\0';
             float st = serv_total();
             if (st > 0.005f) {
-                snprintf(extras, sizeof(extras), "%.2f %s  -  ", st,
+                snprintf(extras, sizeof(extras), "  -  %.2f %s", st,
                          currency_of(s_pern_currency_dd));
             }
             snprintf(s_resumen, sizeof(s_resumen), "%s  -  %u noche%s\n%sServicios:  %s%s",
                      SITIO_NOMBRE[s_pern_sitio], (unsigned)noches,
-                     noches == 1 ? "" : "s", precio, extras, serv);
+                     noches == 1 ? "" : "s", precio, serv, extras);
             break;
         }
         case CAT_ITV:
