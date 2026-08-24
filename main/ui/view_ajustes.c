@@ -234,7 +234,9 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(wlbl, &lv_font_montserrat_24, 0);
     lv_obj_center(wlbl);
 
-    /* Y el resto de la pantalla, la VERSION. Grande y centrada, que es el
+    /* Y el resto de la pantalla, la VERSION. GRANDE y centrada -- letra 40 para
+     * el numero y 20 para el rotulo y la fecha: sobra sitio y esto se mira de
+     * lejos, con el aparato en su soporte y sin acercarse. Que es el
      * primer dato que hace falta cuando algo va raro: sale del tag de git al
      * compilar (esp_app_get_description), no hay ningun numero que mantener a
      * mano. Con la fecha debajo, que distingue dos builds de la misma. */
@@ -257,18 +259,18 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_t *vrot = lv_label_create(vcard);
     lv_label_set_text(vrot, "Version instalada");
     lv_obj_set_style_text_color(vrot, lv_color_hex(0x888888), 0);
-    lv_obj_set_style_text_font(vrot, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(vrot, &lv_font_montserrat_20, 0);
 
     s_ver_lbl = lv_label_create(vcard);
     lv_label_set_text(s_ver_lbl, app ? app->version : "?");
     lv_obj_set_style_text_color(s_ver_lbl, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_font(s_ver_lbl, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_font(s_ver_lbl, &lv_font_montserrat_40, 0);
 
     lv_obj_t *vfecha = lv_label_create(vcard);
     if (app) lv_label_set_text_fmt(vfecha, "%s  %s", app->date, app->time);
     else     lv_label_set_text(vfecha, "");
-    lv_obj_set_style_text_color(vfecha, lv_color_hex(0x888888), 0);
-    lv_obj_set_style_text_font(vfecha, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(vfecha, lv_color_hex(0xAAAAAA), 0);
+    lv_obj_set_style_text_font(vfecha, &lv_font_montserrat_20, 0);
 
     /* ── El formulario del WI-FI ─────────────────────────────────────────── */
     s_wifi = lv_obj_create(parent);
