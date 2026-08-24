@@ -30,10 +30,18 @@ static const char *TAG = "viaje_cola";
 #define K_CABEZA    "cabeza"     /* indice del proximo a enviar */
 #define K_COLA      "cola"       /* indice donde se escribira el siguiente */
 
-/* 64 entradas. Un viaje largo apuntando a mano no llega a tanto ni de lejos, y
- * la NVS de este aparato no es infinita. Al llenarse se AVISA en vez de tirar
- * nada en silencio, que es el fallo que esta cola existe para evitar. */
-#define CAPACIDAD   64
+/* DIECISEIS, y el numero sale de una cuenta, no de un redondeo: la particion
+ * "nvs" son 16 KB (partitions.csv) y ahi dentro viven ademas las credenciales
+ * Wi-Fi, la calibracion del nivel, el estado de la salida y los contadores del
+ * viaje. Con la pernocta -- el apunte mas largo, 693 bytes medidos -- no caben
+ * ni de lejos las 64 que decia antes: se llenaria la NVS mucho antes de llegar,
+ * y el aviso saldria como un error raro de escritura en vez de un "cola llena".
+ *
+ * Que se acumulen apuntes NO es lo normal: la P4 esta siempre encendida y la
+ * cola se vacia sola en segundos. Si crece es que no le llegan. Al llenarse se
+ * AVISA en vez de tirar nada en silencio, que es el fallo que esta cola existe
+ * para evitar. */
+#define CAPACIDAD   VIAJE_COLA_CAPACIDAD
 
 /* El mas largo es la parada con todo marcado: 505 bytes MEDIDOS, no estimados
  * -- la estimacion anterior decia "ronda los 300" y se quedaba corta, con lo que

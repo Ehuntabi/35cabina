@@ -24,6 +24,7 @@
  * lucecitas.
  */
 #include "view_info.h"
+#include "net/viaje_cola.h"   /* VIAJE_COLA_CAPACIDAD, para el aviso de casi llena */
 #include "nav.h"
 #include "../data_model.h"
 #include "esp_timer.h"
@@ -900,6 +901,24 @@ static void pendientes_aplicar(void *arg)
     } else {
         lv_label_set_text_fmt(s_pendientes, "%u sin enviar", (unsigned)s_pend_valor);
     }
+
+    /* Cerca del tope, la pastilla se pone ROJA y lo dice.
+     *
+     * Que se acumulen apuntes no es lo normal: la P4 esta siempre encendida y la
+     * cola se vacia sola en segundos. Si esto llega a verse es que llevan un
+     * buen rato sin llegar -- la P4 sin corriente, o esta pantalla fuera de su
+     * Wi-Fi -- y conviene enterarse ANTES de que no quepa el siguiente, que ahi
+     * ya no se puede anotar. Tres de margen: da tiempo a reaccionar sin dar la
+     * lata por uno o dos. */
+    bool casi = s_pend_valor + 3 >= VIAJE_COLA_CAPACIDAD;
+    if (casi) {
+        lv_label_ins_text(s_pendientes, LV_LABEL_POS_LAST, "  -  CASI LLENA");
+    }
+    lv_obj_set_style_bg_color(s_pendientes,
+                              lv_color_hex(casi ? 0xFF4444 : 0xFF9800), 0);
+    lv_obj_set_style_text_color(s_pendientes,
+                                lv_color_hex(casi ? 0xFFFFFF : 0x000000), 0);
+
     lv_obj_clear_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
     lv_obj_align(s_pendientes, LV_ALIGN_BOTTOM_MID, 0, -6);
 }

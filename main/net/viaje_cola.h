@@ -3,6 +3,10 @@
  * y los apuntes se hacen justo antes de apagar. */
 #pragma once
 
+/* Cuantos apuntes caben esperando. La pantalla de datos lo necesita para avisar
+ * ANTES de llegar al tope; el porque de este numero esta en viaje_cola.c. */
+#define VIAJE_COLA_CAPACIDAD  16
+
 #include <stdbool.h>
 #include <stddef.h>
 

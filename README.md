@@ -295,14 +295,21 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   en julio una estimación de "ronda los 300" para la parada (que eran 505) costó
   una auditoría y apuntes perdidos en silencio.
 
-  🔴 **`CAPACIDAD` de la cola (64) NO es alcanzable**: la partición `nvs` son
-  16 KB (`partitions.csv`) y ahí no caben 64 apuntes de ~700 bytes ni de lejos —
-  descontando lo que ya guardan Wi-Fi, calibración del nivel y el estado de la
-  salida, salen del orden de **10-15 pernoctas**. No se pierde nada en silencio
-  (`viaje_cola_push()` devuelve false y quien llama avisa en pantalla), pero el
-  aviso llegaría como un error de NVS y no como "cola llena". Pendiente de
-  decidir: bajar `CAPACIDAD` a lo que la NVS aguante de verdad, o agrandar la
-  partición (lo segundo **borra** la NVS: credenciales y calibración).
+  **`CAPACIDAD` de la cola: 64 → 16** (24-ago-2026), y el número sale de una
+  cuenta y no de un redondeo: la partición `nvs` son 16 KB (`partitions.csv`) y
+  ahí dentro viven además las credenciales Wi-Fi, la calibración del nivel, el
+  estado de la salida y los contadores del viaje. Con la pernocta a 693 bytes, 64
+  no se alcanzan ni de lejos: la NVS se llenaría mucho antes y el aviso saldría
+  como un error de escritura en vez de un «cola llena». No se perdía nada en
+  silencio, pero el mensaje era el equivocado.
+
+  Y se avisa **antes** de llegar: a menos de 3 huecos, la pastilla de la pantalla
+  de datos se pone roja y añade «CASI LLENA» (`VIAJE_COLA_CAPACIDAD`, expuesto en
+  la cabecera para eso). Tiene sentido porque **la P4 está siempre encendida** —
+  la que se apaga es esta pantalla, con el contacto—, así que la cola se vacía
+  sola en segundos y verla crecer significa que los apuntes no están llegando.
+  Por lo mismo, el cartel de cola llena ya no dice "enciende la P4" sino que no
+  está vaciando la cola.
 
   **El color de los botones va con lo que HACEN, no con dónde están**
   (24-ago-2026, a raíz de mirarlo en la placa). El diálogo pintaba siempre el de

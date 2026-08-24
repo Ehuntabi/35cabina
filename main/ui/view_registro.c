@@ -1949,7 +1949,7 @@ static void apunte_encolar(categoria_t cat)
 
     if (!viaje_cola_push(b)) {
         confirm_screen_aviso("No he podido apuntarlo",
-                             "La cola de pendientes esta\nllena. Enciende la P4 para\nque se vacie.",
+                             "La cola de pendientes esta\nllena y la P4 no la vacia.\nMira si tiene corriente.",
                              COL_ACCION_STOP, "Entendido");
     }
 }
@@ -2186,7 +2186,7 @@ static void viaje_do_finalizar(void *ud)
 
     if (!viaje_cola_push(cuerpo)) {
         confirm_screen_aviso("No he podido apuntarlo",
-                             "La cola de pendientes esta\nllena. Enciende la P4 para\nque se vacie.",
+                             "La cola de pendientes esta\nllena y la P4 no la vacia.\nMira si tiene corriente.",
                              COL_ACCION_STOP, "Entendido");
         return;
     }
@@ -3482,7 +3482,7 @@ static void viaje_p4_manda(const char *cuerpo, const char *titulo)
 {
     if (!viaje_cola_push(cuerpo)) {
         confirm_screen_aviso("No he podido pedirlo",
-                             "La cola de pendientes esta\nllena. Enciende la P4 para\nque se vacie.",
+                             "La cola de pendientes esta\nllena y la P4 no la vacia.\nMira si tiene corriente.",
                              COL_ACCION_STOP, "Entendido");
         return;
     }

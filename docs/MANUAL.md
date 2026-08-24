@@ -67,6 +67,12 @@ cuanto la P4 vuelva, y **no se pierden al quitar el contacto**. Está siempre a
 la vista mientras quede algo, porque esta pantalla no puede saber que vas a
 apagar — se queda sin corriente y ya.
 
+> **Si ese aviso se pone ROJO y dice «CASI LLENA», hazle caso.** Caben **16**
+> apuntes esperando, y como la P4 está siempre encendida lo normal es que la cola
+> se vacíe sola en segundos: que llegue a acumular tantos significa que no le
+> están llegando —la P4 sin corriente, o esta pantalla fuera de su wifi—. Si se
+> llena del todo, el siguiente apunte **no se puede anotar** y te lo dice.
+
 > **El aviso de «sin cerrar» se ve aquí, no solo en el cuaderno.** Si dejaste
 > algo declarado, abajo al centro sale una pastilla naranja **«2 sin cerrar ›»**.
 > Es la pantalla que está puesta mientras conduces, así que es donde tiene que
@@ -687,6 +693,7 @@ llama por lo que es: **`historico.tar`**.
 | El nivel marca torcido estando recta | Pulsa **Calibrar nivel** con la autocaravana bien nivelada |
 | Volviste a Registros y estaba en blanco | Normal: al salir se limpia. Lo no guardado se pierde |
 | **"N sin enviar"** en naranja | No es avería: hay apuntes esperando a la P4. Se van solos cuando aparezca |
+| **"N sin enviar - CASI LLENA"** en rojo | Sí es aviso: quedan menos de 3 huecos de 16. La P4 lleva rato sin recibir; mira si tiene corriente y si esta pantalla ve su wifi |
 | **"Guardado solo aquí"** | Lo anotaste sin viaje en marcha, así que no va a la tarjeta. Inicia un viaje antes |
 
 ---
