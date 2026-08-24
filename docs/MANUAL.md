@@ -261,8 +261,8 @@ pantalla con lo que solo se sabe al marcharse.
   se cobra por noches.
 - En un sitio **gratis no sale el precio**, pero sí los servicios y la nota: un
   parking gratis con agua y buena noche es justo lo que interesa recordar.
-- **Servicios** lleva a la lista de siempre (agua, vaciados, luz, duchas,
-  basura) y, desde ahí, a la **valoración** del sitio.
+- **Servicios** lleva a la lista, donde **cada uno tiene su precio al lado**
+  (ver más abajo), y desde ahí a la **valoración** del sitio.
 
 La hora de fin se congela al pulsar «Terminarla», no al guardar: rellenar esto
 son dos minutos y la noche no duró dos minutos más por eso.
@@ -469,12 +469,32 @@ Aparece una fila con **importe + moneda + tipo de cobro** en la misma línea:
 
 ### Servicios
 
-Botón **"Servicios →"**, disponible en Área y en Camping:
+Botón **"Servicios →"**. Una línea por servicio, con su casilla y **lo que
+costó** al lado:
 
-Agua potable · Vaciado grises · Vaciado WC · Electricidad · Duchas/WC · Basura
+```
+        SERVICIOS
+        [x] Agua potable     [  1.00]
+        [x] Vaciado grises   [      ]
+        [ ] Vaciado WC       [      ]
+        [x] Electricidad     [  2.00]
+        [ ] Duchas/WC        [      ]
+        [x] Basura           [      ]
+        [x] Recomendado
+```
 
-En **camping** el texto de arriba dice *"Incluido en el precio"*, porque ahí no
-estás marcando lo que hay sino lo que ya has pagado.
+**Marcado y sin importe significa gratis**, como en las aguas — y si escribes un
+precio, la casilla se marca sola. En un **camping** normalmente van todos
+marcados y sin importe: ya están pagados en el precio de la noche.
+
+La **moneda** es la de la pernocta, la misma parada. Por eso su selector se queda
+a la vista aunque el sitio sea gratis: dormir puede ser gratis y el agua costar
+un franco.
+
+> **Se guarda el desglose.** Cada servicio lleva su propia columna de precio en
+> `pernoctas.csv`, así que sabrás que en esa área el agua costaba 1 € y la luz 2.
+> En el resumen del viaje esos importes se suman con la noche en la línea de
+> **Alojamiento**, que es lo que interesa para las cuentas.
 
 ### Valoración
 

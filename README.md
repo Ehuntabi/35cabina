@@ -272,14 +272,37 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   puede estar clavado: `BACK_TO_ORIGEN` vuelve a `s_serv_desde`, que pone quien la
   abre.
 
-  El apunte de la pernocta pasa a ser **el más largo: 547 bytes MEDIDOS** en el
+  **Cada servicio lleva su importe** (24-ago-2026): antes eran seis casillas en
+  dos columnas y solo se podía decir que los había, cuando en un área el agua
+  cuesta 1 € y la luz 2. Ahora es una fila por servicio (`make_check_money_row`,
+  la misma de aguas, con el alto como parámetro) más la de valoración. Van a
+  **34 px y sin el rótulo explicativo de antes**, y no es capricho: 48 de
+  cabecera + seis filas + la de valoración + huecos son los 304 útiles clavados;
+  con filas de 40 habría que deslizar para llegar a la última. La moneda no está
+  en esta pantalla — es la de la pernocta, la misma parada — y por eso su
+  selector **se queda a la vista aunque el sitio sea gratis**: dormir gratis y
+  pagar un franco por el agua es un caso real.
+
+  El desglose se guarda entero (una columna `precio_*` por servicio); lo que se
+  junta es solo el total, que suma a **Alojamiento** en el resumen del viaje.
+
+  El apunte de la pernocta pasa a ser **el más largo: 693 bytes MEDIDOS** en el
   peor caso —id y `ts` de 10 cifras, la clave de sitio más larga, los seis
-  servicios, valoración, las dos pegas, inclinación y un resumen que llene sus 96
-  bytes—. Buffer de `apunte_encolar()` y `CUERPO_MAX` de `viaje_cola.c` subidos de
-  640 a **768, y tienen que ir a la par**: quedan 221 bytes de margen, que es lo
-  que hace falta para los dos campos de posición que traerá el GPS. Medido y no
-  estimado a propósito: en julio una estimación de "ronda los 300" para la parada
-  (que eran 505) costó una auditoría y apuntes perdidos en silencio.
+  servicios **con su importe**, valoración, las dos pegas, inclinación y un
+  resumen que llene sus 96 bytes—. Buffer de `apunte_encolar()` y `CUERPO_MAX` de
+  `viaje_cola.c` subidos a **896, y tienen que ir a la par**: lo que sobra es para
+  los dos campos de posición que traerá el GPS. Medido y no estimado a propósito:
+  en julio una estimación de "ronda los 300" para la parada (que eran 505) costó
+  una auditoría y apuntes perdidos en silencio.
+
+  🔴 **`CAPACIDAD` de la cola (64) NO es alcanzable**: la partición `nvs` son
+  16 KB (`partitions.csv`) y ahí no caben 64 apuntes de ~700 bytes ni de lejos —
+  descontando lo que ya guardan Wi-Fi, calibración del nivel y el estado de la
+  salida, salen del orden de **10-15 pernoctas**. No se pierde nada en silencio
+  (`viaje_cola_push()` devuelve false y quien llama avisa en pantalla), pero el
+  aviso llegaría como un error de NVS y no como "cola llena". Pendiente de
+  decidir: bajar `CAPACIDAD` a lo que la NVS aguante de verdad, o agrandar la
+  partición (lo segundo **borra** la NVS: credenciales y calibración).
 
   **El color de los botones va con lo que HACEN, no con dónde están**
   (24-ago-2026, a raíz de mirarlo en la placa). El diálogo pintaba siempre el de

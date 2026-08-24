@@ -217,7 +217,10 @@ static const char *const SERV_OPCIONES[SERV_COUNT] = {
     "Valoracion"
 };
 static lv_obj_t *s_serv_chk[SERV_COUNT];
-static lv_obj_t *s_serv_hint;            /* explica que se esta marcando */
+/* Lo que cuesta cada servicio. En un area el agua puede costar 1 euro y la luz
+ * 2, y hasta el 24-ago-2026 solo se podia decir que LOS HABIA. La valoracion no
+ * lleva importe: no es un servicio, es la puerta a su pantalla. */
+static lv_obj_t *s_serv_precio_ta[SERV_IDX_VALORACION];
 
 /* --- Valoracion del sitio, en pantalla propia -----------------------------
  *
@@ -798,15 +801,22 @@ static lv_obj_t *make_check_grid(lv_obj_t *parent, const char *const *options,
  * guardar, el formulario de aguas se pasaria de los 304 px utiles y Guardar
  * quedaria fuera de la pantalla -- y aqui no hay scroll que valga. Con la
  * altura clavada salen 298. */
-#define CHKMONEY_ROW_H  46
-#define CHKMONEY_TA_H   38
+#define CHKMONEY_ROW_H  46   /* el de aguas, que tiene sitio de sobra */
 #define CHKMONEY_TA_W  150
 
+/* 'alto' porque la misma fila se usa en dos sitios con sitio muy distinto: en
+ * aguas son tres y caben holgadas; en servicios son seis mas la valoracion y
+ * hay que apretarlas para no tener que deslizar. La letra del importe la elige
+ * el alto: por debajo de 40 px la 24 no cabe.
+ *
+ * 'ta_out' a NULL deja la fila SIN importe: es lo que necesita la casilla de
+ * valoracion, que no es un servicio sino la puerta a su pantalla. */
 static void make_check_money_row(lv_obj_t *parent, const char *label_text,
-                                  lv_obj_t **chk_out, lv_obj_t **ta_out)
+                                  lv_obj_t **chk_out, lv_obj_t **ta_out,
+                                  lv_coord_t alto)
 {
     lv_obj_t *row = lv_obj_create(parent);
-    lv_obj_set_size(row, lv_pct(100), CHKMONEY_ROW_H);
+    lv_obj_set_size(row, lv_pct(100), alto);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(row, 0, 0);
     lv_obj_set_style_pad_all(row, 0, 0);
@@ -819,24 +829,28 @@ static void make_check_money_row(lv_obj_t *parent, const char *label_text,
     lv_obj_set_style_text_font(cb, &lv_font_montserrat_20, 0);
     /* Casilla grande, igual que en make_check_grid(): la de serie es diminuta
      * para un dedo en la cabina. */
-    lv_obj_set_style_width(cb, 28, LV_PART_INDICATOR);
-    lv_obj_set_style_height(cb, 28, LV_PART_INDICATOR);
+    lv_coord_t ind = alto >= 40 ? 28 : 26;
+    lv_obj_set_style_width(cb, ind, LV_PART_INDICATOR);
+    lv_obj_set_style_height(cb, ind, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(cb, lv_color_hex(COL_VIAJE),
                               LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_set_style_border_color(cb, lv_color_hex(COL_LABEL), LV_PART_INDICATOR);
     if (chk_out) *chk_out = cb;
 
+    if (!ta_out) return;
+
     lv_obj_t *ta = lv_textarea_create(row);
     lv_textarea_set_one_line(ta, true);
     lv_textarea_set_placeholder_text(ta, "0.00");
-    lv_obj_set_size(ta, CHKMONEY_TA_W, CHKMONEY_TA_H);
+    lv_obj_set_size(ta, CHKMONEY_TA_W, alto - 8);
     lv_obj_align(ta, LV_ALIGN_RIGHT_MID, 0, 0);
-    lv_obj_set_style_text_font(ta, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(ta, alto >= 40 ? &lv_font_montserrat_24
+                                              : &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, 0);
     lv_textarea_set_accepted_chars(ta, "0123456789.");
     lv_obj_set_user_data(ta, (void *)label_text);
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
-    if (ta_out) *ta_out = ta;
+    *ta_out = ta;
 }
 
 /* Moneda en UNA linea: rotulo a la izquierda y desplegable a la derecha.
@@ -1002,6 +1016,9 @@ static void parada_clear_extras(void)
     btnmatrix_reset(s_parada_cobro_bm);
     for (uint8_t i = 0; i < SERV_COUNT; i++) {
         lv_obj_clear_state(s_serv_chk[i], LV_STATE_CHECKED);
+    }
+    for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
+        lv_textarea_set_text(s_serv_precio_ta[i], "");
     }
     /* Quitar el estado a mano no dispara VALUE_CHANGED, asi que
      * valoracion_toggle_cb no se entera y hay que deshacer aqui lo que habria
@@ -1317,6 +1334,14 @@ static const char *const SERV_CLAVE[SERV_IDX_VALORACION] = {
     "serv_agua", "serv_vaciado_grises", "serv_vaciado_wc",
     "serv_electricidad", "serv_duchas", "serv_basura"
 };
+/* Y lo que costo cada uno, en columna aparte del 0/1. El DESGLOSE se guarda
+ * siempre, aunque en el resumen del viaje los importes se sumen todos juntos a
+ * Alojamiento: para volver o no volver a un area, lo que importa es si lo caro
+ * era el agua o la luz. */
+static const char *const SERV_PRECIO_CLAVE[SERV_IDX_VALORACION] = {
+    "precio_agua", "precio_grises", "precio_wc",
+    "precio_luz", "precio_duchas", "precio_basura"
+};
 static const char *const VAL_EXTRA_CLAVE[VAL_EXTRA_COUNT] = {
     "ruidoso", "sin_sombra"
 };
@@ -1404,6 +1429,17 @@ static void serv_lista_txt(char *buf, size_t n)
         }
     }
     if (!marcados) snprintf(buf, n, "--");
+}
+
+/* Lo que se ha pagado por los servicios, todo junto. Solo para ensenarlo: en el
+ * apunte va el desglose, uno por columna. */
+static float serv_total(void)
+{
+    float t = 0;
+    for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
+        t += atof(lv_textarea_get_text(s_serv_precio_ta[i]));
+    }
+    return t;
 }
 
 static void build_resumen(categoria_t cat)
@@ -1603,9 +1639,19 @@ static void build_resumen(categoria_t cat)
                          val_or_dash(s_pern_precio_ta),
                          currency_of(s_pern_currency_dd));
             }
-            snprintf(s_resumen, sizeof(s_resumen), "%s  -  %u noche%s\n%sServicios:  %s",
+            /* Si los servicios han costado algo, va DELANTE de la lista: es lo
+             * que se repasa antes de aceptar. El desglose no cabe aqui y
+             * tampoco hace falta -- va entero en el apunte. */
+            char extras[48];
+            extras[0] = '\0';
+            float st = serv_total();
+            if (st > 0.005f) {
+                snprintf(extras, sizeof(extras), "%.2f %s  -  ", st,
+                         currency_of(s_pern_currency_dd));
+            }
+            snprintf(s_resumen, sizeof(s_resumen), "%s  -  %u noche%s\n%sServicios:  %s%s",
                      SITIO_NOMBRE[s_pern_sitio], (unsigned)noches,
-                     noches == 1 ? "" : "s", precio, serv);
+                     noches == 1 ? "" : "s", precio, extras, serv);
             break;
         }
         case CAT_ITV:
@@ -1730,14 +1776,14 @@ static void parada_abrir_si_procede(void)
  * los saltos de linea, que ahi eran para leerlo y en un CSV sobran. */
 static void apunte_encolar(categoria_t cat)
 {
-    /* 768 y no 640: la PERNOCTA es ahora el apunte mas largo -- lleva lo de una
-     * parada (motivo, horas, minutos, noches) mas precio, seis servicios,
-     * valoracion, dos pegas y la inclinacion -- y ronda los 590 bytes. Con 640
-     * el margen era de 50, que no da ni para los dos campos de posicion del GPS.
+    /* 896 y no 640: la PERNOCTA es el apunte mas largo -- lo de una parada
+     * (motivo, horas, minutos, noches) mas precio, SEIS servicios con su importe
+     * cada uno, valoracion, dos pegas y la inclinacion. Peor caso MEDIDO: 693
+     * bytes. Lo que sobra es para los dos campos de posicion que traera el GPS.
      *
-     * OJO: 768 tiene que ir a la par con CUERPO_MAX de viaje_cola.c, que es
+     * OJO: 896 tiene que ir a la par con CUERPO_MAX de viaje_cola.c, que es
      * quien rechaza (con aviso) lo que no le cabe. */
-    char b[768];
+    char b[896];
     /* El id: el reservado al declarar el evento si se esta cerrando uno, o uno
      * nuevo si el apunte nace aqui (peaje, o los formularios del menu). */
     size_t u = apunte_cabecera(b, sizeof(b),
@@ -1839,9 +1885,14 @@ static void apunte_encolar(categoria_t cat)
                                  currency_of(s_pern_currency_dd));
             u = apunte_campo_txt(b, sizeof(b), u, "precio",
                                  lv_textarea_get_text(s_pern_precio_ta));
+            /* Dos columnas por servicio: si lo habia y lo que costo. Vacio no
+             * es cero: cero es "lo habia y era gratis", que es la mitad de la
+             * gracia de anotarlo. */
             for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
-                u = apunte_campo_num(b, sizeof(b), u, SERV_CLAVE[i],
-                                     lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED) ? 1 : 0);
+                bool hay = lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED);
+                u = apunte_campo_num(b, sizeof(b), u, SERV_CLAVE[i], hay ? 1 : 0);
+                u = apunte_campo_txt(b, sizeof(b), u, SERV_PRECIO_CLAVE[i],
+                                     hay ? lv_textarea_get_text(s_serv_precio_ta[i]) : "");
             }
             u = apunte_campo_txt(b, sizeof(b), u, "valoracion", VALORACION[s_val_nota]);
             for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
@@ -2156,12 +2207,6 @@ static void parada_open_cb(lv_event_t *e)
 static void servicios_open_cb(lv_event_t *e)
 {
     (void)e;
-    /* El rotulo dice que se esta marcando, que no es lo mismo segun donde
-     * hayas parado: en un area, lo que la instalacion ofrece; en un camping,
-     * lo que ya va pagado en el precio de la noche. */
-    bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
-    lv_label_set_text(s_serv_hint, camping ? "Incluido en el precio"
-                                           : "Lo que ofrece el area");
     s_serv_desde = CAT_PARADA;
     show_form(CAT_SERVICIOS);
 }
@@ -2450,15 +2495,15 @@ static void build_mantenimiento(lv_obj_t *form)
     make_save_button(form, "Guardar mantenimiento", save_generic_cb, (void *)(uintptr_t)CAT_MANTENIMIENTO);
 }
 
-/* Poner un precio MARCA su casilla. Sin esto, un importe tecleado en una linea
- * sin marcar no contaba: no se guardaba y el resumen decia "todo gratis", que es
- * justo lo contrario de lo que acababas de escribir. La casilla sigue mandando
- * (es la que dice si se hizo), pero escribir lo que costo ya implica haberlo
- * hecho.
+/* Poner un precio MARCA su casilla. Lo usan las aguas y los servicios de una
+ * pernocta. Sin esto, un importe tecleado en una linea sin marcar no contaba: no
+ * se guardaba y el resumen decia lo contrario de lo que acababas de escribir. La
+ * casilla sigue mandando (es la que dice si lo hubo), pero escribir lo que costo
+ * ya implica que lo hubo.
  *
- * Solo MARCA, nunca desmarca: vaciar gratis es marcar la casilla y dejar el
+ * Solo MARCA, nunca desmarca: un servicio gratis es la casilla marcada y el
  * importe vacio, y ahi borrar el precio no puede deshacer la marca. */
-static void agua_precio_cb(lv_event_t *e)
+static void precio_marca_cb(lv_event_t *e)
 {
     const char *t = lv_textarea_get_text(lv_event_get_target(e));
     if (t && t[0]) lv_obj_add_state(lv_event_get_user_data(e), LV_STATE_CHECKED);
@@ -2477,8 +2522,8 @@ static void build_aguas(lv_obj_t *form)
      * P4 al recibir el apunte, que tiene el reloj bueno. */
     for (uint8_t i = 0; i < AGUA_COUNT; i++) {
         make_check_money_row(form, AGUA_OPCIONES[i], &s_agua_chk[i],
-                             &s_agua_precio_ta[i]);
-        lv_obj_add_event_cb(s_agua_precio_ta[i], agua_precio_cb,
+                             &s_agua_precio_ta[i], CHKMONEY_ROW_H);
+        lv_obj_add_event_cb(s_agua_precio_ta[i], precio_marca_cb,
                             LV_EVENT_VALUE_CHANGED, s_agua_chk[i]);
     }
 
@@ -2634,8 +2679,17 @@ static uint8_t pern_cobro_actual(void)
  * pantalla completa si cabe entero siempre. */
 static void pern_refresh_precio(void)
 {
+    /* En un sitio GRATIS se van el importe y el selector, pero la moneda se
+     * queda: dormir es gratis y el agua puede costar 1 euro -- o 1 franco. Sin
+     * el selector, un area gratis en Suiza anotaria francos como euros. */
+    bool gratis  = !parada_sitio_es_de_pago(s_pern_sitio);
     bool camping = (s_pern_sitio == SITIO_CAMPING);
-    set_hidden(s_pern_cobro_bm, camping);
+    set_hidden(s_pern_precio_ta, gratis);
+    set_hidden(s_pern_cobro_bm, camping || gratis);
+    if (gratis) {
+        lv_label_set_text(s_pern_precio_lbl, "Moneda de los servicios");
+        return;
+    }
     lv_label_set_text(s_pern_precio_lbl, camping ? "Precio por noche" : "Precio");
     lv_obj_set_user_data(s_pern_precio_ta,
                          (void *)(pern_cobro_actual() == PARADA_COBRO_24H
@@ -2653,9 +2707,6 @@ static void pern_cobro_cb(lv_event_t *e)
 static void pern_servicios_open_cb(lv_event_t *e)
 {
     (void)e;
-    lv_label_set_text(s_serv_hint, s_pern_sitio == SITIO_CAMPING
-                                   ? "Incluido en el precio"
-                                   : "Lo que ofrece el sitio");
     s_serv_desde = CAT_PERNOCTA;
     show_form(CAT_SERVICIOS);
 }
@@ -2751,35 +2802,50 @@ static void build_parada(lv_obj_t *form)
     lv_obj_set_flex_grow(guardar, 2);
 }
 
+/* Una linea por servicio, con su casilla y su importe (24-ago-2026). Antes eran
+ * seis casillas en dos columnas y solo se podia decir que los HABIA; en un area
+ * el agua puede costar 1 euro y la luz 2, y eso se perdia.
+ *
+ * Sin rotulo explicativo arriba y con las filas apretadas a 34 px, y no es
+ * capricho: 48 de cabecera + seis filas + la de valoracion + los huecos suman
+ * los 304 utiles CLAVADOS. Con el rotulo o con filas de 40 habria que deslizar
+ * para llegar a la ultima, y esto se toca con la autocaravana parada pero de
+ * noche y con prisa.
+ *
+ * La moneda no esta aqui: es la misma de la pernocta, que es la misma parada.
+ * Por eso su selector se queda a la vista aunque el sitio sea gratis (ver
+ * pern_refresh_precio). */
+#define SERV_ROW_H  34
+
 static void build_servicios(lv_obj_t *form)
 {
     /* "SERVICIOS" a secas: "SERVICIOS DEL AREA" no cabe sin pisar el Volver
-     * (ver el tope de add_header). No hace falta el "del area": aqui se llega
-     * desde el boton Servicios de la parada, que solo sale al marcar Area. */
+     * (ver el tope de add_header). */
     add_header(form, "SERVICIOS", lv_color_hex(COL_VIAJE), BACK_TO_ORIGEN);
 
-    /* El texto lo pone servicios_open_cb segun sea area o camping. */
-    s_serv_hint = lv_label_create(form);
-    lv_label_set_text(s_serv_hint, "");
-    lv_obj_set_style_text_color(s_serv_hint, lv_color_hex(COL_LABEL), 0);
-    lv_obj_set_style_text_font(s_serv_hint, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_align(s_serv_hint, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(s_serv_hint, lv_pct(100));
+    /* Sin boton de guardar: lo marcado aqui se guarda con la pernocta. El
+     * Volver de la cabecera devuelve a ella con todo puesto. */
+    lv_obj_t *bloque = lv_obj_create(form);
+    lv_obj_set_width(bloque, lv_pct(100));
+    lv_obj_set_height(bloque, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(bloque, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(bloque, 0, 0);
+    lv_obj_set_style_pad_all(bloque, 0, 0);
+    lv_obj_set_style_pad_row(bloque, 2, 0);
+    lv_obj_clear_flag(bloque, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(bloque, LV_FLEX_FLOW_COLUMN);
 
-    /* Sin boton de guardar: lo marcado aqui se guarda con la parada. El Volver
-     * de la cabecera devuelve a ella con las casillas puestas.
-     *
-     * Con hueco ancho entre filas: esta pantalla solo lleva cabecera, rotulo y
-     * seis casillas, o sea 48+20+~150 de los 304 utiles. Sobraban casi 90 px
-     * en negro al final, asi que se reparten entre las filas -- mas separacion
-     * es menos fallo al tocar con la autocaravana en marcha. */
-    lv_obj_t *grid = make_check_grid(form, SERV_OPCIONES, SERV_COUNT, s_serv_chk,
-                                     COL_VIAJE, SERV_CHK_GAP);
-    /* Y el bloque, centrado en lo que sobre en vez de pegado arriba. */
-    lv_obj_set_flex_align(lv_obj_get_parent(grid), LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
+    for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
+        make_check_money_row(bloque, SERV_OPCIONES[i], &s_serv_chk[i],
+                             &s_serv_precio_ta[i], SERV_ROW_H);
+        lv_obj_add_event_cb(s_serv_precio_ta[i], precio_marca_cb,
+                            LV_EVENT_VALUE_CHANGED, s_serv_chk[i]);
+    }
 
-    /* La ultima casilla no marca nada: abre la pantalla de valoracion. */
+    /* La ultima no marca nada ni cuesta nada: abre la pantalla de valoracion.
+     * Fuera del bloque, para que se vea que no es uno mas de la lista. */
+    make_check_money_row(form, SERV_OPCIONES[SERV_IDX_VALORACION],
+                         &s_serv_chk[SERV_IDX_VALORACION], NULL, SERV_ROW_H);
     lv_obj_add_event_cb(s_serv_chk[SERV_IDX_VALORACION], valoracion_toggle_cb,
                         LV_EVENT_VALUE_CHANGED, NULL);
 }
