@@ -37,9 +37,14 @@ static const char *TAG = "viaje_cola";
 
 /* El mas largo es la parada con todo marcado: 505 bytes MEDIDOS, no estimados
  * -- la estimacion anterior decia "ronda los 300" y se quedaba corta, con lo que
- * el apunte se cortaba a medias y acababa descartado por la P4. 640 deja margen
- * para los dos campos de posicion que traera el GPS. */
-#define CUERPO_MAX  640
+ * el apunte se cortaba a medias y acababa descartado por la P4.
+ *
+ * 768 desde el 24-ago-2026: el mas largo pasa a ser la PERNOCTA, que lleva lo
+ * de una parada mas precio, seis servicios, valoracion, dos pegas y la
+ * inclinacion, y ronda los 590. Con 640 el margen no daba ni para los dos
+ * campos de posicion que traera el GPS. Va a la par con el buffer de
+ * apunte_encolar() en view_registro.c. */
+#define CUERPO_MAX  768
 
 /* Cada cuanto se reintenta la cabeza cuando hay algo pendiente. 15 s: lo
  * bastante seguido para que al encender la P4 se vacie enseguida, y lo bastante

@@ -61,12 +61,20 @@ typedef enum {
      * ese es el de las columnas del CSV de la P4. */
     CAT_AGUAS,
     CAT_ITV,
+    /* El cierre de una PERNOCTA: precio, servicios y valoracion. Es lo que se
+     * pregunta al marcharte, que es cuando de verdad lo sabes. */
+    CAT_PERNOCTA,
     CAT_COUNT
 } categoria_t;
 
 /* Destino del boton Volver de una cabecera: al menu de iconos o a otra
  * pantalla (parada vuelve a viaje, servicios vuelve a parada). */
 #define BACK_TO_GRID  (-1)
+
+/* La pantalla de SERVICIOS se abre desde dos sitios (el cierre de una pernocta
+ * y el formulario viejo de parada), asi que su Volver no puede estar clavado a
+ * uno: vuelve a s_serv_desde, que pone quien la abre. */
+#define BACK_TO_ORIGEN  (-2)
 
 
 static lv_obj_t *s_forms[CAT_COUNT];
@@ -305,6 +313,41 @@ static lv_obj_t *s_itv_km_ta;
 static lv_obj_t *s_itv_precio_ta;
 static lv_obj_t *s_itv_currency_dd;
 
+/* --- Cierre de una pernocta ---------------------------------------------
+ *
+ * Al declararla solo se toco DONDE se duerme (parking/area/camping, gratis o de
+ * pago). Lo demas -- lo que costo, que habia y que tal -- se pregunta al
+ * marcharte, que es cuando se sabe: si el agua iba, si la luz funcionaba y si
+ * se durmio bien.
+ *
+ * Los datos del evento se copian aqui al abrir el formulario y no se releen al
+ * guardar: la hora de fin es la del momento en que dijiste "Terminarla", no la
+ * de cuando acabaste de rellenarlo. */
+static lv_obj_t *s_pern_info_lbl;      /* "Area de pago  -  2 noches" */
+static lv_obj_t *s_pern_precio_row;    /* oculta si el sitio es gratis */
+static lv_obj_t *s_pern_precio_lbl;
+static lv_obj_t *s_pern_precio_ta;
+static lv_obj_t *s_pern_currency_dd;
+static lv_obj_t *s_pern_cobro_bm;      /* noche / 24 h; oculto en camping */
+static uint8_t   s_pern_sitio;
+static uint32_t  s_pern_ini, s_pern_fin;
+
+/* Desde que formulario se abrio la pantalla de servicios (a donde vuelve). */
+static int s_serv_desde;
+
+/* Donde se duerme. Viven aqui arriba, y no con el resto de tablas de la parada,
+ * porque el resumen y el apunte de la pernocta van antes en el fichero.
+ *
+ * Nombres de pantalla y CLAVES del CSV separados a proposito, como en todo el
+ * fichero: la redaccion de un rotulo puede cambiar, y si las columnas fueran los
+ * rotulos ese cambio partiria el historico en dos. */
+static const char *const SITIO_NOMBRE[SITIO_COUNT] = {
+    "Parking gratis", "Parking de pago", "Area gratis", "Area de pago", "Camping"
+};
+static const char *const SITIO_CLAVE[SITIO_COUNT] = {
+    "parking_gratis", "parking_pago", "area_gratis", "area_pago", "camping"
+};
+
 /* Monedas de la Europa continental que puede pisar la autocaravana.
  * Por defecto EUR (indice 0). Mismo orden en las dos listas.
  *
@@ -329,6 +372,10 @@ static const char *const CURRENCY_CODES[] = {
 
 /* Definidos abajo, junto a los widgets que tocan. */
 static void clear_forms(void);
+/* Definidas mas abajo, con el formulario de la pernocta y con el cierre de la
+ * parada; el resumen y el apunte, que van antes en el fichero, las necesitan. */
+static uint8_t pern_cobro_actual(void);
+static void hora_corta(uint32_t epoch, char *buf, size_t n);
 static void valoracion_actualiza_texto(bool marcado);
 static void valoracion_reset(void);
 
@@ -421,8 +468,9 @@ static void ajustes_click_cb(lv_event_t *e)
 static void back_click_cb(lv_event_t *e)
 {
     int dest = (int)(intptr_t)lv_event_get_user_data(e) - 1;
-    if (dest < 0) show_grid();
-    else          show_form(dest);
+    if (dest == BACK_TO_ORIGEN) show_form(s_serv_desde);
+    else if (dest < 0)          show_grid();
+    else                        show_form(dest);
 }
 
 void view_registro_abrir_sin_cerrar(void)
@@ -1007,6 +1055,10 @@ static void clear_forms(void)
     }
     lv_dropdown_set_selected(s_agua_currency_dd, 0);
 
+    lv_textarea_set_text(s_pern_precio_ta, "");
+    lv_dropdown_set_selected(s_pern_currency_dd, 0);
+    btnmatrix_reset(s_pern_cobro_bm);
+
     btnmatrix_reset(s_itv_resultado_bm);
     lv_textarea_set_text(s_itv_km_ta, "");
     lv_textarea_set_text(s_itv_precio_ta, "");
@@ -1236,7 +1288,11 @@ static const char *CAT_NOMBRE[CAT_COUNT] = {
     /* "agua" en SINGULAR y no "aguas": la P4 nombra el fichero "<tipo>s.csv"
      * (csv_por_tipo() en config_server_viaje.c), asi que con "aguas" saldria un
      * "aguass.csv". Con "agua" sale "aguas.csv", que es lo que se espera. */
-    "agua", "itv"
+    "agua", "itv",
+    /* Hoja propia ("pernoctas.csv" en la P4) y no metida entre las paradas:
+     * lleva sitio, precio, servicios y nota, o sea muchas mas columnas, y
+     * mezclarlas dejaria paradas.csv con dos cabeceras distintas. */
+    "pernocta"
 };
 
 /* CLAVES para el JSON y las columnas del CSV de la P4. Separadas de los rotulos
@@ -1289,7 +1345,8 @@ static uint32_t cat_color(categoria_t c)
         /* Aguas e ITV con el azul de sus casillas del menu, para que se vea que
          * el formulario es el de la casilla que se toco. */
         case CAT_AGUAS:
-        case CAT_ITV:           return COL_VIAJE;
+        case CAT_ITV:
+        case CAT_PERNOCTA:      return COL_VIAJE;
         default:                return COL_MANTENIMIENTO;
     }
 }
@@ -1313,6 +1370,41 @@ static const char *val_or_dash(lv_obj_t *ta)
 /* Buffer del resumen. Estatico porque el dialogo lo sigue leyendo despues de
  * que save_generic_cb() haya terminado. */
 static char s_resumen[256];
+
+/* Los servicios marcados, en una linea y con su nombre entero: el dialogo baja
+ * la letra si hace falta (confirm_screen.c) y "Vaciado grises" se entiende sin
+ * pensar, cosa que "Grises" no. En el sitio de "Valoracion" va la NOTA elegida,
+ * que es el dato; y detras las pegas, que no caben en su casilla y aqui es
+ * donde se repasan antes de guardar.
+ *
+ * (El formulario viejo de parada lleva su propia copia de esto metida en el
+ * switch; se va con el cuando se limpie el modelo viejo.) */
+static void serv_lista_txt(char *buf, size_t n)
+{
+    size_t used = 0;
+    uint8_t marcados = 0;
+    buf[0] = '\0';
+    for (uint8_t i = 0; i < SERV_COUNT; i++) {
+        if (!lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED)) continue;
+        marcados++;
+        const char *nombre = (i == SERV_IDX_VALORACION) ? valoracion_elegida()
+                                                        : SERV_OPCIONES[i];
+        int w = snprintf(buf + used, n - used, "%s%s", used ? ", " : "", nombre);
+        if (w < 0 || (size_t)w >= n - used) return;
+        used += (size_t)w;
+    }
+    if (lv_obj_has_state(s_serv_chk[SERV_IDX_VALORACION], LV_STATE_CHECKED)) {
+        for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
+            if (!lv_obj_has_state(s_val_extra_chk[i], LV_STATE_CHECKED)) continue;
+            marcados++;
+            int w = snprintf(buf + used, n - used, "%s%s", used ? ", " : "",
+                             VAL_EXTRAS[i]);
+            if (w < 0 || (size_t)w >= n - used) return;
+            used += (size_t)w;
+        }
+    }
+    if (!marcados) snprintf(buf, n, "--");
+}
 
 static void build_resumen(categoria_t cat)
 {
@@ -1494,6 +1586,28 @@ static void build_resumen(categoria_t cat)
             }
             break;
         }
+        case CAT_PERNOCTA: {
+            /* Tres lineas: donde y cuantas noches, lo que costo y que habia.
+             * En un sitio gratis la del precio no sale -- no hay nada que
+             * repasar -- pero la de servicios si: un parking gratis con agua es
+             * justo lo que interesa recordar. */
+            uint32_t noches = salida_noches(s_pern_ini, s_pern_fin);
+            char serv[160];
+            serv_lista_txt(serv, sizeof(serv));
+
+            char precio[64];
+            precio[0] = '\0';
+            if (parada_sitio_es_de_pago(s_pern_sitio)) {
+                snprintf(precio, sizeof(precio), "Precio/%s:  %s %s\n",
+                         pern_cobro_actual() == PARADA_COBRO_24H ? "24h" : "noche",
+                         val_or_dash(s_pern_precio_ta),
+                         currency_of(s_pern_currency_dd));
+            }
+            snprintf(s_resumen, sizeof(s_resumen), "%s  -  %u noche%s\n%sServicios:  %s",
+                     SITIO_NOMBRE[s_pern_sitio], (unsigned)noches,
+                     noches == 1 ? "" : "s", precio, serv);
+            break;
+        }
         case CAT_ITV:
             snprintf(s_resumen, sizeof(s_resumen),
                      "Resultado:  %s\nKm:  %s\nPrecio:  %s %s",
@@ -1616,10 +1730,14 @@ static void parada_abrir_si_procede(void)
  * los saltos de linea, que ahi eran para leerlo y en un CSV sobran. */
 static void apunte_encolar(categoria_t cat)
 {
-    /* 640 y no 384: la parada completa son 505 bytes y con 384 se cortaba a
-     * medias (ver la cabecera de apunte.c). Queda margen para los dos campos de
-     * posicion que traera el GPS de la P4. */
-    char b[640];
+    /* 768 y no 640: la PERNOCTA es ahora el apunte mas largo -- lleva lo de una
+     * parada (motivo, horas, minutos, noches) mas precio, seis servicios,
+     * valoracion, dos pegas y la inclinacion -- y ronda los 590 bytes. Con 640
+     * el margen era de 50, que no da ni para los dos campos de posicion del GPS.
+     *
+     * OJO: 768 tiene que ir a la par con CUERPO_MAX de viaje_cola.c, que es
+     * quien rechaza (con aviso) lo que no le cabe. */
+    char b[768];
     /* El id: el reservado al declarar el evento si se esta cerrando uno, o uno
      * nuevo si el apunte nace aqui (peaje, o los formularios del menu). */
     size_t u = apunte_cabecera(b, sizeof(b),
@@ -1698,6 +1816,47 @@ static void apunte_encolar(categoria_t cat)
                                            : "");
             }
             break;
+        case CAT_PERNOCTA: {
+            /* Lleva TODO lo de una parada (motivo, horas, minutos) mas lo suyo,
+             * porque va a su propia hoja y tiene que valerse sola.
+             *
+             * Las horas son las del EVENTO, no las de ahora: la de entrada es
+             * de cuando lo declaraste y la de salida, de cuando dijiste
+             * "Terminarla" -- no de cuando acabaste de rellenar esto. */
+            char hi[8], hf[8];
+            hora_corta(s_pern_ini, hi, sizeof(hi));
+            hora_corta(s_pern_fin, hf, sizeof(hf));
+            u = apunte_campo_txt(b, sizeof(b), u, "sitio", SITIO_CLAVE[s_pern_sitio]);
+            u = apunte_campo_txt(b, sizeof(b), u, "inicio", hi);
+            u = apunte_campo_txt(b, sizeof(b), u, "fin", hf);
+            u = apunte_campo_num(b, sizeof(b), u, "minutos",
+                                 (long)((s_pern_fin - s_pern_ini) / 60));
+            u = apunte_campo_num(b, sizeof(b), u, "noches",
+                                 (long)salida_noches(s_pern_ini, s_pern_fin));
+            u = apunte_campo_txt(b, sizeof(b), u, "cobro",
+                                 pern_cobro_actual() == PARADA_COBRO_24H ? "24h" : "noche");
+            u = apunte_campo_txt(b, sizeof(b), u, "moneda",
+                                 currency_of(s_pern_currency_dd));
+            u = apunte_campo_txt(b, sizeof(b), u, "precio",
+                                 lv_textarea_get_text(s_pern_precio_ta));
+            for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
+                u = apunte_campo_num(b, sizeof(b), u, SERV_CLAVE[i],
+                                     lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED) ? 1 : 0);
+            }
+            u = apunte_campo_txt(b, sizeof(b), u, "valoracion", VALORACION[s_val_nota]);
+            for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
+                u = apunte_campo_num(b, sizeof(b), u, VAL_EXTRA_CLAVE[i],
+                                     lv_obj_has_state(s_val_extra_chk[i], LV_STATE_CHECKED) ? 1 : 0);
+            }
+            /* Como quedo aparcada. Es un dato DEL SITIO, no del momento: si un
+             * area tiene mucha pendiente, conviene saberlo antes de volver. */
+            float pitch = 0, roll = 0;
+            if (tilt_get(&pitch, &roll)) {
+                u = apunte_campo_num(b, sizeof(b), u, "cabeceo_centi", (long)(pitch * 100));
+                u = apunte_campo_num(b, sizeof(b), u, "balanceo_centi", (long)(roll * 100));
+            }
+            break;
+        }
         case CAT_ITV:
             u = apunte_campo_txt(b, sizeof(b), u, "resultado",
                                  ITV_RESULTADO[btnmatrix_checked(s_itv_resultado_bm,
@@ -2003,6 +2162,7 @@ static void servicios_open_cb(lv_event_t *e)
     bool camping = lv_obj_has_state(s_parada_chk[PARADA_IDX_CAMPING], LV_STATE_CHECKED);
     lv_label_set_text(s_serv_hint, camping ? "Incluido en el precio"
                                            : "Lo que ofrece el area");
+    s_serv_desde = CAT_PARADA;
     show_form(CAT_SERVICIOS);
 }
 
@@ -2369,14 +2529,24 @@ static void build_itv(lv_obj_t *form)
 #define PRECIO_GROW_DD  2
 #define PRECIO_GROW_BM  3
 
-static lv_obj_t *make_parada_precio_row(lv_obj_t *parent)
+/* Los cuatro cacharros de la fila, para que la pueda montar cualquiera de los
+ * dos formularios que la usan (el cierre de la pernocta y la parada vieja). */
+typedef struct {
+    lv_obj_t *lbl;
+    lv_obj_t *ta;
+    lv_obj_t *dd;
+    lv_obj_t *bm;
+} precio_row_t;
+
+static lv_obj_t *make_precio_row(lv_obj_t *parent, precio_row_t *o,
+                                  lv_event_cb_t cobro_cb)
 {
     lv_obj_t *cont = make_field_row(parent);
 
-    s_parada_precio_lbl = lv_label_create(cont);
-    lv_label_set_text(s_parada_precio_lbl, "Precio");
-    lv_obj_set_style_text_color(s_parada_precio_lbl, lv_color_hex(COL_LABEL), 0);
-    lv_obj_set_style_text_font(s_parada_precio_lbl, &lv_font_montserrat_16, 0);
+    o->lbl = lv_label_create(cont);
+    lv_label_set_text(o->lbl, "Precio");
+    lv_obj_set_style_text_color(o->lbl, lv_color_hex(COL_LABEL), 0);
+    lv_obj_set_style_text_font(o->lbl, &lv_font_montserrat_16, 0);
 
     lv_obj_t *row = lv_obj_create(cont);
     lv_obj_set_size(row, lv_pct(100), PRECIO_ROW_H);
@@ -2389,43 +2559,53 @@ static lv_obj_t *make_parada_precio_row(lv_obj_t *parent)
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
 
-    s_parada_precio_ta = lv_textarea_create(row);
-    lv_textarea_set_one_line(s_parada_precio_ta, true);
-    lv_textarea_set_placeholder_text(s_parada_precio_ta, "0.00");
-    lv_obj_set_height(s_parada_precio_ta, lv_pct(100));
-    lv_obj_set_flex_grow(s_parada_precio_ta, PRECIO_GROW_TA);
-    lv_obj_set_style_text_font(s_parada_precio_ta, &lv_font_montserrat_32, 0);
-    lv_obj_set_style_text_align(s_parada_precio_ta, LV_TEXT_ALIGN_CENTER, 0);
-    lv_textarea_set_accepted_chars(s_parada_precio_ta, "0123456789.");
-    lv_obj_set_user_data(s_parada_precio_ta, (void *)"Precio por noche");
-    lv_obj_add_event_cb(s_parada_precio_ta, ta_click_cb, LV_EVENT_CLICKED,
+    o->ta = lv_textarea_create(row);
+    lv_textarea_set_one_line(o->ta, true);
+    lv_textarea_set_placeholder_text(o->ta, "0.00");
+    lv_obj_set_height(o->ta, lv_pct(100));
+    lv_obj_set_flex_grow(o->ta, PRECIO_GROW_TA);
+    lv_obj_set_style_text_font(o->ta, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_align(o->ta, LV_TEXT_ALIGN_CENTER, 0);
+    lv_textarea_set_accepted_chars(o->ta, "0123456789.");
+    lv_obj_set_user_data(o->ta, (void *)"Precio por noche");
+    lv_obj_add_event_cb(o->ta, ta_click_cb, LV_EVENT_CLICKED,
                         (void *)(uintptr_t)true);
 
-    s_parada_currency_dd = lv_dropdown_create(row);
-    lv_dropdown_set_options(s_parada_currency_dd, CURRENCY_OPTIONS);
-    lv_obj_set_height(s_parada_currency_dd, lv_pct(100));
-    lv_obj_set_flex_grow(s_parada_currency_dd, PRECIO_GROW_DD);
-    lv_obj_set_style_text_font(s_parada_currency_dd, &lv_font_montserrat_20, 0);
+    o->dd = lv_dropdown_create(row);
+    lv_dropdown_set_options(o->dd, CURRENCY_OPTIONS);
+    lv_obj_set_height(o->dd, lv_pct(100));
+    lv_obj_set_flex_grow(o->dd, PRECIO_GROW_DD);
+    lv_obj_set_style_text_font(o->dd, &lv_font_montserrat_20, 0);
 
     /* Excluyente y con "Noche" de partida: es lo normal, y el area de 24 h se
      * marca cuando toca. */
     static const char *cobro_map[] = { "Noche", "24 h", "" };
-    s_parada_cobro_bm = lv_btnmatrix_create(row);
-    lv_btnmatrix_set_map(s_parada_cobro_bm, cobro_map);
-    lv_obj_set_height(s_parada_cobro_bm, lv_pct(100));
-    lv_obj_set_flex_grow(s_parada_cobro_bm, PRECIO_GROW_BM);
-    lv_obj_set_style_text_font(s_parada_cobro_bm, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_bg_opa(s_parada_cobro_bm, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(s_parada_cobro_bm, 0, 0);
-    lv_obj_set_style_pad_all(s_parada_cobro_bm, 0, 0);
-    lv_btnmatrix_set_btn_ctrl_all(s_parada_cobro_bm, LV_BTNMATRIX_CTRL_CHECKABLE);
-    lv_btnmatrix_set_one_checked(s_parada_cobro_bm, true);
-    lv_btnmatrix_set_btn_ctrl(s_parada_cobro_bm, PARADA_COBRO_NOCHE,
-                              LV_BTNMATRIX_CTRL_CHECKED);
+    o->bm = lv_btnmatrix_create(row);
+    lv_btnmatrix_set_map(o->bm, cobro_map);
+    lv_obj_set_height(o->bm, lv_pct(100));
+    lv_obj_set_flex_grow(o->bm, PRECIO_GROW_BM);
+    lv_obj_set_style_text_font(o->bm, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_bg_opa(o->bm, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(o->bm, 0, 0);
+    lv_obj_set_style_pad_all(o->bm, 0, 0);
+    lv_btnmatrix_set_btn_ctrl_all(o->bm, LV_BTNMATRIX_CTRL_CHECKABLE);
+    lv_btnmatrix_set_one_checked(o->bm, true);
+    lv_btnmatrix_set_btn_ctrl(o->bm, PARADA_COBRO_NOCHE, LV_BTNMATRIX_CTRL_CHECKED);
     /* En RELEASED y no en VALUE_CHANGED: lv_btnmatrix avisa ya al presionar y
      * la marca no se aplica hasta soltar (ver el comentario de las ruedas). */
-    lv_obj_add_event_cb(s_parada_cobro_bm, parada_cobro_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(o->bm, cobro_cb, LV_EVENT_RELEASED, NULL);
 
+    return cont;
+}
+
+static lv_obj_t *make_parada_precio_row(lv_obj_t *parent)
+{
+    precio_row_t o;
+    lv_obj_t *cont = make_precio_row(parent, &o, parada_cobro_cb);
+    s_parada_precio_lbl  = o.lbl;
+    s_parada_precio_ta   = o.ta;
+    s_parada_currency_dd = o.dd;
+    s_parada_cobro_bm    = o.bm;
     return cont;
 }
 
@@ -2440,6 +2620,95 @@ static lv_obj_t *make_parada_precio_row(lv_obj_t *parent)
  * "Servicios del area" comparte fila con Guardar en vez de llevar la suya: asi
  * no cuesta ni un pixel de alto, y cuando no hay area marcada Guardar se queda
  * con toda la fila. */
+/* Como se paga la noche AHORA MISMO en el formulario de la pernocta. En un
+ * camping siempre por noches, asi que el selector ni se ve. */
+static uint8_t pern_cobro_actual(void)
+{
+    if (s_pern_sitio == SITIO_CAMPING) return PARADA_COBRO_NOCHE;
+    return (uint8_t)btnmatrix_checked(s_pern_cobro_bm, 2);
+}
+
+/* El rotulo lo completa el boton marcado ("Precio por [Noche|24 h]"), salvo en
+ * un camping, donde no hay boton y lo dice entero. El titulo del editor a
+ * pantalla completa si cabe entero siempre. */
+static void pern_refresh_precio(void)
+{
+    bool camping = (s_pern_sitio == SITIO_CAMPING);
+    set_hidden(s_pern_cobro_bm, camping);
+    lv_label_set_text(s_pern_precio_lbl, camping ? "Precio por noche" : "Precio");
+    lv_obj_set_user_data(s_pern_precio_ta,
+                         (void *)(pern_cobro_actual() == PARADA_COBRO_24H
+                                  ? "Precio por 24 h" : "Precio por noche"));
+}
+
+static void pern_cobro_cb(lv_event_t *e)
+{
+    (void)e;
+    pern_refresh_precio();
+}
+
+/* Los servicios de la pernocta: en un area es lo que OFRECE y en un camping lo
+ * que va INCLUIDO en el precio. Misma pantalla, distinto rotulo. */
+static void pern_servicios_open_cb(lv_event_t *e)
+{
+    (void)e;
+    lv_label_set_text(s_serv_hint, s_pern_sitio == SITIO_CAMPING
+                                   ? "Incluido en el precio"
+                                   : "Lo que ofrece el sitio");
+    s_serv_desde = CAT_PERNOCTA;
+    show_form(CAT_SERVICIOS);
+}
+
+static void build_pernocta(lv_obj_t *form)
+{
+    add_header(form, "PERNOCTA", lv_color_hex(COL_VIAJE), BACK_TO_GRID);
+
+    /* Donde y cuantas noches, escrito y no preguntado: los dijiste al llegar y
+     * el aparato ya sabe la hora de entrada y la de salida. Aqui solo estan
+     * para que se vea que se esta cerrando LA de anoche y no otra cosa. */
+    s_pern_info_lbl = lv_label_create(form);
+    lv_label_set_text(s_pern_info_lbl, "");
+    lv_obj_set_style_text_color(s_pern_info_lbl, lv_color_hex(COL_LABEL), 0);
+    lv_obj_set_style_text_font(s_pern_info_lbl, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_align(s_pern_info_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(s_pern_info_lbl, lv_pct(100));
+
+    precio_row_t o;
+    s_pern_precio_row    = make_precio_row(form, &o, pern_cobro_cb);
+    s_pern_precio_lbl    = o.lbl;
+    s_pern_precio_ta     = o.ta;
+    s_pern_currency_dd   = o.dd;
+    s_pern_cobro_bm      = o.bm;
+
+    lv_obj_t *acciones = lv_obj_create(form);
+    lv_obj_set_size(acciones, lv_pct(100), 50);
+    lv_obj_set_style_bg_opa(acciones, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(acciones, 0, 0);
+    lv_obj_set_style_pad_all(acciones, 0, 0);
+    lv_obj_set_style_pad_column(acciones, 8, 0);
+    lv_obj_clear_flag(acciones, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(acciones, LV_FLEX_FLOW_ROW);
+
+    lv_obj_t *serv_btn = lv_btn_create(acciones);
+    lv_obj_set_height(serv_btn, 50);
+    lv_obj_set_flex_grow(serv_btn, 1);
+    lv_obj_set_style_bg_color(serv_btn, lv_color_hex(COL_VIAJE), 0);
+    lv_obj_set_style_bg_color(serv_btn,
+                              lv_color_darken(lv_color_hex(COL_VIAJE), LV_OPA_30),
+                              LV_STATE_PRESSED);
+    lv_obj_add_event_cb(serv_btn, pern_servicios_open_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *serv_lbl = lv_label_create(serv_btn);
+    lv_label_set_text(serv_lbl, "Servicios " LV_SYMBOL_RIGHT);
+    lv_obj_set_style_text_font(serv_lbl, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(serv_lbl, lv_color_hex(COL_TILE_FG), 0);
+    lv_obj_center(serv_lbl);
+
+    lv_obj_t *guardar = make_save_button(acciones, "Guardar noche",
+                                         save_generic_cb,
+                                         (void *)(uintptr_t)CAT_PERNOCTA);
+    lv_obj_set_flex_grow(guardar, 2);
+}
+
 static void build_parada(lv_obj_t *form)
 {
     add_header(form, "PARADA", lv_color_hex(COL_VIAJE), CAT_VIAJE);
@@ -2486,7 +2755,7 @@ static void build_servicios(lv_obj_t *form)
     /* "SERVICIOS" a secas: "SERVICIOS DEL AREA" no cabe sin pisar el Volver
      * (ver el tope de add_header). No hace falta el "del area": aqui se llega
      * desde el boton Servicios de la parada, que solo sale al marcar Area. */
-    add_header(form, "SERVICIOS", lv_color_hex(COL_VIAJE), CAT_PARADA);
+    add_header(form, "SERVICIOS", lv_color_hex(COL_VIAJE), BACK_TO_ORIGEN);
 
     /* El texto lo pone servicios_open_cb segun sea area o camping. */
     s_serv_hint = lv_label_create(form);
@@ -3209,12 +3478,6 @@ static const char *const MOTIVO_NOMBRE[MOTIVO_COUNT] = {
 static const char *const MOTIVO_CLAVE[MOTIVO_COUNT] = {
     "visita", "descanso", "comer", "cenar", "compras", "pernocta"
 };
-static const char *const SITIO_NOMBRE[SITIO_COUNT] = {
-    "Parking gratis", "Parking de pago", "Area gratis", "Area de pago", "Camping"
-};
-static const char *const SITIO_CLAVE[SITIO_COUNT] = {
-    "parking_gratis", "parking_pago", "area_gratis", "area_pago", "camping"
-};
 
 static char s_parada_txt[192];
 static bool s_parada_ya_preguntada;   /* una sola vez por encendido */
@@ -3225,6 +3488,39 @@ static void duracion_texto(uint32_t seg, char *buf, size_t n)
     uint32_t m = seg / 60;
     if (m < 60) snprintf(buf, n, "%u min", (unsigned)m);
     else        snprintf(buf, n, "%u h %u min", (unsigned)(m / 60), (unsigned)(m % 60));
+}
+
+/* Terminar una PERNOCTA no guarda nada todavia: abre el formulario donde se
+ * piden el precio, los servicios y la nota del sitio. Lo que se guarda lo monta
+ * despues apunte_encolar(CAT_PERNOCTA), con estos mismos datos.
+ *
+ * La hora de fin se congela AQUI, en el momento de decir "Terminarla", no
+ * cuando se pulse Guardar: rellenar el formulario son dos minutos y la noche no
+ * duro dos minutos mas por eso. */
+static void pernocta_abrir(int idx, const salida_evento_t *ev, uint32_t ahora)
+{
+    s_cerrando    = idx;
+    s_cerrando_id = ev->id;
+    s_pern_sitio  = ev->sub2 < SITIO_COUNT ? ev->sub2 : 0;
+    s_pern_ini    = ev->epoch_ini;
+    s_pern_fin    = ahora;
+
+    uint32_t noches = salida_noches(s_pern_ini, s_pern_fin);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s\n%u noche%s", SITIO_NOMBRE[s_pern_sitio],
+             (unsigned)noches, noches == 1 ? "" : "s");
+    lv_label_set_text(s_pern_info_lbl, buf);
+
+    /* Sitio gratis: fuera el precio, que no hay nada que teclear. Los servicios
+     * y la nota SI se preguntan igual -- un parking gratis con agua y buena
+     * noche es justo lo que interesa recordar para la proxima vez. */
+    set_hidden(s_pern_precio_row, !parada_sitio_es_de_pago(s_pern_sitio));
+    pern_refresh_precio();
+
+    /* Al carrusel primero, como todos los cierres: el formulario vive en la
+     * pagina de registros y el cartel salta sobre la que estes mirando. */
+    nav_ir_a_registros();
+    show_form(CAT_PERNOCTA);
 }
 
 static void parada_terminar(void *ud)
@@ -3241,9 +3537,14 @@ static void parada_terminar(void *ud)
         return;
     }
 
-    uint8_t motivo = ev->sub  < MOTIVO_COUNT ? ev->sub  : MOTIVO_VISITA;
-    uint8_t sitio  = ev->sub2 < SITIO_COUNT  ? ev->sub2 : 0;
-    bool    noche  = (motivo == MOTIVO_PERNOCTA);
+    uint8_t motivo = ev->sub < MOTIVO_COUNT ? ev->sub : MOTIVO_VISITA;
+
+    /* La pernocta se va por su camino: tiene mas que contar y va a su propia
+     * hoja. De aqui abajo, motivo NUNCA es MOTIVO_PERNOCTA. */
+    if (motivo == MOTIVO_PERNOCTA) {
+        pernocta_abrir(idx, ev, ahora);
+        return;
+    }
 
     char hi[8], hf[8];
     hora_corta(ev->epoch_ini, hi, sizeof(hi));
@@ -3252,24 +3553,14 @@ static void parada_terminar(void *ud)
     char cuerpo[384];
     size_t u = apunte_cabecera(cuerpo, sizeof(cuerpo), ev->id, "parada");
     u = apunte_campo_txt(cuerpo, sizeof(cuerpo), u, "motivo", MOTIVO_CLAVE[motivo]);
-    if (noche) u = apunte_campo_txt(cuerpo, sizeof(cuerpo), u, "sitio", SITIO_CLAVE[sitio]);
     u = apunte_campo_txt(cuerpo, sizeof(cuerpo), u, "inicio", hi);
     u = apunte_campo_txt(cuerpo, sizeof(cuerpo), u, "fin", hf);
     u = apunte_campo_num(cuerpo, sizeof(cuerpo), u, "minutos",
                          (long)((ahora - ev->epoch_ini) / 60));
-    if (noche) {
-        u = apunte_campo_num(cuerpo, sizeof(cuerpo), u, "noches",
-                             (long)salida_noches(ev->epoch_ini, ahora));
-    }
 
     char resumen[96];
-    if (noche) {
-        snprintf(resumen, sizeof(resumen), "Pernocta en %s, %s a %s",
-                 SITIO_NOMBRE[sitio], hi, hf);
-    } else {
-        snprintf(resumen, sizeof(resumen), "Parada: %s, %s a %s",
-                 MOTIVO_NOMBRE[motivo], hi, hf);
-    }
+    snprintf(resumen, sizeof(resumen), "Parada: %s, %s a %s",
+             MOTIVO_NOMBRE[motivo], hi, hf);
     u = apunte_cerrar(cuerpo, sizeof(cuerpo), u, resumen);
 
     /* u == 0 significa que el JSON no cabia y quedo cortado: NO se manda. */
@@ -3304,7 +3595,7 @@ static bool parada_preguntar_en(int idx)
         uint32_t noches = salida_noches(ev->epoch_ini, ahora);
         snprintf(s_parada_txt, sizeof(s_parada_txt),
                  "%s\ndesde las %s  -  %u noche%s\n\n"
-                 "Todavia no se pedir servicios\nni precio: se guarda el sitio.",
+                 "Al terminarla te pido el precio\ny que habia.",
                  SITIO_NOMBRE[sitio], hi, (unsigned)noches, noches == 1 ? "" : "s");
     } else {
         snprintf(s_parada_txt, sizeof(s_parada_txt), "%s\ndesde las %s  -  %s",
@@ -3799,6 +4090,9 @@ void view_registro_create(lv_obj_t *parent)
 
     s_forms[CAT_ITV] = make_form_container(parent);
     build_itv(s_forms[CAT_ITV]);
+
+    s_forms[CAT_PERNOCTA] = make_form_container(parent);
+    build_pernocta(s_forms[CAT_PERNOCTA]);
 
     s_forms[CAT_PARADA] = make_form_container(parent);
     build_parada(s_forms[CAT_PARADA]);

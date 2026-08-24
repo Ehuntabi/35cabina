@@ -235,9 +235,40 @@ Solo se pregunta una vez por encendido, y solo cuando la P4 ya ha dicho la hora
 - **Terminarla** la cierra y la manda a la P4 con **su hora de entrada y de
   salida reales**, no tecleadas, más los minutos que duró.
 
-> **La pernocta, a medias todavía.** Se cierra y se guarda el sitio y las noches,
-> pero **aún no te pide servicios ni precio**. El cartel lo dice antes de que
-> confirmes.
+#### La pernocta, al terminarla
+
+Si la parada era una **pernocta**, «Terminarla» no la guarda todavía: abre una
+pantalla con lo que solo se sabe al marcharse.
+
+```
+        PERNOCTA
+        Area de pago
+        2 noches
+
+        Precio  [ 18.00 ][ EUR ][ Noche | 24 h ]
+
+        [ Servicios > ]   [ Guardar noche ]
+```
+
+- Arriba, **dónde dormiste y cuántas noches**. No se pregunta: lo dijiste al
+  llegar y las horas las sabe el aparato. Está ahí para que veas que estás
+  cerrando la de anoche y no otra cosa.
+- **El precio es por noche** (o por 24 h, que es como cobran algunas áreas): es
+  lo que se anuncia a la entrada, y la cuenta la echa la P4 multiplicando por las
+  noches que fueron. En un **camping** el selector ni sale, porque allí siempre
+  se cobra por noches.
+- En un sitio **gratis no sale el precio**, pero sí los servicios y la nota: un
+  parking gratis con agua y buena noche es justo lo que interesa recordar.
+- **Servicios** lleva a la lista de siempre (agua, vaciados, luz, duchas,
+  basura) y, desde ahí, a la **valoración** del sitio.
+
+La hora de fin se congela al pulsar «Terminarla», no al guardar: rellenar esto
+son dos minutos y la noche no duró dos minutos más por eso.
+
+La pernocta se guarda **en su propia hoja** (`pernoctas.csv`), no entre las
+paradas: lleva sitio, precio, servicios y nota, y mezclarla dejaría la hoja de
+paradas con dos cabeceras distintas. Sigue contando como parada en el resumen, y
+lo que costaron las noches sale en su línea de **Alojamiento**.
 
 #### Las aguas, el repostaje, la bombona, la avería y la ITV
 
@@ -573,8 +604,9 @@ GASTOS (EUR)
   Gas ...........    18.00
   Mantenimiento .     0.00
   Aguas .........     6.00
+  Alojamiento ...    36.00
   ----------------------
-  TOTAL .........   129.50
+  TOTAL .........   165.50
 
   Precio medio del litro: 1.520 EUR
 
@@ -641,11 +673,10 @@ llama por lo que es: **`historico.tar`**.
 
 Para no llevarse sorpresas:
 
-1. **De la pernocta faltan los servicios y el precio.** Se cierra y se guarda el
-   sitio y las noches, pero todavía no te los pide; el cartel lo dice antes de
-   que confirmes. Todo lo demás se cierra entero: parada, aguas, repostaje,
-   bombona, avería e ITV. El **peaje** se guarda entero desde el principio,
-   porque se rellena en el momento.
+1. **Ya se cierra todo**: parada, pernocta (con precio, servicios y
+   valoración), aguas, repostaje, bombona, avería e ITV. El **peaje** se guarda
+   entero desde el principio, porque se rellena en el momento y no queda
+   abierto.
 2. **No hay kilómetros.** La P4 no tiene GPS ni cuentakilómetros todavía, así
    que el resumen no puede decir cuánto recorriste. Lo dice explícitamente en
    vez de callarlo, para que no parezca un viaje de 0 km. Cuando llegue el GPS,

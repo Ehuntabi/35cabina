@@ -253,10 +253,37 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   que no se ve y parecía que el botón cerraba el cartel sin hacer nada. Visto en
   la placa el 24-ago-2026.
 
-  ⏳ **Lo que falta del rediseño**: los servicios y el precio de una
-  **pernocta**; y el aviso de «estuviste parado desde las 19:40». Deshacer se
-  puede de dos maneras: en el cartel de «Anotado» y en la pantalla de lo que
-  queda sin cerrar.
+  **La PERNOCTA ya se cierra entera** (24-ago-2026). «Terminarla» no guarda: abre
+  `CAT_PERNOCTA`, con el sitio y las noches escritos arriba (no se preguntan: los
+  dijiste al llegar y las horas las sabe el aparato), la fila de precio —oculta si
+  el sitio es gratis, y sin el selector noche/24 h en un camping— y un botón a la
+  pantalla de servicios, que desde ahí lleva a la valoración. **La hora de fin se
+  congela al pulsar «Terminarla»**, no al guardar.
+
+  Va a **su propia hoja** (`pernoctas.csv`; el tipo del apunte es `pernocta`) y no
+  entre las paradas: lleva sitio, precio, cobro, seis servicios, valoración, dos
+  pegas e inclinación, y mezclarla dejaría `paradas.csv` con dos cabeceras. En la
+  P4 cuenta como parada **y** suma en una línea nueva de **Alojamiento**
+  (`t_aloja`), multiplicando el precio por las noches — el precio que se teclea es
+  por noche, que es lo que se anuncia a la entrada. Cero noches (llegar y marcharse
+  el mismo día) se cobra como una.
+
+  La pantalla de **SERVICIOS se abre desde dos sitios**, así que su «Volver» no
+  puede estar clavado: `BACK_TO_ORIGEN` vuelve a `s_serv_desde`, que pone quien la
+  abre.
+
+  El apunte de la pernocta pasa a ser **el más largo: 547 bytes MEDIDOS** en el
+  peor caso —id y `ts` de 10 cifras, la clave de sitio más larga, los seis
+  servicios, valoración, las dos pegas, inclinación y un resumen que llene sus 96
+  bytes—. Buffer de `apunte_encolar()` y `CUERPO_MAX` de `viaje_cola.c` subidos de
+  640 a **768, y tienen que ir a la par**: quedan 221 bytes de margen, que es lo
+  que hace falta para los dos campos de posición que traerá el GPS. Medido y no
+  estimado a propósito: en julio una estimación de "ronda los 300" para la parada
+  (que eran 505) costó una auditoría y apuntes perdidos en silencio.
+
+  ⏳ **Lo que falta del rediseño**: el aviso de «estuviste parado desde las
+  19:40». Deshacer se puede de dos maneras: en el cartel de «Anotado» y en la
+  pantalla de lo que queda sin cerrar.
 
   🧹 Pendiente de limpieza: el modelo VIEJO de parada (namespace `parada` de NVS)
   ya no se usa —se suelta al arrancar— y deja `parada_abrir_si_procede()` y
