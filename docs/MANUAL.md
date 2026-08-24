@@ -615,7 +615,28 @@ Aceite · Filtro aceite · Filtro aire · Filtro habitáculo · Correa · Ruedas
 Al marcar **Ruedas** aparece **cuántas** (1 a 4); si no, ese selector ni se ve.
 Abajo, **Km** y **Coste**.
 
-### Wi-Fi (Ajustes)
+### Configuración
+
+Se llega con el botón **Configuración**, que sale en todos los menús del
+cuaderno. Tiene dos cosas:
+
+```
+        [ < Volver ]        CONFIGURACION
+
+        [        Wi-Fi        ]
+
+              Version instalada
+                  v1.9.1
+             Aug 24 2026  14:20
+```
+
+- Un botón de **Wi-Fi**, que lleva a los ajustes de abajo.
+- Y **la versión que lleva puesta**, en grande, con la fecha de compilación
+  debajo. Es el primer dato que hace falta cuando algo va raro: te dice si la
+  pantalla tiene lo último o se quedó en una versión vieja. La fecha distingue
+  dos grabados de la misma versión.
+
+### Wi-Fi
 Cuatro campos, y **la pantalla se desliza hacia abajo** porque no caben todos a
 la vez:
 
@@ -628,6 +649,8 @@ la vez:
 Si tocas Guardar **sin haber cambiado nada**, te lo dice: *"No has cambiado
 nada."* Y si sí lo has cambiado, **pide confirmación** antes de reconectar — es
 fácil dejarse la pantalla incomunicada por un dedazo en la contraseña.
+
+El **Volver** de esta pantalla regresa a Configuración, no al cuaderno.
 
 ---
 

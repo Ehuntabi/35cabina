@@ -339,6 +339,21 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   rinde a los cinco minutos** si la P4 no dice la hora, en vez de quedarse vivo
   para siempre.
 
+  **Configuración es un menú desde el 24-ago-2026** (`view_ajustes.c`): un botón
+  de Wi-Fi y, en el resto de la pantalla, **la versión instalada** en letra 40
+  con la fecha de compilación debajo. Antes entraba directo al formulario del
+  Wi-Fi y la versión no se podía mirar en ninguna parte — que es el primer dato
+  que hace falta cuando algo va raro. Sale de `esp_app_get_description()`, o sea
+  del tag de git al compilar: no hay ningún número que mantener a mano.
+
+  ⚠️ Y ese número **puede quedarse viejo**: `PROJECT_VER` se calcula al
+  CONFIGURAR, no al compilar. Por eso el `CMAKE_CONFIGURE_DEPENDS` sobre
+  `.git/HEAD` y `.git/index` del `CMakeLists.txt` — sin él, se graba un binario
+  nuevo con la versión de hace veinte commits (la P4 llegó a decir `v1.10.0`
+  llevando once por encima). La regla que va con esto: **publicar versión antes
+  de grabar**, con `git tag -a vX.Y.Z` (este proyecto todavía no tiene el
+  `release.sh` que sí tiene la P4).
+
   ⏳ **Lo que falta del rediseño**: nada de la lista original. Deshacer se puede
   de dos maneras: en el cartel de «Anotado» y en la pantalla de lo que queda sin
   cerrar.
