@@ -512,6 +512,20 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   arrancar, la pantalla lo indica ("Sensor ADXL345 no detectado") en vez de
   fallar.
 
+  **La bola no puede temblar** (24-ago-2026, visto en la placa: quieta la
+  autocaravana, la bola no paraba). El dial reparte 6° en 106 px — casi **18 px
+  por grado** — así que el ruido normal del chip (~1 LSB = 3,9 mg = 0,22°) se ve
+  como un temblor permanente de 3-4 px. Se ataca por los dos lados, en `tilt.c`:
+  **`BW_RATE` a 12,5 Hz** (de fábrica arranca a 100 Hz, o sea 50 Hz de ancho de
+  banda y todo el ruido dentro; parada no hay nada que medir por encima de unos
+  pocos hercios) y **media exponencial α=0,2 sobre el VECTOR de gravedad**, no
+  sobre los ángulos — promediar después de la arcotangente deforma cerca de los
+  extremos. Dos salvaguardas: **salto** (si la lectura se aleja más de 0,03 g,
+  ~1,7°, el filtro se tira al valor nuevo de golpe, así que subir a una rampa se
+  ve al instante) y **olvido** (si hace más de 1 s que nadie lee, empieza de
+  cero: si no, la inclinación que se guarda al aparcar —una sola lectura cada
+  muchas horas— saldría mezclada con la de la última vez que se miró el nivel).
+
   Estado real: con el ADXL345 cableado a IO17/IO18 el arranque dice
   `tilt: ADXL345 OK` y **el mapeo de ejes está comprobado** — cabeceo y
   balanceo salen en el sentido correcto con el sensor montado como está, así

@@ -51,6 +51,7 @@
 #include "driver/i2c_master.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <math.h>
@@ -68,6 +69,7 @@ static const char *TAG = "tilt";
 
 #define ADXL345_ADDR            0x53
 #define REG_DEVID                0x00
+#define REG_BW_RATE               0x2C
 #define REG_POWER_CTL             0x2D
 #define REG_DATA_FORMAT           0x31
 #define REG_DATAX0                0x32
@@ -106,6 +108,68 @@ static bool read_raw_g(float *ax, float *ay, float *az)
     return true;
 }
 
+/* --- Que la bola no tiemble ---------------------------------------------
+ *
+ * El ADXL345 mete alrededor de 1 LSB de ruido, y en full-res 1 LSB son 3,9 mg,
+ * o sea unos 0,22 grados. En el dial del nivel eso NO es despreciable: el
+ * circulo reparte 6 grados en 106 px, casi 18 px por grado, asi que el ruido
+ * normal del chip se ve como un temblor de 3 o 4 px que no para nunca. Se ataca
+ * por los dos lados:
+ *
+ * 1. EN EL SENSOR (BW_RATE, en tilt_init): a 100 Hz el ancho de banda es de 50
+ *    Hz y el ruido entra entero. La autocaravana esta PARADA cuando se mira el
+ *    nivel: no hay nada por encima de unos pocos hercios que merezca la pena
+ *    medir. Bajando a 12,5 Hz (6,25 Hz de ancho de banda) el ruido cae con la
+ *    raiz del ancho de banda, casi tres veces.
+ *
+ * 2. AQUI, media exponencial sobre el vector de gravedad -- no sobre los
+ *    angulos: los angulos salen de una arcotangente y promediar despues de una
+ *    funcion no lineal deforma el resultado cerca de los extremos.
+ *
+ * Con ALFA 0,2 y una lectura cada 200 ms la constante de tiempo es de ~0,8 s.
+ * Se nota al mover la autocaravana, y por eso existe el SALTO: si la lectura se
+ * aleja mas de lo que el ruido puede explicar (0,03 g son ~1,7 grados, y el
+ * ruido es 0,004 g), el filtro se tira al valor nuevo de golpe en vez de ir
+ * llegando. Asi se queda quieto parado y responde al instante al subir a una
+ * rampa, que es justo lo que hace falta.
+ *
+ * Y OLVIDO: si hace mas de un segundo que nadie lee, el filtro empieza de cero.
+ * Sin eso, la inclinacion que se guarda al aparcar (view_registro la pide una
+ * sola vez, cada muchas horas) saldria mezclada con la de donde estabas la
+ * ultima vez que se miro el nivel. */
+#define TILT_ALFA        0.20f
+#define TILT_SALTO_G     0.03f
+#define TILT_OLVIDO_US   (1000 * 1000)
+
+static float   s_fx, s_fy, s_fz;
+static bool    s_filtro_vivo;
+static int64_t s_filtro_us;
+
+static bool read_g(float *ax, float *ay, float *az)
+{
+    float x, y, z;
+    if (!read_raw_g(&x, &y, &z)) return false;
+
+    int64_t ahora = esp_timer_get_time();
+    bool de_golpe = !s_filtro_vivo
+                    || (ahora - s_filtro_us) > TILT_OLVIDO_US
+                    || fabsf(x - s_fx) > TILT_SALTO_G
+                    || fabsf(y - s_fy) > TILT_SALTO_G
+                    || fabsf(z - s_fz) > TILT_SALTO_G;
+    if (de_golpe) {
+        s_fx = x; s_fy = y; s_fz = z;
+    } else {
+        s_fx += TILT_ALFA * (x - s_fx);
+        s_fy += TILT_ALFA * (y - s_fy);
+        s_fz += TILT_ALFA * (z - s_fz);
+    }
+    s_filtro_vivo = true;
+    s_filtro_us   = ahora;
+
+    *ax = s_fx; *ay = s_fy; *az = s_fz;
+    return true;
+}
+
 /* Lleva el vector medido a los ejes del VEHICULO.
  *
  * El sensor va montado girado 270 grados (o sea, 90 en sentido antihorario
@@ -123,7 +187,7 @@ static void a_ejes_vehiculo(float *ax, float *ay)
 static bool compute_angles(float *pitch_deg, float *roll_deg)
 {
     float ax, ay, az;
-    if (!read_raw_g(&ax, &ay, &az)) return false;
+    if (!read_g(&ax, &ay, &az)) return false;
     a_ejes_vehiculo(&ax, &ay);
     *pitch_deg = atan2f(-ax, sqrtf(ay * ay + az * az)) * 180.0f / (float)M_PI;
     *roll_deg  = atan2f(ay, az) * 180.0f / (float)M_PI;
@@ -168,6 +232,10 @@ esp_err_t tilt_init(void)
         return ESP_ERR_NOT_FOUND;
     }
 
+    /* 12,5 Hz (bits 0111, LOW_POWER a 0): menos ancho de banda, menos ruido.
+     * Ver el bloque del filtro, arriba. Sigue habiendo muestra nueva cada 80 ms
+     * y el dial se refresca cada 200, asi que no se pierde ninguna. */
+    reg_write(REG_BW_RATE, 0x07);
     reg_write(REG_DATA_FORMAT, 0x08);  /* FULL_RES=1, +/-2g */
     reg_write(REG_POWER_CTL, 0x08);    /* Measure=1, sale de standby */
     s_present = true;

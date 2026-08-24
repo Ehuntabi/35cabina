@@ -94,6 +94,13 @@ Colores:
 El límite de 3° de lado a lado **no es un capricho: es el del frigorífico**. Por
 encima de eso el frigo de absorción trabaja mal.
 
+> **La bola tarda un instante en asentarse, y es a propósito.** El sensor tiene
+> un ruido propio que, ampliado por el dial, se veía como un temblor que no
+> paraba con la autocaravana quieta. Ahora la lectura va suavizada: al subir a
+> una rampa la bola sigue el movimiento al momento, pero cuando paras tarda un
+> segundo largo en quedarse fija del todo. Si tiembla estando parada, entonces sí
+> es que se mueve algo de verdad.
+
 **Botón "Calibrar nivel":** pon el cero cuando la autocaravana esté realmente
 nivelada (comprobado con un nivel de burbuja de verdad). Corrige que la pantalla
 no esté montada perfectamente recta.
