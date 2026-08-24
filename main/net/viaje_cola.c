@@ -74,12 +74,35 @@ static void indices_leer(uint32_t *cabeza, uint32_t *cola)
     nvs_close(h);
 }
 
-static void indices_escribir(uint32_t cabeza, uint32_t cola)
+/* Devuelve si se han guardado DE VERDAD. Antes no se miraba, y ahi habia un
+ * agujero por el que se perdian apuntes en silencio: el cuerpo se escribe
+ * primero y el indice despues, asi que si el indice no entra -- la NVS son
+ * 16 KB y se puede llenar -- el apunte queda escrito pero INVISIBLE, y push()
+ * devolvia true igualmente. La pantalla decia "guardado" y no habia nada. */
+static bool indices_escribir(uint32_t cabeza, uint32_t cola)
+{
+    nvs_handle_t h;
+    if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) {
+        ESP_LOGE(TAG, "no puedo abrir la NVS para los indices de la cola");
+        return false;
+    }
+    esp_err_t e = nvs_set_u32(h, K_CABEZA, cabeza);
+    if (e == ESP_OK) e = nvs_set_u32(h, K_COLA, cola);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    if (e != ESP_OK) {
+        ESP_LOGE(TAG, "no puedo guardar los indices de la cola: %s", esp_err_to_name(e));
+        return false;
+    }
+    return true;
+}
+
+/* Borra una entrada por su clave. Se usa para deshacer un push a medias. */
+static void borrar_entrada(const char *clave)
 {
     nvs_handle_t h;
     if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_u32(h, K_CABEZA, cabeza);
-    nvs_set_u32(h, K_COLA, cola);
+    nvs_erase_key(h, clave);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -142,7 +165,14 @@ bool viaje_cola_push(const char *cuerpo)
         return false;
     }
 
-    indices_escribir(cabeza, cola + 1);
+    if (!indices_escribir(cabeza, cola + 1)) {
+        /* Sin indice, ese apunte no existe para nadie. Se borra y se dice que
+         * NO se ha guardado, en vez de dejar un fantasma y contestar que si. */
+        borrar_entrada(clave);
+        xSemaphoreGive(s_mutex);
+        ESP_LOGE(TAG, "el apunte NO se ha encolado (no cabe el indice)");
+        return false;
+    }
     xSemaphoreGive(s_mutex);
 
     ESP_LOGI(TAG, "encolado #%lu (%u pendientes): %s",
@@ -166,7 +196,12 @@ static void descartar_cabeza(void)
             nvs_commit(h);
             nvs_close(h);
         }
-        indices_escribir(cabeza + 1, cola);
+        if (!indices_escribir(cabeza + 1, cola)) {
+            /* La entrada ya esta borrada pero la cabeza no avanza: la proxima
+             * lectura no encontrara la clave. Lo recoge el repartidor, que
+             * salta las cabezas ilegibles en vez de atascarse. */
+            ESP_LOGE(TAG, "la cabeza de la cola no avanza; se reintentara");
+        }
     }
     xSemaphoreGive(s_mutex);
     avisar_cambio();
@@ -197,6 +232,17 @@ static void reparto_task(void *arg)
 
     while (1) {
         if (!leer_cabeza(cuerpo, sizeof(cuerpo))) {
+            /* OJO: leer_cabeza dice que no por dos motivos distintos, y hay que
+             * separarlos. Si la cola esta vacia, a dormir. Pero si hay
+             * pendientes y aun asi no se puede leer, esa entrada esta rota o no
+             * esta: sin saltarla, la cola se queda atascada PARA SIEMPRE detras
+             * de ella, con el aviso de "N sin enviar" puesto y sin avanzar. */
+            if (viaje_cola_pendientes() > 0) {
+                ESP_LOGE(TAG, "la cabeza de la cola no se puede leer: la salto "
+                              "para no atascar lo que viene detras");
+                descartar_cabeza();
+                continue;
+            }
             /* Cola vacia: dormir el ciclo entero. No hay nada que hacer y
              * despertarse mas a menudo solo gasta bateria. */
             vTaskDelay(pdMS_TO_TICKS(REINTENTO_MS));
@@ -236,10 +282,60 @@ static void reparto_task(void *arg)
     }
 }
 
+/* La capacidad bajo de 64 a 16 el 24-ago-2026 (la NVS son 16 KB y con 64 nunca
+ * se habria llegado al tope: se llenaba antes la particion). Eso deja dos
+ * cabos:
+ *
+ *  - Entradas HUERFANAS q16..q63 de la version anterior, ocupando para siempre
+ *   una memoria que va justa. Se borran una vez.
+ *  - Los indices se traducen a clave con "modulo capacidad", asi que si habia
+ *   apuntes pendientes al actualizar, la cabeza apuntaria a OTRA entrada. Si
+ *   los indices no cuadran con la capacidad de ahora, se reinicia la cola
+ *   entera y se dice: mejor perderlos avisando que entregar el apunte
+ *   equivocado. */
+#define CAPACIDAD_ANTERIOR  64
+
+static void migrar_cola(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) return;
+
+    bool borrado = false;
+    for (uint32_t i = CAPACIDAD; i < CAPACIDAD_ANTERIOR; i++) {
+        char clave[16];
+        snprintf(clave, sizeof(clave), "q%lu", (unsigned long)i);
+        if (nvs_erase_key(h, clave) == ESP_OK) borrado = true;
+    }
+    if (borrado) {
+        nvs_commit(h);
+        ESP_LOGW(TAG, "borradas entradas huerfanas de la capacidad anterior");
+    }
+
+    uint32_t cabeza = 0, cola = 0;
+    nvs_get_u32(h, K_CABEZA, &cabeza);
+    nvs_get_u32(h, K_COLA, &cola);
+    if ((uint32_t)(cola - cabeza) > CAPACIDAD) {
+        ESP_LOGE(TAG, "los indices de la cola no cuadran (%lu pendientes para "
+                      "una capacidad de %d): la reinicio",
+                 (unsigned long)(cola - cabeza), CAPACIDAD);
+        for (uint32_t i = 0; i < CAPACIDAD; i++) {
+            char clave[16];
+            snprintf(clave, sizeof(clave), "q%lu", (unsigned long)i);
+            nvs_erase_key(h, clave);
+        }
+        nvs_set_u32(h, K_CABEZA, 0);
+        nvs_set_u32(h, K_COLA, 0);
+        nvs_commit(h);
+    }
+    nvs_close(h);
+}
+
 void viaje_cola_init(viaje_cola_cambio_cb cb)
 {
     s_mutex = xSemaphoreCreateMutex();
     s_cambio_cb = cb;
+
+    migrar_cola();
 
     size_t n = viaje_cola_pendientes();
     if (n) ESP_LOGW(TAG, "arranco con %u apuntes sin entregar del encendido anterior",
