@@ -684,8 +684,15 @@ ENERGIA
   Gastados ......     7160 Wh
   De la placa ...     6180 Wh   (31.4 h de sol)
 
-Kilometros: no disponibles (la P4 aun no tiene GPS).
+Recorrido: 412.6 km
+  Combustible y peajes: 0.256 EUR por km
 ```
+
+El **recorrido lo mide el GPS** de la P4 mientras conduces. Cuenta por lo bajo
+a propósito: si pierde la señal —un túnel, un parking cubierto— no une los dos
+extremos por la recta, porque no es por donde fuiste. Y estando parado no suma,
+aunque el receptor se mueva unos metros él solo. Lo puedes ir viendo subir en la
+P4, en Ajustes → GPS.
 
 El apartado **ENERGIA es de este viaje y de ninguno más**: los contadores de la
 P4 se ponen a cero solos cuando declaras el viaje, y se cierran cuando lo
