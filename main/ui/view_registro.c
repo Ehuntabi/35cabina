@@ -1449,18 +1449,35 @@ static void build_resumen(categoria_t cat)
             break;
         }
         case CAT_AGUAS: {
-            /* Una linea por cosa MARCADA, y las que no se marcan no salen: en
-             * la confirmacion importa lo que se va a guardar, no la lista de lo
-             * que se podria haber hecho. Tres lineas como mucho, que es lo que
-             * admite el dialogo (ver el reparto en confirm_screen.c).
+            /* Salen las TRES lineas siempre, tenga importe o no (usuario,
+             * 24-ago-2026, en la placa). Lo que se repasa aqui es el DINERO: la
+             * que no lleva importe pone "gratis", que es lo normal en las
+             * aguas, y verlas las tres juntas dice de un vistazo lo que ha
+             * costado la parada.
              *
-             * Sin importe pone "gratis" y no "--": en las aguas lo normal es no
-             * pagar, asi que un hueco vacio no es un olvido. */
+             * Ojo: la marca sigue siendo la que dice QUE se hizo, y va aparte
+             * en el CSV. Una linea sin marcar sale aqui como "gratis" pero en
+             * la hoja de calculo va como no hecha.
+             *
+             * Si no hay ni marcas ni importes se resume en una linea, "todo
+             * gratis", en vez de tres que dicen lo mismo. */
             const char *moneda = currency_of(s_agua_currency_dd);
+            bool algo = false;
+            for (uint8_t i = 0; i < AGUA_COUNT; i++) {
+                const char *p = lv_textarea_get_text(s_agua_precio_ta[i]);
+                if (lv_obj_has_state(s_agua_chk[i], LV_STATE_CHECKED) ||
+                    (p && p[0])) {
+                    algo = true;
+                    break;
+                }
+            }
+            if (!algo) {
+                snprintf(s_resumen, sizeof(s_resumen), "todo gratis");
+                break;
+            }
             size_t used = 0;
             s_resumen[0] = '\0';
             for (uint8_t i = 0; i < AGUA_COUNT; i++) {
-                if (!lv_obj_has_state(s_agua_chk[i], LV_STATE_CHECKED)) continue;
                 const char *p = lv_textarea_get_text(s_agua_precio_ta[i]);
                 int w;
                 if (p && p[0]) {
@@ -1475,15 +1492,6 @@ static void build_resumen(categoria_t cat)
                 if (w < 0 || (size_t)w >= sizeof(s_resumen) - used) break;
                 used += (size_t)w;
             }
-            /* Nada marcado sale como "todo gratis" y no como el "--" del resto de
-             * formularios: decision del usuario viendolo en la placa
-             * (24-ago-2026). En las aguas lo que se mira es el dinero, y no
-             * haber puesto ningun importe significa que la parada no costo
-             * nada; el "--" ahi se leia como un dato que falta.
-             *
-             * A cambio, un apunte sin ninguna marca no dice QUE se hizo: en el
-             * CSV van las tres columnas a cero. Es lo que se pidio. */
-            if (!used) snprintf(s_resumen, sizeof(s_resumen), "todo gratis");
             break;
         }
         case CAT_ITV:

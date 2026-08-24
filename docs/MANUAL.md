@@ -272,14 +272,27 @@ importe al lado:
 
 **Marcas lo que hiciste y solo pones precio a lo que pagaste**, y **si escribes
 un precio, la casilla se marca sola** — un importe en una línea sin marcar no se
-guardaría, así que no hay manera de perderlo por ese despiste. Marcado y sin
-importe significa **gratis**, y así lo dice la confirmación — que es lo normal
-en las aguas, y por eso no sale como un dato que falta. Y si **no marcas nada**, la
-confirmación pone directamente *«todo gratis»*: en las aguas lo que se mira es el
-dinero, y no haber puesto ningún importe quiere decir que la parada no costó
-nada. (Eso sí: el apunte no dirá entonces qué hiciste, sólo que fue gratis.) Un precio por cada cosa
-y no uno solo: en muchas áreas el vaciado es gratis y el agua se paga, y con un
-importe único no habría manera de saber cuál era cuál.
+guardaría, así que no hay manera de perderlo por ese despiste.
+
+La confirmación enseña **las tres líneas siempre**, y la que no lleva importe
+sale como **gratis**:
+
+```
+        Guardar aguas?
+        Vaciar grises:  gratis
+        Vaciar wc:  2.00 EUR
+        Llenar agua:  gratis
+```
+
+Así ves de un vistazo lo que ha costado la parada. Si no marcas nada y no pones
+ningún importe, se resume en *«todo gratis»* en vez de tres líneas diciendo lo
+mismo. Un precio por cada cosa y no uno solo: en muchas áreas el vaciado es
+gratis y el agua se paga, y con un importe único no habría manera de saber cuál
+era cuál.
+
+> Lo que se **guarda** sigue siendo lo que marcaste: una línea sin marcar sale
+> como «gratis» en la confirmación, pero en la hoja de cálculo va como *no
+> hecha*. La casilla es la que dice qué hiciste; el precio, lo que costó.
 
 **El formulario de la ITV** pide **resultado, kilómetros y precio**:
 

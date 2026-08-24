@@ -277,9 +277,12 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   resumen — ahí importa más que en ningún sitio, porque finalizar un viaje
   por un roce cierra el registro en curso de la P4. Los campos vacíos salen
   como `--`, para que se vea que faltan antes de aceptar. La excepción es
-  **aguas sin ninguna casilla marcada**, que sale como «todo gratis» (decisión del
-  usuario en la placa, 24-ago): ahí lo que se mira es el dinero, y el `--` se
-  leía como un dato que falta. A cambio, ese apunte no dice qué se hizo.
+  **aguas**: la confirmación enseña **las tres líneas siempre** y la que no
+  lleva importe sale como «gratis»; sin marcas ni importes se resume en «todo
+  gratis» (decisiones del usuario en la placa, 24-ago). Ahí lo que se repasa es
+  el dinero, y el `--` se leía como un dato que falta. Ojo con la asimetría que
+  eso deja: el CSV sigue guardando la MARCA, así que una línea sin marcar sale
+  como «gratis» en pantalla y como *no hecha* en la hoja de cálculo.
 
   **Fondos claros con el contenido en negro**, no al revés: la primera versión
   usaba la familia Material 800 con texto blanco y daba 3,8-6,4:1 de contraste,
