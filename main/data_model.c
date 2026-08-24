@@ -32,7 +32,11 @@ void data_model_update_from_msg(const struct mini_msg *msg)
 
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
 
-    /* Shunt — siempre presente, solo se invalida si SoC viene como NO_DATA. */
+    /* Shunt. Se invalida si el SoC viene como NO_DATA, igual que los otros
+     * cinco bloques: sin ese else -- que faltaba, auditando el 24-ago-2026 --
+     * has_data se quedaba en true para siempre y la pantalla seguia ensenando
+     * el ultimo porcentaje con el SmartShunt apagado, ahora ademas con el punto
+     * de conexion en verde, porque el enlace con la P4 si estaba vivo. */
     if (msg->shunt_soc_deci != MINI_NO_DATA_I16) {
         tmp.has_data            = true;
         tmp.shunt_soc_deci      = msg->shunt_soc_deci;
@@ -41,6 +45,8 @@ void data_model_update_from_msg(const struct mini_msg *msg)
         /* P = V * I -> centi V * milli A / 100000 = W, signo conservado. */
         tmp.shunt_power_w = (int32_t)((int64_t)msg->shunt_voltage_centi *
                                        msg->shunt_current_milli / 100000);
+    } else {
+        tmp.has_data = false;
     }
 
     /* Aux del SmartShunt = bateria de arranque/motor. */
