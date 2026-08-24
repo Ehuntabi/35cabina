@@ -135,7 +135,10 @@ static void calib_btn_cb(lv_event_t *e)
 
 /* Lo ultimo PINTADO, para no repintar por un resto de ruido. Ver la zona muerta
  * en refresh_cb(). */
-#define BOLA_ZONA_MUERTA_PX  3
+/* 5 px y no 3: con 3 quedaba bien pero el usuario, viendolo en la placa, pidio
+ * apretar mas (24-ago-2026). Son 0,28 grados, todavia menos de un tercio de
+ * grado y muy por debajo del circulo verde de 1. */
+#define BOLA_ZONA_MUERTA_PX  5
 #define TEXTO_HISTERESIS_DEG 0.08f
 
 static int   s_bola_x, s_bola_y;
@@ -182,11 +185,10 @@ static void refresh_cb(lv_timer_t *t)
      * queda basta para que la bola no pare: el dial reparte 6 grados en 106 px,
      * asi que UNA centesima de grado ya es un cuarto de pixel y cualquier resto
      * mueve el dibujo. Aqui se corta por lo sano: la bola no se pinta en otro
-     * sitio hasta que el sitio nuevo esta a 3 px o mas.
+     * sitio hasta que el sitio nuevo esta a BOLA_ZONA_MUERTA_PX o mas.
      *
-     * 3 px son 0,17 grados, muy por debajo del circulo verde de 1 grado, asi
-     * que no se pierde nada util. Y cuando se mueve va al sitio EXACTO, no de
-     * 3 en 3: la zona muerta decide CUANDO se redibuja, no donde. */
+     * Y cuando se mueve va al sitio EXACTO, no a saltos de ese tamano: la zona
+     * muerta decide CUANDO se redibuja, no donde. */
     if (!s_bola_pintada ||
         abs(off_x - s_bola_x) >= BOLA_ZONA_MUERTA_PX ||
         abs(off_y - s_bola_y) >= BOLA_ZONA_MUERTA_PX) {

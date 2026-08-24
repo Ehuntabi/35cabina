@@ -529,10 +529,12 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   **Con el filtro solo no bastó** (probado en la placa, 24-ago: "ahora es menor,
   pero sigue moviéndose"). El resto de ruido que sobrevive sigue siendo suficiente
   para mover el dibujo, porque una centésima de grado ya es un cuarto de píxel. Lo
-  que lo deja quieto del todo es la **zona muerta de 3 px** en `view_inclinacion.c`:
-  la bola no se redibuja hasta que su sitio nuevo está a 3 px o más (0,17°, muy por
-  debajo del círculo verde de 1°). La zona muerta decide **cuándo** se redibuja, no
-  dónde: al moverse va a la posición exacta, no a saltos de 3. Los grados escritos
+  que lo deja quieto del todo es la **zona muerta de 5 px** en `view_inclinacion.c`:
+  la bola no se redibuja hasta que su sitio nuevo está a 5 px o más (0,28°, todavía
+  menos de un tercio de grado y muy por debajo del círculo verde de 1°). La zona
+  muerta decide **cuándo** se redibuja, no dónde: al moverse va a la posición
+  exacta, no a saltos de 5. Empezó en 3 px y se apretó a 5 a petición del usuario,
+  con la placa delante. Los grados escritos
   llevan lo mismo con 0,08° de histéresis, o la última cifra bailaba sola cuando el
   valor caía entre dos décimas.
 
