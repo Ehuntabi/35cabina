@@ -2542,7 +2542,8 @@ static void barra_timer_cb(lv_timer_t *t)
     mini_data_t d;
     data_model_get(&d);
     uint32_t ms     = (uint32_t)(esp_timer_get_time() / 1000);
-    bool     fresco = d.has_data && (ms - d.last_update_ms < CONN_MS);
+    /* El enlace, no el shunt: ver la nota larga en view_info.c. */
+    bool     fresco = d.last_update_ms != 0 && (ms - d.last_update_ms < CONN_MS);
 
     uint32_t c_wifi = fresco ? 0x4CD964 : 0x666666;
     uint32_t c_gps  = !fresco ? 0x666666

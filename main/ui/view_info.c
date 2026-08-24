@@ -609,7 +609,15 @@ static void refresh_cb(lv_timer_t *t)
          * Es el mismo fallo que gps.c ya evita en la P4 con su caducidad de
          * 5 s; faltaba aplicarlo en el lado que recibe. */
         uint32_t ms = (uint32_t)(esp_timer_get_time() / 1000);
-        bool fresco = d.has_data && (ms - d.last_update_ms < CONN_TIMEOUT_MS);
+        /* Lo que caduca es el ENLACE con la P4, y eso lo dice last_update_ms
+         * (se sella con CADA mensaje valido). NO vale d.has_data: eso significa
+         * "el shunt esta mandando SoC", que es otra cosa -- en un banco de
+         * pruebas sin SmartShunt es false, y el icono se quedaba GRIS aunque la
+         * P4 estuviera diciendo que el GPS busca satelites (visto el
+         * 24-ago-2026). El != 0 es para el primer arranque: sin ningun mensaje
+         * todavia, last_update_ms vale 0 y la resta daria "fresco". */
+        bool fresco = d.last_update_ms != 0 &&
+                      (ms - d.last_update_ms < CONN_TIMEOUT_MS);
         /* CIAN para "buscando", y no el naranja de antes: el icono vive pegado
          * al marco de la tarjeta de bateria, que es naranja (COL_BORDER_BAT,
          * 0xFF9800) -- o sea, EXACTAMENTE el mismo color. Mirandolo no habia
