@@ -486,7 +486,7 @@ costó** al lado:
         [x] Electricidad     [  2.00]
         [ ] Duchas/WC        [      ]
         [x] Basura           [      ]
-        [x] Recomendado
+        [ Buena ][ Aceptable ][ Mala ]
 ```
 
 **Marcado y sin importe significa gratis**, como en las aguas — y si escribes un
@@ -504,13 +504,21 @@ un franco.
 
 ### Valoración
 
-Última opción dentro de Servicios. Tiene pantalla propia con tres botones
-grandes de color:
+**La última línea de Servicios**, tres botones de color:
 
-🟢 **Recomendado** · 🟡 **Aceptable** · 🔴 **Sucio**
+🟢 **Buena** · 🟡 **Aceptable** · 🔴 **Mala**
 
-Y debajo, dos pegas sueltas: **Ruidoso** y **Sin sombra**. Son casillas aparte y
-no notas, porque un sitio recomendable puede perfectamente no tener sombra.
+Solo queda uno elegido: se pone a todo color y con un visto, y los otros dos se
+apagan. Si no tocas ninguno, el sitio queda **sin valorar** — no se inventa una
+nota.
+
+Al pulsar **cualquiera** de los tres se abre además **«Pegas del sitio»**:
+
+**Poco seguro · Ruidosa · Inclinada · Sin sombra**
+
+Son casillas aparte de la nota, y salen con las tres a propósito: un sitio bueno
+puede ser ruidoso o estar inclinado, y eso es justo lo que quieres recordar
+antes de volver. Si no hay ninguna pega, sales con **Volver** sin marcar nada.
 
 **Sin que tengas que hacer nada**, la parada guarda también **cómo quedó
 nivelada** la autocaravana (el cabeceo y el balanceo del momento). Es un dato del

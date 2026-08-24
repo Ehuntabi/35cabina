@@ -508,40 +508,34 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   que aparezca. Síntoma en el log cuando no la encuentra:
   `udp_rx: Desconectado reason=201` (`NO_AP_FOUND`) cada pocos segundos.
 
-  Los **servicios** (Agua potable · Vaciado grises · Vaciado WC ·
-  Electricidad · Duchas/WC · Basura) más una séptima casilla, **Valoración**,
-  que no marca nada: abre su propia pantalla (ver abajo). Al volver, esa
-  casilla muestra **la nota elegida** en vez de la palabra "Valoración"
-  ("Valoración: Recomendado" son 23 caracteres y en media rejilla entran ~16).
-  Los servicios son el mismo dato con dos lecturas, así
-  que comparten lista y pantalla y solo cambia el rótulo que la explica: en un
-  área es *"Lo que ofrece el área"* y en un camping *"Incluido en el
-  precio"*. Viven en **otra pantalla**: los 320 px
-  de alto ya van justos (48 de cabecera + 116 de las cinco casillas + 62 del
-  precio + 54 de la fila de acciones = 280 de los 304 útiles), y seis
-  casillas más no caben de ninguna manera. No llevan botón de guardar: se
-  guardan con la parada. El botón "Servicios" comparte fila con "Guardar" en
-  vez de llevar la suya, así no cuesta ni un píxel de alto.
+  Los **servicios** son **seis** (Agua potable · Vaciado grises · Vaciado WC ·
+  Electricidad · Duchas/WC · Basura), cada uno con su importe, y viven en otra
+  pantalla porque en la de la pernocta no caben. No llevan botón de guardar: se
+  guardan con ella.
 
-  Esa pantalla sí va sobrada de alto, así que sus casillas van **más
-  separadas** (`SERV_CHK_GAP`, 26 px frente a los 6 de mantenimiento y parada)
-  y el bloque **centrado** en lo que sobra en vez de pegado arriba: más
-  separación es menos fallo al tocar en marcha.
+  **La nota del sitio es la última línea de esa misma pantalla**: tres botones
+  de color — **Buena** en verde, **Aceptable** en ámbar, **Mala** en rojo — de
+  los que solo uno queda elegido, a todo color y con la marca de visto, con los
+  otros dos apagados. Dos señales a la vez y no una, porque solo con el borde no
+  se distingue de lejos y solo con el color tampoco, y esto se mira con sol de
+  lado.
 
-  **Valoración** (`build_valoracion`) es una **tercera pantalla**, colgada de
-  servicios. Tres botones de un dedo con su color — **Recomendado** en verde,
-  **Aceptable** en ámbar, **Sucio** en rojo — de los que solo uno queda
-  elegido: el elegido va a todo color y con la marca de visto, los otros dos
-  apagados. Dos señales a la vez y no una, porque solo con el borde no se
-  distingue de lejos y solo con el color tampoco, y esto se mira con sol de
-  lado. Debajo, las **pegas del sitio**: Ruidoso · Sin sombra, que son
-  casillas y no notas porque pueden pasar con cualquiera de las tres (un sitio
-  recomendable puede no tener sombra).
+  Era una séptima casilla de la lista que en realidad abría otra pantalla, y no
+  se entendía: parecía un servicio más. Como botones se ve lo que hay y se elige
+  de un toque. **Sin tocar ninguno el sitio queda sin valorar** (`s_val_puesta`);
+  antes hacía de interruptor la casilla, y sin ella hay que decirlo aparte o se
+  guardaría "Buena" por defecto, que sería inventarse el dato.
 
-  Antes esto era una tira de tres botones que se desplegaba dentro de
-  servicios y obligaba a apretar las casillas para hacerle sitio. En pantalla
-  propia hay espacio de sobra: cabecera 48 + tres botones elásticos (~66 cada
-  uno) + la fila de casillas 40 + 12 de huecos, de los 304 útiles.
+  `build_valoracion` deja de ser la pantalla de la nota y pasa a ser la de las
+  **PEGAS DEL SITIO**: Poco seguro · Ruidosa · Inclinada · Sin sombra. Se abre
+  sola al pulsar **cualquiera** de las tres notas —no solo la mala: un sitio
+  bueno puede ser ruidoso o estar inclinado, y eso es lo que hay que saber antes
+  de volver— y se sale con Volver sin marcar nada.
+
+  ⚠️ Cambian **valores** del CSV, no solo rótulos: la columna `valoracion` pasa
+  de `Recomendado/Aceptable/Sucio` a `Buena/Aceptable/Mala`, y las pegas de dos
+  columnas a cuatro (`poco_seguro`, `ruidoso`, `inclinada`, `sin_sombra`). Los
+  viajes ya descargados conservan los suyos.
 
   **Desmarcar Valoración borra lo que hubiera dentro** (nota y pegas): sin
   valoración no significan nada. Las pegas no caben en la casilla de

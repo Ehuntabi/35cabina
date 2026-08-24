@@ -209,18 +209,20 @@ static lv_obj_t *s_parada_servicios_btn; /* oculto salvo area */
 /* Servicios que ofrece el area, en su propia pantalla: las cinco casillas de
  * parada + el precio + estas seis no caben juntas en 320 px de alto. */
 /* La ultima no es un servicio: es la puerta a la pantalla de valoracion. */
-#define SERV_COUNT           7
-#define SERV_IDX_VALORACION  6
+/* SEIS, y la valoracion ya no es uno de ellos: era una casilla mas de la lista
+ * que en realidad abria otra pantalla, y no se entendia. Ahora la nota son TRES
+ * BOTONES de color en la ultima linea de esta misma pantalla (usuario,
+ * 24-ago-2026, con la placa delante). */
+#define SERV_COUNT           6
 static const char *const SERV_OPCIONES[SERV_COUNT] = {
     "Agua potable", "Vaciado grises", "Vaciado WC",
-    "Electricidad", "Duchas/WC", "Basura",
-    "Valoracion"
+    "Electricidad", "Duchas/WC", "Basura"
 };
 static lv_obj_t *s_serv_chk[SERV_COUNT];
 /* Lo que cuesta cada servicio. En un area el agua puede costar 1 euro y la luz
  * 2, y hasta el 24-ago-2026 solo se podia decir que LOS HABIA. La valoracion no
  * lleva importe: no es un servicio, es la puerta a su pantalla. */
-static lv_obj_t *s_serv_precio_ta[SERV_IDX_VALORACION];
+static lv_obj_t *s_serv_precio_ta[SERV_COUNT];
 
 /* --- Valoracion del sitio, en pantalla propia -----------------------------
  *
@@ -233,20 +235,29 @@ static lv_obj_t *s_serv_precio_ta[SERV_IDX_VALORACION];
  * la interfaz (ver el bloque de colores de arriba). */
 #define VALORACION_COUNT 3
 static const char *const VALORACION[VALORACION_COUNT] = {
-    "Recomendado", "Aceptable", "Sucio"
+    "Buena", "Aceptable", "Mala"
 };
 static const uint32_t VALORACION_COL[VALORACION_COUNT] = {
     0x66BB6A, 0xFFA726, 0xE57373
 };
 static uint8_t   s_val_nota;             /* indice en VALORACION */
+/* Mientras no se toque ningun boton NO hay nota, y eso no es lo mismo que
+ * "Buena": antes la casilla de servicios hacia de interruptor y sin marcarla no
+ * habia valoracion. Sin casilla, hace falta decirlo aparte. */
+static bool      s_val_puesta;
 static lv_obj_t *s_val_btn[VALORACION_COUNT];
 static lv_obj_t *s_val_btn_lbl[VALORACION_COUNT];
 
 /* Las pegas del sitio: no son notas sino cosas que pueden pasar con cualquier
  * nota (un sitio recomendable puede no tener sombra). Por eso son casillas
  * sueltas y no opciones de la nota. */
-#define VAL_EXTRA_COUNT 2
-static const char *const VAL_EXTRAS[VAL_EXTRA_COUNT] = { "Ruidoso", "Sin sombra" };
+/* CUATRO desde el 24-ago-2026 (antes ruidoso y sin sombra). Salen al pulsar
+ * CUALQUIERA de las tres notas, no solo la mala: un sitio bueno puede ser
+ * ruidoso, y eso es lo que uno quiere recordar antes de volver. */
+#define VAL_EXTRA_COUNT 4
+static const char *const VAL_EXTRAS[VAL_EXTRA_COUNT] = {
+    "Poco seguro", "Ruidosa", "Inclinada", "Sin sombra"
+};
 static lv_obj_t *s_val_extra_chk[VAL_EXTRA_COUNT];
 
 /* Mantenimiento: varias casillas a la vez, no una opcion. Con el mismo
@@ -379,7 +390,6 @@ static void clear_forms(void);
  * parada; el resumen y el apunte, que van antes en el fichero, las necesitan. */
 static uint8_t pern_cobro_actual(void);
 static void hora_corta(uint32_t epoch, char *buf, size_t n);
-static void valoracion_actualiza_texto(bool marcado);
 static void valoracion_reset(void);
 
 /* Las pantallas de menu. La lista vive aqui arriba y no con su codigo porque
@@ -842,10 +852,16 @@ static void make_check_money_row(lv_obj_t *parent, const char *label_text,
     lv_obj_t *ta = lv_textarea_create(row);
     lv_textarea_set_one_line(ta, true);
     lv_textarea_set_placeholder_text(ta, "0.00");
-    lv_obj_set_size(ta, CHKMONEY_TA_W, alto - 8);
+    lv_obj_set_size(ta, CHKMONEY_TA_W, alto - 6);
     lv_obj_align(ta, LV_ALIGN_RIGHT_MID, 0, 0);
     lv_obj_set_style_text_font(ta, alto >= 40 ? &lv_font_montserrat_24
                                               : &lv_font_montserrat_20, 0);
+    /* Sin el relleno vertical del tema. El numero salia CORTADO por arriba en
+     * las filas apretadas de servicios (visto en la placa, 24-ago): la letra 20
+     * ocupa 23 px y el tema anade ~5 arriba y ~5 abajo, o sea 33 dentro de una
+     * caja de 28. Al no caber, la caja recorta -- y recorta por arriba, que es
+     * justo donde esta el numero. */
+    lv_obj_set_style_pad_ver(ta, 1, 0);
     lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, 0);
     lv_textarea_set_accepted_chars(ta, "0123456789.");
     lv_obj_set_user_data(ta, (void *)label_text);
@@ -1017,14 +1033,10 @@ static void parada_clear_extras(void)
     for (uint8_t i = 0; i < SERV_COUNT; i++) {
         lv_obj_clear_state(s_serv_chk[i], LV_STATE_CHECKED);
     }
-    for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
+    for (uint8_t i = 0; i < SERV_COUNT; i++) {
         lv_textarea_set_text(s_serv_precio_ta[i], "");
     }
-    /* Quitar el estado a mano no dispara VALUE_CHANGED, asi que
-     * valoracion_toggle_cb no se entera y hay que deshacer aqui lo que habria
-     * hecho el: nota a cero, pegas sin marcar y la casilla con su texto. */
     valoracion_reset();
-    valoracion_actualiza_texto(false);
 }
 
 /* Vacia TODOS los formularios. Lo llama show_grid(), o sea cada vez que se
@@ -1141,20 +1153,10 @@ static void ruedas_release_cb(lv_event_t *e)
 
 static const char *valoracion_elegida(void)
 {
-    return VALORACION[s_val_nota];
+    return s_val_puesta ? VALORACION[s_val_nota] : "";
 }
 
-/* Marcada, la casilla de servicios muestra la NOTA en vez de la palabra
- * "Valoracion": asi se lee de un vistazo cual has puesto. El nombre completo no
- * cabria -- "Valoracion: Recomendado" son 23 caracteres y en media rejilla
- * entran ~16. Las pegas (ruidoso, sin sombra) no caben ahi; salen en el resumen
- * de la confirmacion, antes de guardar. */
-static void valoracion_actualiza_texto(bool marcado)
-{
-    lv_checkbox_set_text(s_serv_chk[SERV_IDX_VALORACION],
-                         marcado ? valoracion_elegida()
-                                 : SERV_OPCIONES[SERV_IDX_VALORACION]);
-}
+
 
 /* La elegida va a todo color y con la marca de visto; las otras dos, apagadas.
  * Con solo el borde no se distinguia de lejos y con solo el color tampoco: dos
@@ -1162,7 +1164,7 @@ static void valoracion_actualiza_texto(bool marcado)
 static void valoracion_pinta(void)
 {
     for (uint8_t i = 0; i < VALORACION_COUNT; i++) {
-        bool sel = (i == s_val_nota);
+        bool sel = s_val_puesta && (i == s_val_nota);
         lv_obj_set_style_bg_opa(s_val_btn[i], sel ? LV_OPA_COVER : LV_OPA_40, 0);
         lv_obj_set_style_border_width(s_val_btn[i], sel ? 4 : 0, 0);
         lv_label_set_text_fmt(s_val_btn_lbl[i], "%s%s",
@@ -1173,17 +1175,23 @@ static void valoracion_pinta(void)
 static void valoracion_reset(void)
 {
     s_val_nota = 0;
+    s_val_puesta = false;
     for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
         lv_obj_clear_state(s_val_extra_chk[i], LV_STATE_CHECKED);
     }
     valoracion_pinta();
 }
 
+/* Pulsar una nota la deja puesta Y abre las pegas. Al pulsar CUALQUIERA de las
+ * tres, no solo la mala (usuario, 24-ago): un sitio bueno puede ser ruidoso o
+ * estar inclinado, y esas son justo las cosas que hay que saber antes de
+ * volver. Se sale con Volver, sin marcar nada si no hay nada que marcar. */
 static void valoracion_nota_cb(lv_event_t *e)
 {
     s_val_nota = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
+    s_val_puesta = true;
     valoracion_pinta();
-    valoracion_actualiza_texto(true);
+    show_form(CAT_VALORACION);
 }
 
 /* Marcar la casilla de servicios abre la pantalla; desmarcarla borra lo que
@@ -1192,14 +1200,6 @@ static void valoracion_nota_cb(lv_event_t *e)
  * El estado de un checkbox de LVGL cambia al SOLTAR, no al presionar, asi que
  * abrir otra pantalla desde aqui es seguro: cuando llega este aviso el dedo ya
  * se ha levantado y no queda ningun toque pendiente. */
-static void valoracion_toggle_cb(lv_event_t *e)
-{
-    bool marcado = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
-    if (!marcado) valoracion_reset();
-    valoracion_actualiza_texto(marcado);
-    if (marcado) show_form(CAT_VALORACION);
-}
-
 static lv_obj_t *make_readonly_row(lv_obj_t *parent, const char *label_text)
 {
     lv_obj_t *cont = lv_obj_create(parent);
@@ -1330,7 +1330,7 @@ static const char *const PARADA_CLAVE[PARADA_COUNT] = {
 };
 /* Solo los seis servicios; el septimo de SERV_OPCIONES es la puerta a la
  * pantalla de valoracion, no un servicio. */
-static const char *const SERV_CLAVE[SERV_IDX_VALORACION] = {
+static const char *const SERV_CLAVE[SERV_COUNT] = {
     "serv_agua", "serv_vaciado_grises", "serv_vaciado_wc",
     "serv_electricidad", "serv_duchas", "serv_basura"
 };
@@ -1338,12 +1338,12 @@ static const char *const SERV_CLAVE[SERV_IDX_VALORACION] = {
  * siempre, aunque en el resumen del viaje los importes se sumen todos juntos a
  * Alojamiento: para volver o no volver a un area, lo que importa es si lo caro
  * era el agua o la luz. */
-static const char *const SERV_PRECIO_CLAVE[SERV_IDX_VALORACION] = {
+static const char *const SERV_PRECIO_CLAVE[SERV_COUNT] = {
     "precio_agua", "precio_grises", "precio_wc",
     "precio_luz", "precio_duchas", "precio_basura"
 };
 static const char *const VAL_EXTRA_CLAVE[VAL_EXTRA_COUNT] = {
-    "ruidoso", "sin_sombra"
+    "poco_seguro", "ruidoso", "inclinada", "sin_sombra"
 };
 /* Aguas: una columna 0/1 por cosa hecha y otra al lado con su importe. En dos
  * columnas y no en una ("gratis" mezclado con numeros) para poder sumar la
@@ -1412,13 +1412,19 @@ static void serv_lista_txt(char *buf, size_t n)
     for (uint8_t i = 0; i < SERV_COUNT; i++) {
         if (!lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED)) continue;
         marcados++;
-        const char *nombre = (i == SERV_IDX_VALORACION) ? valoracion_elegida()
-                                                        : SERV_OPCIONES[i];
-        int w = snprintf(buf + used, n - used, "%s%s", used ? ", " : "", nombre);
+        int w = snprintf(buf + used, n - used, "%s%s", used ? ", " : "",
+                         SERV_OPCIONES[i]);
         if (w < 0 || (size_t)w >= n - used) return;
         used += (size_t)w;
     }
-    if (lv_obj_has_state(s_serv_chk[SERV_IDX_VALORACION], LV_STATE_CHECKED)) {
+    /* La nota y sus pegas van detras, con los servicios: es lo mismo que se
+     * repasa antes de guardar y no cabe en dos lineas separadas. */
+    if (s_val_puesta) {
+        int w = snprintf(buf + used, n - used, "%s%s", used ? ", " : "",
+                         valoracion_elegida());
+        if (w < 0 || (size_t)w >= n - used) return;
+        used += (size_t)w;
+        marcados++;
         for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
             if (!lv_obj_has_state(s_val_extra_chk[i], LV_STATE_CHECKED)) continue;
             marcados++;
@@ -1436,7 +1442,7 @@ static void serv_lista_txt(char *buf, size_t n)
 static float serv_total(void)
 {
     float t = 0;
-    for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
+    for (uint8_t i = 0; i < SERV_COUNT; i++) {
         t += atof(lv_textarea_get_text(s_serv_precio_ta[i]));
     }
     return t;
@@ -1545,8 +1551,7 @@ static void build_resumen(categoria_t cat)
                      * letra si hace falta y "Vaciado grises" se entiende sin
                      * pensar, cosa que "Grises" no. En el sitio de "Valoracion"
                      * va la nota elegida, que es el dato. */
-                    const char *nombre = (i == SERV_IDX_VALORACION)
-                                         ? valoracion_elegida() : SERV_OPCIONES[i];
+                    const char *nombre = SERV_OPCIONES[i];
                     int n = snprintf(serv + s_used, sizeof(serv) - s_used, "%s%s",
                                      s_used ? ", " : "", nombre);
                     if (n < 0 || (size_t)n >= sizeof(serv) - s_used) break;
@@ -1556,7 +1561,7 @@ static void build_resumen(categoria_t cat)
                  * viven dentro de esa pantalla y sin ella no se han podido
                  * marcar. Aqui es donde se repasan antes de guardar, porque en
                  * la casilla de servicios no caben. */
-                if (lv_obj_has_state(s_serv_chk[SERV_IDX_VALORACION], LV_STATE_CHECKED)) {
+                if (s_val_puesta) {
                     for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
                         if (!lv_obj_has_state(s_val_extra_chk[i], LV_STATE_CHECKED)) continue;
                         marcados++;
@@ -1830,11 +1835,14 @@ static void apunte_encolar(categoria_t cat)
                                  parada_cobro_actual() == PARADA_COBRO_24H ? "24h" : "noche");
             u = apunte_campo_txt(b, sizeof(b), u, "moneda", currency_of(s_parada_currency_dd));
             u = apunte_campo_txt(b, sizeof(b), u, "precio", lv_textarea_get_text(s_parada_precio_ta));
-            for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
+            for (uint8_t i = 0; i < SERV_COUNT; i++) {
                 u = apunte_campo_num(b, sizeof(b), u, SERV_CLAVE[i],
                                      lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED) ? 1 : 0);
             }
-            u = apunte_campo_txt(b, sizeof(b), u, "valoracion", VALORACION[s_val_nota]);
+            /* valoracion_elegida() y no VALORACION[s_val_nota]: sin haber
+             * tocado ningun boton NO hay nota, y guardar "Buena" por defecto
+             * seria inventarse el dato. Vacio significa "sin valorar". */
+            u = apunte_campo_txt(b, sizeof(b), u, "valoracion", valoracion_elegida());
             for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
                 u = apunte_campo_num(b, sizeof(b), u, VAL_EXTRA_CLAVE[i],
                                      lv_obj_has_state(s_val_extra_chk[i], LV_STATE_CHECKED) ? 1 : 0);
@@ -1888,13 +1896,16 @@ static void apunte_encolar(categoria_t cat)
             /* Dos columnas por servicio: si lo habia y lo que costo. Vacio no
              * es cero: cero es "lo habia y era gratis", que es la mitad de la
              * gracia de anotarlo. */
-            for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
+            for (uint8_t i = 0; i < SERV_COUNT; i++) {
                 bool hay = lv_obj_has_state(s_serv_chk[i], LV_STATE_CHECKED);
                 u = apunte_campo_num(b, sizeof(b), u, SERV_CLAVE[i], hay ? 1 : 0);
                 u = apunte_campo_txt(b, sizeof(b), u, SERV_PRECIO_CLAVE[i],
                                      hay ? lv_textarea_get_text(s_serv_precio_ta[i]) : "");
             }
-            u = apunte_campo_txt(b, sizeof(b), u, "valoracion", VALORACION[s_val_nota]);
+            /* valoracion_elegida() y no VALORACION[s_val_nota]: sin haber
+             * tocado ningun boton NO hay nota, y guardar "Buena" por defecto
+             * seria inventarse el dato. Vacio significa "sin valorar". */
+            u = apunte_campo_txt(b, sizeof(b), u, "valoracion", valoracion_elegida());
             for (uint8_t i = 0; i < VAL_EXTRA_COUNT; i++) {
                 u = apunte_campo_num(b, sizeof(b), u, VAL_EXTRA_CLAVE[i],
                                      lv_obj_has_state(s_val_extra_chk[i], LV_STATE_CHECKED) ? 1 : 0);
@@ -2835,19 +2846,47 @@ static void build_servicios(lv_obj_t *form)
     lv_obj_clear_flag(bloque, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(bloque, LV_FLEX_FLOW_COLUMN);
 
-    for (uint8_t i = 0; i < SERV_IDX_VALORACION; i++) {
+    for (uint8_t i = 0; i < SERV_COUNT; i++) {
         make_check_money_row(bloque, SERV_OPCIONES[i], &s_serv_chk[i],
                              &s_serv_precio_ta[i], SERV_ROW_H);
         lv_obj_add_event_cb(s_serv_precio_ta[i], precio_marca_cb,
                             LV_EVENT_VALUE_CHANGED, s_serv_chk[i]);
     }
 
-    /* La ultima no marca nada ni cuesta nada: abre la pantalla de valoracion.
-     * Fuera del bloque, para que se vea que no es uno mas de la lista. */
-    make_check_money_row(form, SERV_OPCIONES[SERV_IDX_VALORACION],
-                         &s_serv_chk[SERV_IDX_VALORACION], NULL, SERV_ROW_H);
-    lv_obj_add_event_cb(s_serv_chk[SERV_IDX_VALORACION], valoracion_toggle_cb,
-                        LV_EVENT_VALUE_CHANGED, NULL);
+    /* Y la ultima linea es la NOTA del sitio: tres botones de color, verde /
+     * ambar / rojo. Antes era una casilla mas de la lista que en realidad abria
+     * otra pantalla, y eso no se entendia: aqui se ve lo que hay y se elige de
+     * un toque. Pulsar cualquiera abre ademas las pegas.
+     *
+     * Fuera del bloque de los servicios, para que se vea que no es uno mas. */
+    lv_obj_t *notas = lv_obj_create(form);
+    lv_obj_set_size(notas, lv_pct(100), SERV_ROW_H);
+    lv_obj_set_style_bg_opa(notas, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(notas, 0, 0);
+    lv_obj_set_style_pad_all(notas, 0, 0);
+    lv_obj_set_style_pad_column(notas, 6, 0);
+    lv_obj_clear_flag(notas, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(notas, LV_FLEX_FLOW_ROW);
+
+    for (uint8_t i = 0; i < VALORACION_COUNT; i++) {
+        lv_obj_t *btn = lv_btn_create(notas);
+        lv_obj_set_height(btn, lv_pct(100));
+        lv_obj_set_flex_grow(btn, 1);
+        lv_obj_set_style_radius(btn, 10, 0);
+        lv_obj_set_style_bg_color(btn, lv_color_hex(VALORACION_COL[i]), 0);
+        lv_obj_set_style_border_color(btn, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_add_event_cb(btn, valoracion_nota_cb, LV_EVENT_CLICKED,
+                            (void *)(uintptr_t)i);
+
+        lv_obj_t *lbl = lv_label_create(btn);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(COL_TILE_FG), 0);
+        lv_obj_center(lbl);
+
+        s_val_btn[i]     = btn;
+        s_val_btn_lbl[i] = lbl;
+    }
+    valoracion_pinta();
 }
 
 /* Pantalla de valoracion. Tres botones de un dedo con su color -- verde,
@@ -2857,37 +2896,22 @@ static void build_servicios(lv_obj_t *form)
  * sobra (~66 cada uno) + la fila de casillas 40 + 12 de huecos. Los botones son
  * elasticos a proposito: si algun dia se anade una nota, encogen solos en vez
  * de salirse. */
+/* Ya no es la pantalla de la nota -- esa se elige de un toque en servicios --
+ * sino la de las PEGAS: lo que le pasa al sitio y no depende de la nota. Un
+ * sitio bueno puede ser ruidoso o estar inclinado, y eso es lo que uno quiere
+ * recordar antes de volver.
+ *
+ * Sale sola al pulsar cualquiera de las tres notas. Se sale con Volver, sin
+ * marcar nada si no hay nada que marcar. Solo lleva cabecera y cuatro casillas,
+ * asi que se pueden separar bien: mas hueco es menos fallo al tocar. */
 static void build_valoracion(lv_obj_t *form)
 {
-    add_header(form, "VALORACION", lv_color_hex(COL_VIAJE), CAT_SERVICIOS);
+    add_header(form, "PEGAS DEL SITIO", lv_color_hex(COL_VIAJE), CAT_SERVICIOS);
 
-    for (uint8_t i = 0; i < VALORACION_COUNT; i++) {
-        lv_obj_t *btn = lv_btn_create(form);
-        lv_obj_set_width(btn, lv_pct(100));
-        lv_obj_set_height(btn, LV_SIZE_CONTENT);
-        lv_obj_set_style_min_height(btn, 56, 0);
-        lv_obj_set_flex_grow(btn, 1);
-        lv_obj_set_style_radius(btn, 12, 0);
-        lv_obj_set_style_bg_color(btn, lv_color_hex(VALORACION_COL[i]), 0);
-        lv_obj_set_style_border_color(btn, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_add_event_cb(btn, valoracion_nota_cb, LV_EVENT_CLICKED,
-                            (void *)(uintptr_t)i);
-
-        lv_obj_t *lbl = lv_label_create(btn);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_24, 0);
-        lv_obj_set_style_text_color(lbl, lv_color_hex(COL_TILE_FG), 0);
-        lv_obj_center(lbl);
-
-        s_val_btn[i]     = btn;
-        s_val_btn_lbl[i] = lbl;
-    }
-
-    /* Las pegas van juntas en una fila, en su propia rejilla de dos: no son
-     * notas, sino cosas que pueden pasar con cualquiera de las tres. */
-    make_check_grid(form, VAL_EXTRAS, VAL_EXTRA_COUNT, s_val_extra_chk,
-                    COL_VIAJE, CHK_GAP);
-
-    valoracion_pinta();
+    lv_obj_t *grid = make_check_grid(form, VAL_EXTRAS, VAL_EXTRA_COUNT,
+                                     s_val_extra_chk, COL_VIAJE, SERV_CHK_GAP);
+    lv_obj_set_flex_align(lv_obj_get_parent(grid), LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
 }
 
 /* === Menus de la salida ===================================================
