@@ -56,6 +56,11 @@ typedef enum {
     CAT_PARADA,
     CAT_SERVICIOS,
     CAT_VALORACION,
+    /* Los dos formularios de CIERRE que faltaban del rediseno del 23-ago-2026.
+     * Van AL FINAL a proposito: el orden de este enum es el de CAT_CLAVE, y
+     * ese es el de las columnas del CSV de la P4. */
+    CAT_AGUAS,
+    CAT_ITV,
     CAT_COUNT
 } categoria_t;
 
@@ -255,6 +260,50 @@ static lv_obj_t *s_repo_litros_ta;
 static lv_obj_t *s_repo_km_ta;
 static lv_obj_t *s_repo_currency_dd;
 static lv_obj_t *s_repo_preciolitro_lbl;
+
+/* --- Aguas: que se ha hecho y lo que ha costado cada cosa ----------------
+ *
+ * Se declara de un toque al llegar -- con la manguera en la mano no se rellena
+ * un formulario -- y se pregunta al volver a dar el contacto, que es cuando ya
+ * se sabe lo que ha costado.
+ *
+ * UN PRECIO POR CADA COSA y no uno total (decision del usuario, 24-ago-2026):
+ * en muchas areas el vaciado es gratis y el agua se paga, y con un importe
+ * unico no habria manera de saber cual de las dos era. */
+typedef enum {
+    AGUA_GRISES = 0,
+    AGUA_WC,
+    AGUA_LLENADO,
+    AGUA_COUNT
+} agua_idx_t;
+
+static const char *const AGUA_OPCIONES[AGUA_COUNT] = {
+    "Vaciar grises", "Vaciar wc", "Llenar agua"
+};
+static lv_obj_t *s_agua_chk[AGUA_COUNT];
+static lv_obj_t *s_agua_precio_ta[AGUA_COUNT];
+static lv_obj_t *s_agua_currency_dd;
+
+/* --- ITV -----------------------------------------------------------------
+ *
+ * Los tres resultados son los NOMBRES OFICIALES de la inspeccion y no un
+ * "pasada / no pasada": con desfavorable se puede seguir circulando y hay que
+ * volver, con negativa el vehiculo no se puede mover. La diferencia importa
+ * demasiado para perderla al anotarla. */
+typedef enum {
+    ITV_FAVORABLE = 0,
+    ITV_DESFAVORABLE,
+    ITV_NEGATIVA,
+    ITV_RESULTADO_COUNT
+} itv_resultado_t;
+
+static const char *const ITV_RESULTADO[ITV_RESULTADO_COUNT] = {
+    "Favorable", "Desfavorable", "Negativa"
+};
+static lv_obj_t *s_itv_resultado_bm;
+static lv_obj_t *s_itv_km_ta;
+static lv_obj_t *s_itv_precio_ta;
+static lv_obj_t *s_itv_currency_dd;
 
 /* Monedas de la Europa continental que puede pisar la autocaravana.
  * Por defecto EUR (indice 0). Mismo orden en las dos listas.
@@ -693,6 +742,109 @@ static lv_obj_t *make_check_grid(lv_obj_t *parent, const char *const *options,
     return grid;
 }
 
+/* Fila COMPACTA de "casilla + importe": a la izquierda lo que se ha hecho, a
+ * la derecha lo que ha costado, en el mismo renglon.
+ *
+ * No usa make_field_row() y no es por capricho: aquella reserva 56 px de minimo
+ * y ademas crece. Con tres de estas, el selector de moneda y el boton de
+ * guardar, el formulario de aguas se pasaria de los 304 px utiles y Guardar
+ * quedaria fuera de la pantalla -- y aqui no hay scroll que valga. Con la
+ * altura clavada salen 298. */
+#define CHKMONEY_ROW_H  46
+#define CHKMONEY_TA_H   38
+#define CHKMONEY_TA_W  150
+
+static void make_check_money_row(lv_obj_t *parent, const char *label_text,
+                                  lv_obj_t **chk_out, lv_obj_t **ta_out)
+{
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_set_size(row, lv_pct(100), CHKMONEY_ROW_H);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *cb = lv_checkbox_create(row);
+    lv_checkbox_set_text(cb, label_text);
+    lv_obj_align(cb, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_text_color(cb, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_font(cb, &lv_font_montserrat_20, 0);
+    /* Casilla grande, igual que en make_check_grid(): la de serie es diminuta
+     * para un dedo en la cabina. */
+    lv_obj_set_style_width(cb, 28, LV_PART_INDICATOR);
+    lv_obj_set_style_height(cb, 28, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(cb, lv_color_hex(COL_VIAJE),
+                              LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_set_style_border_color(cb, lv_color_hex(COL_LABEL), LV_PART_INDICATOR);
+    if (chk_out) *chk_out = cb;
+
+    lv_obj_t *ta = lv_textarea_create(row);
+    lv_textarea_set_one_line(ta, true);
+    lv_textarea_set_placeholder_text(ta, "0.00");
+    lv_obj_set_size(ta, CHKMONEY_TA_W, CHKMONEY_TA_H);
+    lv_obj_align(ta, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_set_style_text_font(ta, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, 0);
+    lv_textarea_set_accepted_chars(ta, "0123456789.");
+    lv_obj_set_user_data(ta, (void *)label_text);
+    lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
+    if (ta_out) *ta_out = ta;
+}
+
+/* Moneda en UNA linea: rotulo a la izquierda y desplegable a la derecha.
+ * make_currency_row() se lleva 68 px con el rotulo encima; en aguas esos 68 px
+ * son justo los que necesitan los tres importes. */
+#define MONEDA_ROW_H  42
+#define MONEDA_DD_W  150
+
+static lv_obj_t *make_currency_inline_row(lv_obj_t *parent, const char *label_text)
+{
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_set_size(row, lv_pct(100), MONEDA_ROW_H);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *lbl = lv_label_create(row);
+    lv_label_set_text(lbl, label_text);
+    lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(COL_LABEL), 0);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, 0);
+
+    lv_obj_t *dd = lv_dropdown_create(row);
+    lv_dropdown_set_options(dd, CURRENCY_OPTIONS);
+    lv_obj_set_size(dd, MONEDA_DD_W, MONEDA_ROW_H - 2);
+    lv_obj_align(dd, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_set_style_text_font(dd, &lv_font_montserrat_20, 0);
+    return dd;
+}
+
+/* Un numero SUELTO a lo ancho, con su rotulo encima. make_dual_number_row()
+ * pide dos y la ITV solo tiene uno (los kilometros): el precio va aparte,
+ * porque lleva su moneda pegada. */
+static lv_obj_t *make_number_field(lv_obj_t *parent, const char *label_text)
+{
+    lv_obj_t *cont = make_field_row(parent);
+
+    lv_obj_t *lbl = lv_label_create(cont);
+    lv_label_set_text(lbl, label_text);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(COL_LABEL), 0);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, 0);
+
+    lv_obj_t *ta = lv_textarea_create(cont);
+    lv_textarea_set_one_line(ta, true);
+    lv_textarea_set_placeholder_text(ta, "0");
+    lv_obj_set_size(ta, lv_pct(62), FIELD_TA_H);
+    lv_obj_set_style_text_font(ta, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, 0);
+    /* Sin punto: un cuentakilometros no tiene decimales. */
+    lv_textarea_set_accepted_chars(ta, "0123456789");
+    lv_obj_set_user_data(ta, (void *)label_text);
+    lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
+    return ta;
+}
+
 /* Cual de los botones de una botonera esta marcado. lv_btnmatrix_get_selected_btn()
  * NO vale: devuelve el ultimo pulsado, no el que quedo marcado. */
 static uint16_t btnmatrix_checked(lv_obj_t *bm, uint16_t count)
@@ -848,6 +1000,17 @@ static void clear_forms(void)
      * rehacerlos aqui; si no, ruedas_toggle_cb no se entera. */
     ruedas_actualiza_texto(false);
     lv_obj_add_flag(lv_obj_get_parent(s_mant_ruedas_bm), LV_OBJ_FLAG_HIDDEN);
+
+    for (uint8_t i = 0; i < AGUA_COUNT; i++) {
+        lv_obj_clear_state(s_agua_chk[i], LV_STATE_CHECKED);
+        lv_textarea_set_text(s_agua_precio_ta[i], "");
+    }
+    lv_dropdown_set_selected(s_agua_currency_dd, 0);
+
+    btnmatrix_reset(s_itv_resultado_bm);
+    lv_textarea_set_text(s_itv_km_ta, "");
+    lv_textarea_set_text(s_itv_precio_ta, "");
+    lv_dropdown_set_selected(s_itv_currency_dd, 0);
 
     for (uint8_t i = 0; i < PARADA_COUNT; i++) {
         lv_obj_clear_state(s_parada_chk[i], LV_STATE_CHECKED);
@@ -1069,7 +1232,11 @@ static lv_obj_t *add_header(lv_obj_t *form, const char *title, lv_color_t color,
 
 static const char *CAT_NOMBRE[CAT_COUNT] = {
     "viaje", "repostaje", "peaje", "bombona", "mantenimiento",
-    "parada", "servicios", "valoracion"
+    "parada", "servicios", "valoracion",
+    /* "agua" en SINGULAR y no "aguas": la P4 nombra el fichero "<tipo>s.csv"
+     * (csv_por_tipo() en config_server_viaje.c), asi que con "aguas" saldria un
+     * "aguass.csv". Con "agua" sale "aguas.csv", que es lo que se espera. */
+    "agua", "itv"
 };
 
 /* CLAVES para el JSON y las columnas del CSV de la P4. Separadas de los rotulos
@@ -1097,6 +1264,15 @@ static const char *const SERV_CLAVE[SERV_IDX_VALORACION] = {
 static const char *const VAL_EXTRA_CLAVE[VAL_EXTRA_COUNT] = {
     "ruidoso", "sin_sombra"
 };
+/* Aguas: una columna 0/1 por cosa hecha y otra al lado con su importe. En dos
+ * columnas y no en una ("gratis" mezclado con numeros) para poder sumar la
+ * columna del precio en la hoja de calculo sin limpiarla antes. */
+static const char *const AGUA_CLAVE[AGUA_COUNT] = {
+    "vaciado_grises", "vaciado_wc", "llenado_agua"
+};
+static const char *const AGUA_PRECIO_CLAVE[AGUA_COUNT] = {
+    "precio_grises", "precio_wc", "precio_agua"
+};
 
 static uint32_t cat_color(categoria_t c)
 {
@@ -1110,6 +1286,10 @@ static uint32_t cat_color(categoria_t c)
         case CAT_PARADA:
         case CAT_SERVICIOS:
         case CAT_VALORACION:    return COL_VIAJE;
+        /* Aguas e ITV con el azul de sus casillas del menu, para que se vea que
+         * el formulario es el de la casilla que se toco. */
+        case CAT_AGUAS:
+        case CAT_ITV:           return COL_VIAJE;
         default:                return COL_MANTENIMIENTO;
     }
 }
@@ -1268,6 +1448,46 @@ static void build_resumen(categoria_t cat)
             snprintf(s_resumen, sizeof(s_resumen), "%s%s", used ? tipo : "--", extra);
             break;
         }
+        case CAT_AGUAS: {
+            /* Una linea por cosa MARCADA, y las que no se marcan no salen: en
+             * la confirmacion importa lo que se va a guardar, no la lista de lo
+             * que se podria haber hecho. Tres lineas como mucho, que es lo que
+             * admite el dialogo (ver el reparto en confirm_screen.c).
+             *
+             * Sin importe pone "gratis" y no "--": en las aguas lo normal es no
+             * pagar, asi que un hueco vacio no es un olvido. */
+            const char *moneda = currency_of(s_agua_currency_dd);
+            size_t used = 0;
+            s_resumen[0] = '\0';
+            for (uint8_t i = 0; i < AGUA_COUNT; i++) {
+                if (!lv_obj_has_state(s_agua_chk[i], LV_STATE_CHECKED)) continue;
+                const char *p = lv_textarea_get_text(s_agua_precio_ta[i]);
+                int w;
+                if (p && p[0]) {
+                    w = snprintf(s_resumen + used, sizeof(s_resumen) - used,
+                                 "%s%s:  %s %s", used ? "\n" : "",
+                                 AGUA_OPCIONES[i], p, moneda);
+                } else {
+                    w = snprintf(s_resumen + used, sizeof(s_resumen) - used,
+                                 "%s%s:  gratis", used ? "\n" : "",
+                                 AGUA_OPCIONES[i]);
+                }
+                if (w < 0 || (size_t)w >= sizeof(s_resumen) - used) break;
+                used += (size_t)w;
+            }
+            /* Nada marcado: se ve el "--" en la confirmacion y da tiempo a
+             * volver, igual que en mantenimiento. */
+            if (!used) snprintf(s_resumen, sizeof(s_resumen), "--");
+            break;
+        }
+        case CAT_ITV:
+            snprintf(s_resumen, sizeof(s_resumen),
+                     "Resultado:  %s\nKm:  %s\nPrecio:  %s %s",
+                     ITV_RESULTADO[btnmatrix_checked(s_itv_resultado_bm,
+                                                     ITV_RESULTADO_COUNT)],
+                     val_or_dash(s_itv_km_ta), val_or_dash(s_itv_precio_ta),
+                     currency_of(s_itv_currency_dd));
+            break;
         default:
             s_resumen[0] = '\0';
             break;
@@ -1450,6 +1670,31 @@ static void apunte_encolar(categoria_t cat)
             }
             break;
         }
+        case CAT_AGUAS:
+            /* Dos columnas por cosa: el 0/1 de si se hizo y su importe. Lo que
+             * no se ha hecho deja el precio VACIO, que no es lo mismo que un
+             * cero: cero es "lo hice y fue gratis". */
+            u = apunte_campo_txt(b, sizeof(b), u, "moneda",
+                                 currency_of(s_agua_currency_dd));
+            for (uint8_t i = 0; i < AGUA_COUNT; i++) {
+                bool hecho = lv_obj_has_state(s_agua_chk[i], LV_STATE_CHECKED);
+                u = apunte_campo_num(b, sizeof(b), u, AGUA_CLAVE[i], hecho ? 1 : 0);
+                u = apunte_campo_txt(b, sizeof(b), u, AGUA_PRECIO_CLAVE[i],
+                                     hecho ? lv_textarea_get_text(s_agua_precio_ta[i])
+                                           : "");
+            }
+            break;
+        case CAT_ITV:
+            u = apunte_campo_txt(b, sizeof(b), u, "resultado",
+                                 ITV_RESULTADO[btnmatrix_checked(s_itv_resultado_bm,
+                                                                 ITV_RESULTADO_COUNT)]);
+            u = apunte_campo_txt(b, sizeof(b), u, "km",
+                                 lv_textarea_get_text(s_itv_km_ta));
+            u = apunte_campo_txt(b, sizeof(b), u, "moneda",
+                                 currency_of(s_itv_currency_dd));
+            u = apunte_campo_txt(b, sizeof(b), u, "precio",
+                                 lv_textarea_get_text(s_itv_precio_ta));
+            break;
         default:
             break;
     }
@@ -2030,6 +2275,52 @@ static void build_mantenimiento(lv_obj_t *form)
     make_save_button(form, "Guardar mantenimiento", save_generic_cb, (void *)(uintptr_t)CAT_MANTENIMIENTO);
 }
 
+static void build_aguas(lv_obj_t *form)
+{
+    add_header(form, "AGUAS", lv_color_hex(COL_VIAJE), BACK_TO_GRID);
+
+    /* Una fila por cosa, con su casilla y su importe al lado. La casilla dice
+     * que se hizo y el importe lo que costo: hacen falta las dos, porque
+     * "vaciado gratis" y "no vaciado" son cosas distintas y un hueco vacio no
+     * las distingue.
+     *
+     * Sin coordenada GPS ni hora, igual que los demas formularios: las pone la
+     * P4 al recibir el apunte, que tiene el reloj bueno. */
+    for (uint8_t i = 0; i < AGUA_COUNT; i++) {
+        make_check_money_row(form, AGUA_OPCIONES[i], &s_agua_chk[i],
+                             &s_agua_precio_ta[i]);
+    }
+
+    /* Una moneda para los tres importes: es la misma parada y el mismo pais. */
+    s_agua_currency_dd = make_currency_inline_row(form, "Moneda");
+
+    make_save_button(form, "Guardar aguas", save_generic_cb,
+                     (void *)(uintptr_t)CAT_AGUAS);
+}
+
+static void build_itv(lv_obj_t *form)
+{
+    add_header(form, "ITV", lv_color_hex(COL_VIAJE), BACK_TO_GRID);
+
+    /* No lleva el segundo 'const' porque lv_btnmatrix_set_map() pide
+     * "const char *map[]" y se queda con el puntero al array. */
+    static const char *itv_map[] = { "Favorable", "Desfavorable", "Negativa", "" };
+    s_itv_resultado_bm = make_choice_row(form, "Resultado", itv_map);
+    /* Letra 20 y no la 24 que pone make_choice_row: cada boton se queda con un
+     * tercio de los 464 px (154), y "Desfavorable" con la 24 no cabe y sale
+     * cortado. */
+    lv_obj_set_style_text_font(s_itv_resultado_bm, &lv_font_montserrat_20, 0);
+
+    /* Los kilometros, como en el repostaje: si no se piden desde el primer dia,
+     * las ITV viejas no los tendran nunca y no habra manera de saber a que
+     * kilometraje toco cada una. */
+    s_itv_km_ta = make_number_field(form, "Kilometros");
+    s_itv_precio_ta = make_money_field(form, "Precio", &s_itv_currency_dd);
+
+    make_save_button(form, "Guardar ITV", save_generic_cb,
+                     (void *)(uintptr_t)CAT_ITV);
+}
+
 /* Fila de precio de la parada: importe, moneda y tipo de cobro TODOS en la
  * misma linea, y grandes -- son los tres el mismo dato ("cuanto cuesta cada
  * noche / cada 24 h") y leerlos de un vistazo importa mas que su tamano por
@@ -2604,9 +2895,10 @@ static lv_obj_t *fila(lv_obj_t *padre)
 /* === Que hace cada boton ==================================================
  *
  * Declarar es lo UNICO que se hace al llegar: se abre el evento y se vuelve al
- * menu. Los numeros (importe, litros, precio de la noche...) se piden al
- * arrancar, que es cuando ya se saben -- esas pantallas todavia no estan
- * hechas, ver el diseno.
+ * menu. Los numeros (importe, litros, lo que costo el agua...) se piden al
+ * volver a dar el contacto, que es cuando ya se saben: de eso se encarga la
+ * tabla CIERRE, mas abajo. Falta el precio y los servicios de una PERNOCTA,
+ * que siguen preguntandose solo como "prolongar o terminar".
  */
 
 static const char *const EV_NOMBRE[EV_COUNT] = {
@@ -3016,9 +3308,9 @@ static void cierre_empezar(int idx, categoria_t cat)
  * surtidor y los numeros te los pide despues, que es cuando los sabes. Los
  * demas funcionan igual, cada uno con su formulario de siempre.
  *
- * cat == CAT_COUNT significa "todavia no se sabe cerrar": aguas e ITV esperan
- * un formulario que no existe, y la parada va por su camino (prolongar o
- * terminar, sin formulario). */
+ * cat == CAT_COUNT significa que no se cierra con un formulario: la parada va
+ * por su camino (prolongar o terminarla) y el peaje no llega nunca aqui, porque
+ * se rellena en el momento y no abre evento. */
 typedef struct {
     categoria_t cat;
     const char *titulo;
@@ -3027,7 +3319,8 @@ typedef struct {
 
 static const cierre_t CIERRE[EV_COUNT] = {
     [EV_PARADA]    = { CAT_COUNT,          NULL,                 NULL },
-    [EV_AGUAS]     = { CAT_COUNT,          NULL,                 NULL },
+    [EV_AGUAS]     = { CAT_AGUAS,          "Aguas terminadas",
+                       "lo que has hecho y lo\nque te ha costado" },
     [EV_REPOSTAJE] = { CAT_REPOSTAJE,      "Finalizar repostaje",
                        "el importe, los litros\ny los kilometros" },
     [EV_PEAJE]     = { CAT_COUNT,          NULL,                 NULL },
@@ -3035,7 +3328,8 @@ static const cierre_t CIERRE[EV_COUNT] = {
                        "cuantas son y lo que\nhan costado" },
     [EV_AVERIA]    = { CAT_MANTENIMIENTO,  "Averia terminada",
                        "que se ha hecho y lo\nque ha costado" },
-    [EV_ITV]       = { CAT_COUNT,          NULL,                 NULL },
+    [EV_ITV]       = { CAT_ITV,            "ITV pasada",
+                       "el resultado, los km\ny lo que ha costado" },
 };
 
 /* idx y categoria caben de sobra en el user_data. */
@@ -3461,6 +3755,12 @@ void view_registro_create(lv_obj_t *parent)
 
     s_forms[CAT_MANTENIMIENTO] = make_form_container(parent);
     build_mantenimiento(s_forms[CAT_MANTENIMIENTO]);
+
+    s_forms[CAT_AGUAS] = make_form_container(parent);
+    build_aguas(s_forms[CAT_AGUAS]);
+
+    s_forms[CAT_ITV] = make_form_container(parent);
+    build_itv(s_forms[CAT_ITV]);
 
     s_forms[CAT_PARADA] = make_form_container(parent);
     build_parada(s_forms[CAT_PARADA]);

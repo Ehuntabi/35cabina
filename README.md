@@ -219,11 +219,33 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   FontAwesome 4.7 y Noto Sans Symbols (solo por el surtidor ⛽, U+26FD); las dos
   ya están en el equipo. La orden exacta para regenerarla está en `iconos.h`.
 
-  ⏳ **Lo que falta del rediseño**: cerrar aguas e ITV (necesitan formulario
-  nuevo); los
-  servicios y el precio de una **pernocta**; y el aviso de «estuviste parado
-  desde las 19:40». Deshacer se puede de dos maneras: en el cartel de «Anotado»
-  y en la pantalla de lo que queda sin cerrar.
+  **Aguas e ITV ya se cierran** (24-ago-2026), y con eso la tabla `CIERRE` cubre
+  todo lo que abre evento — el peaje no llega ahí nunca, porque se rellena en el
+  momento. **Aguas** son tres filas de «casilla + importe» (vaciar grises,
+  vaciar wc, llenar agua) y una moneda para las tres: marcado y sin importe
+  significa **gratis**, que en las aguas es lo normal, y por eso hace falta la
+  casilla además del precio. Un importe **por cada cosa** y no uno total porque
+  en muchas áreas el vaciado es gratis y el agua se paga. **ITV** pide
+  resultado, kilómetros y precio; los tres resultados son los nombres oficiales
+  (favorable / desfavorable / negativa) y no un «pasada / no pasada», porque con
+  desfavorable se circula y hay que volver y con negativa no.
+
+  Las dos filas nuevas van con altura CLAVADA (`make_check_money_row`,
+  `make_currency_inline_row`) y no con `make_field_row`: aquella reserva 56 px y
+  crece, y con tres importes, la moneda y el botón el formulario se salía de los
+  304 px útiles — sin scroll, o sea con Guardar fuera de la pantalla. Así son
+  298.
+
+  Sus columnas en el CSV de la P4 son `vaciado_grises`/`precio_grises` y
+  compañía, en pares 0/1 + importe, para poder sumar la columna del precio en la
+  hoja de cálculo sin limpiarla antes. Ojo con el nombre del tipo: es **`agua`**
+  en singular a propósito, porque la P4 escribe `<tipo>s.csv` y con «aguas»
+  saldría un `aguass.csv`.
+
+  ⏳ **Lo que falta del rediseño**: los servicios y el precio de una
+  **pernocta**; y el aviso de «estuviste parado desde las 19:40». Deshacer se
+  puede de dos maneras: en el cartel de «Anotado» y en la pantalla de lo que
+  queda sin cerrar.
 
   🧹 Pendiente de limpieza: el modelo VIEJO de parada (namespace `parada` de NVS)
   ya no se usa —se suelta al arrancar— y deja `parada_abrir_si_procede()` y

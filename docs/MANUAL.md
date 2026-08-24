@@ -156,7 +156,7 @@ cerrar, **cuántas cosas quedan** («2 sin cerrar»).
 | Casilla | Qué hace al tocarla |
 |---|---|
 | 🟢 **Parada** | Pregunta **por qué** paras |
-| 🔵 **Aguas** | WC, vaciado de grises, llenado de agua |
+| 🔵 **Aguas** | Un toque. Qué hiciste —wc, grises, llenar agua— y lo que costó se preguntan al arrancar |
 | 🟠 **Repostaje** | Un toque y listo |
 | 🟣 **Peaje** | **La excepción**: abre el formulario ahí mismo |
 | ⬜ **Bombona** | Un toque |
@@ -205,8 +205,9 @@ esta pantalla no tiene reloj propio. Si no está, avisa y no anota.
 ### Al volver a dar el contacto: cerrar lo que dejaste abierto
 
 Al encender se te pregunta por lo que quedó abierto, **en orden de cuándo lo
-declaraste**. Se saben cerrar la **parada**, el **repostaje**, la **bombona** y
-la **avería**. Aguas e ITV se saltan y siguen esperando su formulario.
+declaraste**. **Se cierra todo**: la parada, las **aguas**, el repostaje, la
+bombona, la avería y la **ITV**. (El peaje no aparece nunca aquí: se rellena en
+el momento y no queda abierto.)
 
 Solo se pregunta una vez por encendido, y solo cuando la P4 ya ha dicho la hora
 —sin ella no hay nada que calcular.
@@ -231,10 +232,10 @@ Solo se pregunta una vez por encendido, y solo cuando la P4 ya ha dicho la hora
 > pero **aún no te pide servicios ni precio**. El cartel lo dice antes de que
 > confirmes.
 
-#### El repostaje, la bombona y la avería
+#### Las aguas, el repostaje, la bombona, la avería y la ITV
 
-Los tres funcionan igual: un cartel con la hora a la que lo anotaste y dos
-botones, **Rellenarlo** (abre su formulario de siempre) y **Luego** (sigue
+Todos funcionan igual: un cartel con la hora a la que lo anotaste y dos
+botones, **Rellenarlo** (abre su formulario) y **Luego** (sigue
 abierto, se vuelve a preguntar).
 
 ```
@@ -252,22 +253,59 @@ vuelve a preguntar — rellenarlo con el surtidor delante no siempre se puede.
 Al guardar, el apunte va a la P4 **con el mismo número que se le reservó al
 declararlo**, así que aunque se reintente no se duplica.
 
+**El formulario de aguas** son tres líneas, una por cosa, con su casilla y su
+importe al lado:
+
+```
+        AGUAS
+        [x] Vaciar grises   [      ]
+        [x] Vaciar wc       [  2.00]
+        [ ] Llenar agua     [      ]
+              Moneda   [ EUR ]
+
+        [    Guardar aguas    ]
+```
+
+**Marcas lo que hiciste y solo pones precio a lo que pagaste.** Marcado y sin
+importe significa **gratis**, y así lo dice la confirmación — que es lo normal
+en las aguas, y por eso no sale como un dato que falta. Un precio por cada cosa
+y no uno solo: en muchas áreas el vaciado es gratis y el agua se paga, y con un
+importe único no habría manera de saber cuál era cuál.
+
+**El formulario de la ITV** pide **resultado, kilómetros y precio**:
+
+```
+        ITV
+        Resultado
+        [ Favorable ][ Desfavorable ][ Negativa ]
+
+        Kilometros  [ 148320 ]
+        Precio      [  49.50 ][ EUR ]
+
+        [     Guardar ITV     ]
+```
+
+Los tres resultados son los **nombres oficiales** de la inspección y no un
+«pasada / no pasada»: con **desfavorable** puedes seguir circulando y tienes que
+volver, con **negativa** el vehículo no se mueve de allí. La diferencia importa
+demasiado para perderla al anotarla.
+
 ### Borrar algo que anotaste antes
 
 La tira de arriba, cuando hay algo abierto, pone **«2 sin cerrar ›»**. **Tócala**
 y sale la lista de lo que tienes pendiente: qué es, a qué hora lo anotaste y los
 botones de cada uno:
 
-- **Terminar** (verde) — en todo lo que hoy se sabe cerrar: paradas,
-  repostajes, bombonas y averías. Saca la misma pregunta que al dar el contacto.
+- **Terminar** (verde) — en todos: paradas, aguas, repostajes, bombonas,
+  averías e ITV. Saca la misma pregunta que al dar el contacto.
 - **Borrar** (rojo) — en todos. Pide confirmación, y al borrar el último te
   devuelve al menú.
 
 A la lista también se llega **desde la pantalla de datos**, tocando la pastilla
 naranja de «N sin cerrar» (apartado 2).
 
-Es la red de seguridad mientras no estén las pantallas de cerrar apuntes: sin
-ella, un toque equivocado se quedaría ahí para siempre.
+Es la red de seguridad de un toque equivocado: se declara con un dedo y sin esta
+lista se quedaría ahí hasta que lo cerrases con datos inventados.
 
 ### Terminar con algo abierto
 
@@ -505,8 +543,9 @@ GASTOS (EUR)
   Peajes ........    23.10
   Gas ...........    18.00
   Mantenimiento .     0.00
+  Aguas .........     6.00
   ----------------------
-  TOTAL .........   123.50
+  TOTAL .........   129.50
 
   Precio medio del litro: 1.520 EUR
 
@@ -573,12 +612,11 @@ llama por lo que es: **`historico.tar`**.
 
 Para no llevarse sorpresas:
 
-1. **Aguas e ITV todavía no se cierran.** Parada, repostaje, bombona y avería
-   sí — los tres últimos abriendo su formulario de siempre. De aguas e ITV no te
-   pide los números: se quedan en la lista
-   («2 sin cerrar») esperando su formulario. Y de la **pernocta** se guarda el
-   sitio y las noches, pero aún no los servicios ni el precio. El **peaje** se
-   guarda entero desde el principio, porque se rellena en el momento.
+1. **De la pernocta faltan los servicios y el precio.** Se cierra y se guarda el
+   sitio y las noches, pero todavía no te los pide; el cartel lo dice antes de
+   que confirmes. Todo lo demás se cierra entero: parada, aguas, repostaje,
+   bombona, avería e ITV. El **peaje** se guarda entero desde el principio,
+   porque se rellena en el momento.
 2. **No hay kilómetros.** La P4 no tiene GPS ni cuentakilómetros todavía, así
    que el resumen no puede decir cuánto recorriste. Lo dice explícitamente en
    vez de callarlo, para que no parezca un viaje de 0 km. Cuando llegue el GPS,
