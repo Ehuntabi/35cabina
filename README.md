@@ -103,6 +103,7 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
    ├─ esp_bsp.c/h                     # pantalla QSPI + tactil + bus I2C
    ├─ lv_port.c/h, display.h          # bring-up LVGL / panel
    ├─ salida.c/h                      # la salida en curso y lo que quedo abierto (NVS)
+   ├─ brillo.c/h                      # brillo en dos niveles (30/100%), doble toque en Datos
    ├─ wifi_credentials.h.example      # plantilla; el real NO se versiona
    ├─ ui/
    │  ├─ ui_theme.c/h, ui_format.c/h  # genericos, sin Victron
@@ -430,6 +431,36 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   campo se cambiaba de pantalla y acto seguido el clic reabría el formulario
   por detrás — al volver te lo encontrabas abierto, de forma intermitente
   (solo si el dedo arrancaba encima de un widget).
+
+- **Brillo en dos niveles por doble toque** (25-ago-2026, `main/brillo.c`).
+  Hasta aquí la pantalla iba **clavada al 5 %** desde el `chore: scaffold
+  inicial`: era la línea del ejemplo del fabricante y nadie la revisó, así que
+  el satélite ha estado meses casi apagado sin que hubiera forma de subirlo.
+  Ahora alterna **30 % ↔ 100 %**, arranca al 100 % y se recuerda.
+
+  Tres decisiones que no son obvias:
+
+  - **Escucha en la PANTALLA, no en las tarjetas.** Un `lv_obj_create()` nace
+    clicable, y la rejilla y las tarjetas de Datos cubren toda la superficie:
+    se tragaban el toque antes de llegar al fondo. Se resuelve con
+    `LV_OBJ_FLAG_EVENT_BUBBLE` en rejilla y tarjetas —no hacen nada al
+    tocarlas, así que dejar subir el evento no rompe nada— y un solo
+    `LV_EVENT_CLICKED` en el objeto pantalla. Una alternativa era desactivar
+    el clic en cada widget, pero son muchos y el próximo que se añada se
+    olvidaría.
+  - **Deslizar no dispara el brillo** sin necesidad de código extra: el
+    `lv_indev_wait_release()` del gesto convierte el release en `PRESS_LOST`,
+    no en `CLICKED`.
+  - **NVS antes que el display en `main.c`.** El nivel guardado se lee de NVS,
+    así que si NVS arrancara después habría que encender la retroiluminación a
+    un valor cualquiera y corregirlo un instante más tarde — de noche eso se ve
+    como un fogonazo.
+
+  Persiste por `config_storage` (`load_brightness`/`save_brightness`, namespace
+  `display`), que **ya existían del fork anterior sin que las llamara nadie**.
+  Se valida lo leído contra los dos niveles válidos y, si no cuadra, se corrige
+  en disco: `load_brightness()` escribe un 5 por defecto la primera vez y ese 5
+  es justo el brillo que no se ve.
 
   🧹 **Los formularios viejos de Viaje y Parada se han BORRADO** (24-ago-2026,
   -563 líneas). Eran un bucle cerrado: a Parada solo se llegaba desde el botón

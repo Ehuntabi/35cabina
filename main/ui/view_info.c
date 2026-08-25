@@ -24,6 +24,7 @@
  * lucecitas.
  */
 #include "view_info.h"
+#include "brillo.h"
 #include "net/viaje_cola.h"   /* VIAJE_COLA_CAPACIDAD, para el aviso de casi llena */
 #include "nav.h"
 #include "../data_model.h"
@@ -644,6 +645,31 @@ static void refresh_cb(lv_timer_t *t)
     update_conn_dots(&d);
 }
 
+/* DOBLE TOQUE = cambiar el brillo (peticion del 25-ago-2026).
+ *
+ * Va aqui y no en la barra de Ajustes a proposito: lo que surge conduciendo se
+ * resuelve en esta pantalla, sin menus y sin apuntar. Toda la superficie vale
+ * menos la pastilla de pendientes, que tiene su propio toque y manda ella.
+ *
+ * Un deslizamiento NO cuenta como toque: nav.c llama a lv_indev_wait_release()
+ * en cuanto detecta el gesto, y entonces LVGL manda PRESS_LOST en vez de
+ * CLICKED. O sea que cambiar de pantalla no toca el brillo por sorpresa. */
+#define DOBLE_TOQUE_MS  400
+
+static uint32_t s_toque_previo;   /* 0 = no hay ningun toque a medias */
+
+static void doble_toque_cb(lv_event_t *e)
+{
+    (void)e;
+    if (s_toque_previo && lv_tick_elaps(s_toque_previo) <= DOBLE_TOQUE_MS) {
+        s_toque_previo = 0;   /* un tercer toque empieza cuenta nueva, no encadena */
+        brillo_alternar();
+    } else {
+        uint32_t t = lv_tick_get();
+        s_toque_previo = t ? t : 1;   /* el 0 esta reservado para "ninguno" */
+    }
+}
+
 /* Una tarjeta vacia con su borde de color, su punto de enlace y su titulo
  * arriba a la izquierda. El contenido lo pone cada cual. */
 static lv_obj_t *make_card(lv_obj_t *grid, lv_color_t border, const char *titulo,
@@ -661,6 +687,12 @@ static lv_obj_t *make_card(lv_obj_t *grid, lv_color_t border, const char *titulo
     lv_obj_set_style_radius(card, 10, 0);
     lv_obj_set_style_pad_all(card, 8, 0);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    /* Las tarjetas no hacen nada al tocarlas, pero SI se tragan el toque (un
+     * lv_obj_create nace clicable). Sin esto el doble toque del brillo no
+     * funcionaria en casi ningun sitio, porque las tarjetas cubren la pantalla
+     * entera. Con EVENT_BUBBLE el toque sube hasta la pantalla, que es donde
+     * escucha view_info_create(). */
+    lv_obj_add_flag(card, LV_OBJ_FLAG_EVENT_BUBBLE);
 
     if (dot_out) {
         lv_obj_t *dot = lv_obj_create(card);
@@ -722,7 +754,12 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_pad_all(grid, 4, 0);
     lv_obj_set_style_pad_gap(grid, 4, 0);
     lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(grid, LV_OBJ_FLAG_EVENT_BUBBLE);   /* ver make_card() */
     lv_obj_set_grid_dsc_array(grid, col_dsc, row_dsc);
+
+    /* El doble toque escucha en la PANTALLA, no en la rejilla: asi tambien
+     * valen los huecos que quedan fuera de ella. */
+    lv_obj_add_event_cb(parent, doble_toque_cb, LV_EVENT_CLICKED, NULL);
 
     /* --- Bateria: toda la franja de arriba -------------------------------- */
     s_bat_card = /* La de bateria manda, y su titulo tambien: 24 contra los 20 de las de

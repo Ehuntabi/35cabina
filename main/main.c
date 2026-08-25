@@ -11,6 +11,7 @@
 #include <lvgl.h>
 #include "display.h"
 #include "esp_bsp.h"
+#include "brillo.h"
 #include "lv_port.h"
 #include "data_model.h"
 #include "tilt.h"
@@ -143,6 +144,17 @@ void setup(void) {
              esp_get_minimum_free_heap_size(),
              heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
+    /* La memoria persistente se arranca ANTES que la pantalla porque el brillo
+     * guardado se lee de ahi: si se hiciera despues habria que encender la
+     * retroiluminacion a un valor cualquiera y corregirlo un instante mas
+     * tarde, que de noche se ve como un fogonazo. */
+    esp_err_t nvs_err = nvs_flash_init();
+    if (nvs_err == ESP_ERR_NVS_NO_FREE_PAGES || nvs_err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        nvs_err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(nvs_err);
+
     logSection("Display init");
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
@@ -158,19 +170,12 @@ void setup(void) {
 #endif
     };
     bsp_display_start_with_config(&cfg);
-    bsp_display_brightness_set(5);
+    brillo_init();   /* nivel guardado; la primera vez, el ALTO */
 
     if (!lvgl_port_lock(5000)) {
         ESP_LOGE(TAG, "No se pudo tomar lvgl_port_lock al iniciar UI");
         return;
     }
-
-    esp_err_t nvs_err = nvs_flash_init();
-    if (nvs_err == ESP_ERR_NVS_NO_FREE_PAGES || nvs_err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        nvs_err = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(nvs_err);
 
     /* La salida en curso y lo que quedo abierto. Va ANTES de construir la UI:
      * el menu de registros pregunta el estado nada mas crearse, y lee la marca

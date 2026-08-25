@@ -35,6 +35,8 @@ Dos cosas que conviene saber:
   medio rellenar un formulario y te vas a otra pantalla, al volver encuentras el
   menú de iconos limpio, no el formulario a medias. Es a propósito: **lo que no
   guardaste, se pierde.**
+- **Dos toques seguidos en la pantalla de Datos cambian el brillo.** Ver más
+  abajo.
 
 ---
 
@@ -57,6 +59,23 @@ Lo que manda la P4, una vez por segundo. No se toca nada aquí, solo se mira.
 
   La flecha tarda un poco en cambiar, a propósito: mira la tendencia de fondo y
   no cada oscilación del sensor, para que no esté bailando todo el rato.
+
+### Cambiar el brillo: dos toques
+
+**Dos toques seguidos en cualquier parte de la pantalla de Datos** cambian el
+brillo entre **30 %** y **100 %**. Otros dos toques y vuelve al anterior.
+
+- **Se acuerda al apagar.** Enciendes y sigue como lo dejaste.
+- **De fábrica arranca al 100 %.**
+- Los toques tienen que ir seguidos: si tardas más de medio segundo entre uno y
+  otro, no cuenta y no pasa nada.
+- **Deslizar para cambiar de pantalla no cuenta como toque**, así que no vas a
+  cambiar el brillo sin querer al moverte.
+- La única parte que no vale es la **pastilla de "sin enviar"** de abajo: ahí un
+  toque abre la lista, que es lo suyo.
+
+Está puesto aquí y no en Ajustes a propósito: lo que surge conduciendo se
+resuelve en esta pantalla, sin menús y sin tener que apuntar con el dedo.
 
 Si ves **"--"** en vez de números, es que **no está llegando nada de la P4**
 (apagada, fuera de alcance o Wi-Fi mal configurado). Ver el apartado 10.
