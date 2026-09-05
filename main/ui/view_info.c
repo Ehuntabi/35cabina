@@ -76,7 +76,8 @@ static lv_obj_t   *s_pendientes;      /* pastilla "N sin enviar", oculta si 0 */
 static void pendientes_aplicar(void *arg);
 static void pendientes_click_cb(lv_event_t *e);
 static lv_obj_t   *s_gps;             /* indicador de GPS de la P4 */
-static lv_obj_t   *s_frigo_fan;
+static lv_obj_t   *s_frigo_fan_track;
+static lv_obj_t   *s_frigo_fan_fill;
 static lv_obj_t   *s_ext_val;
 static lv_timer_t *s_refresh_timer;
 
@@ -118,7 +119,7 @@ static lv_color_t color_for_frigo(int16_t centi) {
 #define BAT_NUM_X      12
 
 /* Hueco fijo de las temperaturas, con la flecha de tendencia detras. */
-#define TEMP_NUM_W    120
+#define TEMP_NUM_W    150
 
 static lv_obj_t *s_bat_relleno;
 
@@ -592,13 +593,6 @@ static void refresh_cb(lv_timer_t *t)
     mini_data_t d;
     data_model_get(&d);
 
-    char fan_buf[16];
-    const char *frigo_secondary = "";
-    if (d.frigo_has_data) {
-        snprintf(fan_buf, sizeof(fan_buf), "vent. %u%%", d.frigo_fan_pct);
-        frigo_secondary = fan_buf;
-    }
-
     refresh_bat(&d);
     refresh_aux(&d);
     static tendencia_t t_frigo, t_ext;
@@ -640,7 +634,9 @@ static void refresh_cb(lv_timer_t *t)
                                          : 0x666666;   /* la P4 no ve el GPS */
         lv_obj_set_style_text_color(s_gps, lv_color_hex(c), 0);
     }
-    lv_label_set_text(s_frigo_fan, frigo_secondary);
+    uint8_t fan_pct = d.frigo_has_data ? d.frigo_fan_pct : 0;
+    lv_coord_t track_w = lv_obj_get_width(s_frigo_fan_track);
+    lv_obj_set_width(s_frigo_fan_fill, track_w * fan_pct / 100);
     refresh_aguas(&d);
     update_conn_dots(&d);
 }
@@ -726,7 +722,11 @@ static lv_obj_t *make_fila_dato(lv_obj_t *padre, const char *etiqueta,
     lv_label_set_text(l, etiqueta);
     lv_obj_set_style_text_color(l, COL_TEXT_ESCALA, 0);
     lv_obj_set_style_text_font(l, &lv_font_montserrat_20, 0);
-    lv_obj_align(l, LV_ALIGN_TOP_LEFT, 0, y + 3);
+    /* Centrado vertical respecto al valor: la etiqueta es mas baja (font 20)
+     * que el valor, cuyo tamano varia segun la tarjeta. */
+    lv_coord_t label_y = y + (lv_font_get_line_height(fuente_val) -
+                               lv_font_get_line_height(&lv_font_montserrat_20)) / 2;
+    lv_obj_align(l, LV_ALIGN_TOP_LEFT, 0, label_y);
 
     lv_obj_t *v = lv_label_create(padre);
     lv_label_set_text(v, "--");
@@ -743,8 +743,8 @@ void view_info_create(lv_obj_t *parent)
      * DOS columnas y DOS filas, con la bateria ocupando la fila de arriba
      * entera. La de arriba pesa mas (3 contra 2) porque ahi va el dibujo de la
      * bateria con su relleno, que es lo que se mira. */
-    static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t row_dsc[] = {LV_GRID_FR(3), LV_GRID_FR(2), LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t col_dsc[] = {LV_GRID_FR(2), LV_GRID_FR(3), LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
 
     lv_obj_t *grid = lv_obj_create(parent);
     lv_obj_set_size(grid, lv_pct(100), lv_pct(100));
@@ -847,7 +847,7 @@ void view_info_create(lv_obj_t *parent)
     /* El valor del frigo va en un hueco fijo y la flecha al borde: asi la
      * flecha no se mueve cuando el numero cambia de ancho ("-5.0" contra
      * "-18.0"), igual que con la V y la A de la bateria. */
-    s_frigo_val = make_fila_dato(temp_card, "Frigo", &lv_font_montserrat_24, 26);
+    s_frigo_val = make_fila_dato(temp_card, "Frigo", &lv_font_montserrat_32, 26);
     lv_obj_set_width(s_frigo_val, TEMP_NUM_W);
     lv_obj_set_style_text_align(s_frigo_val, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_align(s_frigo_val, LV_ALIGN_TOP_RIGHT, -26, 26);
@@ -857,7 +857,7 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_frigo_trend, &lv_font_montserrat_20, 0);
     lv_obj_align(s_frigo_trend, LV_ALIGN_TOP_RIGHT, 0, 30);
 
-    s_ext_val   = make_fila_dato(temp_card, "Exterior", &lv_font_montserrat_24, 62);
+    s_ext_val   = make_fila_dato(temp_card, "Exterior", &lv_font_montserrat_32, 62);
     lv_obj_set_width(s_ext_val, TEMP_NUM_W);
     lv_obj_set_style_text_align(s_ext_val, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_align(s_ext_val, LV_ALIGN_TOP_RIGHT, -26, 62);
@@ -867,11 +867,45 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_ext_trend, &lv_font_montserrat_20, 0);
     lv_obj_align(s_ext_trend, LV_ALIGN_TOP_RIGHT, 0, 66);
 
-    s_frigo_fan = lv_label_create(temp_card);
-    lv_label_set_text(s_frigo_fan, "");
-    lv_obj_set_style_text_color(s_frigo_fan, COL_TEXT_DIM, 0);
-    lv_obj_set_style_text_font(s_frigo_fan, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_frigo_fan, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+    /* Ventilador del frigo: etiqueta + barra de nivel, a la izquierda de la
+     * tarjeta (antes era texto "vent. NN%" a la derecha, tapado por el
+     * numero de Exterior al subir este a fuente 32). */
+    lv_obj_t *fan_lbl = lv_label_create(temp_card);
+    lv_label_set_text(fan_lbl, "Vent.");
+    lv_obj_set_style_text_color(fan_lbl, COL_TEXT, 0);
+    lv_obj_set_style_text_font(fan_lbl, &lv_font_montserrat_14, 0);
+    lv_obj_align(fan_lbl, LV_ALIGN_BOTTOM_LEFT, 0, -3);
+
+    /* La barra va justo a la derecha de la etiqueta, centrada verticalmente
+     * CON ELLA (align_to a su borde derecho) en vez de anclada al borde de la
+     * tarjeta por su cuenta: asi quedan a la misma altura pase lo que pase
+     * con el alto exacto de cada una, sin ajustar offsets a ojo. */
+    s_frigo_fan_track = lv_obj_create(temp_card);
+    lv_obj_set_size(s_frigo_fan_track, 70, 10);
+    lv_obj_set_style_bg_color(s_frigo_fan_track, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_bg_opa(s_frigo_fan_track, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_frigo_fan_track, 0, 0);
+    lv_obj_set_style_radius(s_frigo_fan_track, 3, 0);
+    lv_obj_set_style_pad_all(s_frigo_fan_track, 0, 0);
+    lv_obj_clear_flag(s_frigo_fan_track, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    /* update_layout fuerza el calculo del tamano de fan_lbl YA: align_to
+     * necesita su borde derecho resuelto, que si no sale 0 (ver commit
+     * anterior, mismo problema con el ancho leido demasiado pronto). */
+    lv_obj_update_layout(fan_lbl);
+    lv_obj_align_to(s_frigo_fan_track, fan_lbl, LV_ALIGN_OUT_RIGHT_MID, 16, 0);
+
+    /* El relleno crece desde la izquierda, igual que el de la bateria crece
+     * desde abajo: se ancla al lado fijo y solo cambia de ancho. */
+    s_frigo_fan_fill = lv_obj_create(s_frigo_fan_track);
+    lv_obj_set_height(s_frigo_fan_fill, lv_pct(100));
+    lv_obj_set_width(s_frigo_fan_fill, 0);
+    lv_obj_set_style_bg_color(s_frigo_fan_fill, COL_TEXT, 0);
+    lv_obj_set_style_bg_opa(s_frigo_fan_fill, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_frigo_fan_fill, 0, 0);
+    lv_obj_set_style_radius(s_frigo_fan_fill, 3, 0);
+    lv_obj_set_style_pad_all(s_frigo_fan_fill, 0, 0);
+    lv_obj_clear_flag(s_frigo_fan_fill, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(s_frigo_fan_fill, LV_ALIGN_LEFT_MID, 0, 0);
 
     /* Pastilla de pendientes: encima de todo y FUERA de la rejilla, para no
      * robarle sitio a ninguna tarjeta -- casi siempre no esta. Abajo al centro,
