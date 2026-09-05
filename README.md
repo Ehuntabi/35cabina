@@ -361,12 +361,25 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 
   **Mantenimiento** usa **casillas, no un desplegable**: con el mismo
   kilometraje puedes haber hecho varias cosas (el aceite Y su filtro es el
-  caso típico). Seis opciones — aceite, filtro de aceite, filtro de aire,
-  filtro de habitáculo, correa y ruedas — en dos columnas. Al marcar
-  **Ruedas** aparece un contador de cuántas (1-4), oculto el resto del
-  tiempo. Debajo, **Km y Coste comparten línea**. Aviso de espacio: con
-  Ruedas marcado el formulario queda al límite de los 320 px y puede pedir
-  un pequeño desplazamiento para llegar al botón de guardar.
+  caso típico). Seis opciones — Aceite, **Filtros**, Correa, Ruedas, Lavado
+  y **Otros** — en dos columnas.
+
+  **Filtros** no marca directamente: abre una **pantalla propia** con las
+  cuatro opciones reales (filtro de aceite, de gasoil, de aire y de
+  habitáculo, marcables varias a la vez) y un botón «Aceptar» que vuelve al
+  formulario dejando la casilla marcada con la lista de cuáles. Columna CSV
+  propia por cada filtro, además de la casilla "Filtros" en conjunto.
+
+  **Ruedas** solo admite **2 o 4** (se cambian por eje, nunca sueltas): al
+  marcarla aparece el selector, oculto el resto del tiempo.
+
+  **Otros** tampoco es un sí/no: al tocarla abre el editor de campo a
+  pantalla completa para escribir el motivo, y se marca sola en cuanto se
+  escribe algo (mismo criterio que un importe tecleado marca su casilla).
+
+  Debajo, **Km y Coste comparten línea**, con el rótulo a la izquierda de
+  cada número (no encima, como en Repostaje) para dejar sitio a las dos
+  casillas nuevas.
 
   **Toda acción pide confirmación** (`ui/confirm_screen.c`): al pulsar
   Guardar aparece una pantalla con **lo que se ha introducido** y un
