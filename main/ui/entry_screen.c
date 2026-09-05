@@ -96,8 +96,14 @@ void entry_screen_open(lv_obj_t *target, const char *label, bool numeric)
     lv_label_set_text(s_label, label ? label : "");
 
     /* Los caracteres aceptados se fijan ANTES de meter el texto: si no, un valor
-     * previo con caracteres ahora prohibidos entraria igual. */
+     * previo con caracteres ahora prohibidos entraria igual.
+     *
+     * El limite de caracteres tambien se copia del campo de destino: sin esto
+     * se podia escribir sin tope aqui (el textarea del editor es uno propio,
+     * no el 'target'), y el limite puesto en el destino -- 40 en el motivo de
+     * "Otros", por ejemplo -- no protegia nada mientras se tecleaba. */
     lv_textarea_set_accepted_chars(s_value, numeric ? "0123456789." : NULL);
+    lv_textarea_set_max_length(s_value, lv_textarea_get_max_length(target));
     lv_textarea_set_text(s_value, lv_textarea_get_text(target));
     lv_keyboard_set_mode(s_kb, numeric ? LV_KEYBOARD_MODE_NUMBER
                                        : LV_KEYBOARD_MODE_TEXT_LOWER);
