@@ -28,6 +28,7 @@
 #include "confirm_screen.h"
 #include "view_info.h"
 #include "../icons/iconos.h"
+#include "../fonts/montserrat_bold.h"
 #include "config_storage.h"
 #include "p4_api.h"
 #include "viaje_cola.h"
@@ -227,14 +228,31 @@ static const char *const VAL_EXTRAS[VAL_EXTRA_COUNT] = {
 static lv_obj_t *s_val_extra_chk[VAL_EXTRA_COUNT];
 
 /* Mantenimiento: varias casillas a la vez, no una opcion. Con el mismo
- * kilometraje puedes haber hecho el aceite Y su filtro. */
+ * kilometraje puedes haber hecho el aceite Y su filtro.
+ *
+ * Los filtros (antes tres casillas sueltas) van agrupados bajo una sola
+ * "Filtros": al marcarla se despliegan las cuatro opciones (aceite, gasoil,
+ * aire, habitaculo) en un check-grid propio, igual que "Ruedas" despliega su
+ * contador. Aqui SI se puede marcar mas de uno a la vez -- en la misma
+ * revision cambian el de aceite y el de aire juntos. */
 #define MANT_COUNT 6
-#define MANT_IDX_RUEDAS 5          /* la ultima: es la que despliega el contador */
+#define MANT_IDX_FILTROS 1
+#define MANT_IDX_RUEDAS  3
+#define MANT_IDX_OTROS   5          /* la ultima: abre pantalla para el motivo */
 static const char *const MANT_OPCIONES[MANT_COUNT] = {
-    "Aceite", "Filtro aceite", "Filtro aire", "Filtro habitaculo",
-    "Correa", "Ruedas"
+    "Aceite", "Filtros", "Correa", "Ruedas", "Lavado", "Otros"
 };
 static lv_obj_t *s_mant_chk[MANT_COUNT];
+static lv_obj_t *s_mant_otros_ta;    /* oculto, 0x0: el motivo lo teclea
+                                       * entry_screen sobre este textarea */
+
+#define MANT_FILTRO_COUNT 4
+static const char *const MANT_FILTRO_OPCIONES[MANT_FILTRO_COUNT] = {
+    "Filtro aceite", "Filtro gasoil", "Filtro aire", "Filtro habitaculo"
+};
+static lv_obj_t *s_mant_filtro_chk[MANT_FILTRO_COUNT];
+static lv_obj_t *s_filtros_screen;   /* pantalla propia, tapa el formulario */
+
 static lv_obj_t *s_mant_ruedas_bm;   /* cuantas ruedas; oculto si no se marcan */
 static lv_obj_t *s_mant_km_ta;
 static lv_obj_t *s_mant_coste_ta;
@@ -352,6 +370,7 @@ static const char *const CURRENCY_CODES[] = {
 
 /* Definidos abajo, junto a los widgets que tocan. */
 static void clear_forms(void);
+static void filtros_sincroniza(void);
 /* Definidas mas abajo, con el formulario de la pernocta y con el cierre de la
  * parada; el resumen y el apunte, que van antes en el fichero, las necesitan. */
 static uint8_t pern_cobro_actual(void);
@@ -512,7 +531,7 @@ static void ta_click_cb(lv_event_t *e)
 #define HEADER_H     48
 
 /* Ancho maximo del titulo para no pisar el boton de Volver. Ver add_header(). */
-#define HEADER_TITLE_MAX_W  200
+#define HEADER_TITLE_MAX_W  208
 
 static lv_obj_t *make_field_row(lv_obj_t *parent)
 {
@@ -551,38 +570,49 @@ static lv_obj_t *make_money_field_stacked(lv_obj_t *parent, const char *label_te
     lv_obj_t *lbl = lv_label_create(cont);
     lv_label_set_text(lbl, label_text);
     lv_obj_set_style_text_color(lbl, lv_color_hex(COL_LABEL), 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, 0);
-
-    lv_obj_t *dd = lv_dropdown_create(cont);
-    lv_dropdown_set_options(dd, CURRENCY_OPTIONS);
-    lv_obj_set_size(dd, lv_pct(100), MONEY_BIG_DD_H);
-    lv_obj_set_style_text_font(dd, &lv_font_montserrat_32, 0);
-    if (dd_out) *dd_out = dd;
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, 0);
 
     lv_obj_t *ta = lv_textarea_create(cont);
     lv_textarea_set_one_line(ta, true);
     lv_textarea_set_placeholder_text(ta, "0.00");
     lv_obj_set_size(ta, lv_pct(100), MONEY_BIG_TA_H);
-    lv_obj_set_style_text_font(ta, &lv_font_montserrat_40, 0);
+    lv_obj_set_style_pad_top(ta, 0, 0);
+    lv_obj_set_style_pad_bottom(ta, 0, 0);
+    lv_obj_set_style_text_font(ta, &lv_font_montserrat_48, 0);
     lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, 0);
     lv_textarea_set_accepted_chars(ta, "0123456789.");
     lv_obj_set_user_data(ta, (void *)label_text);
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
 
+    /* La moneda ya no reparte fila propia arriba: mas estrecha y clavada
+     * abajo a la derecha del campo. FLOATING la saca del flujo flex para
+     * poder alinearla a mano sin que empuje al resto de hijos. */
+    lv_obj_t *dd = lv_dropdown_create(cont);
+    lv_dropdown_set_options(dd, CURRENCY_OPTIONS);
+    lv_obj_set_size(dd, 90, MONEY_BIG_DD_H);
+    lv_obj_set_style_text_font(dd, &lv_font_montserrat_20, 0);
+    lv_obj_add_flag(dd, LV_OBJ_FLAG_FLOATING);
+    lv_obj_align(dd, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+    if (dd_out) *dd_out = dd;
+
     return ta;
 }
 
-/* Media fila: rotulo pequeno arriba y numero grande debajo. */
-static lv_obj_t *make_half_number(lv_obj_t *row, const char *label_text)
+/* Media fila: rotulo pequeno arriba y numero grande debajo. Con 'horizontal'
+ * (mantenimiento, para hacer sitio a las casillas nuevas) el rotulo pasa a ir
+ * a la IZQUIERDA del numero en vez de encima, en una sola linea mas baja. */
+static lv_obj_t *make_half_number(lv_obj_t *row, const char *label_text,
+                                  bool horizontal)
 {
     lv_obj_t *col = lv_obj_create(row);
-    lv_obj_set_size(col, lv_pct(48), lv_pct(100));
+    lv_obj_set_size(col, lv_pct(48), horizontal ? FIELD_TA_H : lv_pct(100));
     lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(col, 0, 0);
     lv_obj_set_style_pad_all(col, 0, 0);
     lv_obj_set_style_pad_row(col, 2, 0);
+    lv_obj_set_style_pad_column(col, 8, 0);
     lv_obj_clear_flag(col, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_flow(col, horizontal ? LV_FLEX_FLOW_ROW : LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
 
@@ -596,9 +626,14 @@ static lv_obj_t *make_half_number(lv_obj_t *row, const char *label_text)
     lv_obj_t *ta = lv_textarea_create(col);
     lv_textarea_set_one_line(ta, true);
     lv_textarea_set_placeholder_text(ta, "0.00");
-    lv_obj_set_size(ta, lv_pct(100), MONEY_BIG_TA_H);
+    lv_obj_set_size(ta, horizontal ? lv_pct(55) : lv_pct(100),
+                    horizontal ? FIELD_TA_H : MONEY_BIG_TA_H);
     lv_obj_set_style_text_font(ta, &lv_font_montserrat_32, 0);
     lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, 0);
+    /* Sin esto el 32 no queda centrado en vertical dentro de FIELD_TA_H (40):
+     * mismo caso que Bombona, ver make_money_field. */
+    lv_obj_set_style_pad_top(ta, 0, 0);
+    lv_obj_set_style_pad_bottom(ta, 0, 0);
     lv_textarea_set_accepted_chars(ta, "0123456789.");
     lv_obj_set_user_data(ta, (void *)label_text);
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
@@ -607,21 +642,28 @@ static lv_obj_t *make_half_number(lv_obj_t *row, const char *label_text)
 
 /* Dos numeros en la MISMA linea, cada uno con su rotulo. Para repostaje, que
  * pide importe y litros: puestos uno al lado del otro caben los dos grandes y
- * queda sitio para el precio/litro calculado debajo. */
+ * queda sitio para el precio/litro calculado debajo.
+ *
+ * 'horizontal' (solo mantenimiento): ademas de compartir fila entre si, cada
+ * rotulo pasa a la izquierda de su numero (en vez de encima) y la fila deja
+ * de crecer (flex_grow a 0): asi ocupa solo su alto natural, mas bajo, y le
+ * deja sitio a las casillas nuevas de Limpieza/Otros. */
 static void make_dual_number_row(lv_obj_t *parent,
                                   const char *l1, lv_obj_t **ta1_out,
-                                  const char *l2, lv_obj_t **ta2_out)
+                                  const char *l2, lv_obj_t **ta2_out,
+                                  bool horizontal)
 {
     lv_obj_t *cont = make_field_row(parent);
+    if (horizontal) lv_obj_set_flex_grow(cont, 0);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    if (ta1_out) *ta1_out = make_half_number(cont, l1);
-    if (ta2_out) *ta2_out = make_half_number(cont, l2);
+    if (ta1_out) *ta1_out = make_half_number(cont, l1, horizontal);
+    if (ta2_out) *ta2_out = make_half_number(cont, l2, horizontal);
 }
 
 static lv_obj_t *make_money_field(lv_obj_t *parent, const char *label_text,
-                                   lv_obj_t **dd_out)
+                                   lv_obj_t **dd_out, bool moneda_izda)
 {
     lv_obj_t *cont = make_field_row(parent);
 
@@ -631,9 +673,12 @@ static lv_obj_t *make_money_field(lv_obj_t *parent, const char *label_text,
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, 0);
 
     /* Sub-fila para poner numero y moneda uno al lado del otro dentro de la
-     * columna centrada de make_field_row(). */
+     * columna centrada de make_field_row(). Con la fuente 32 de Bombona,
+     * FIELD_TA_H (40) se queda justo -- el texto no cabe centrado, se pega
+     * arriba o se recorta. Un poco mas de alto solo en esa variante. */
+    lv_coord_t ta_h = moneda_izda ? (FIELD_TA_H + 10) : FIELD_TA_H;
     lv_obj_t *row = lv_obj_create(cont);
-    lv_obj_set_size(row, lv_pct(100), FIELD_TA_H);
+    lv_obj_set_size(row, lv_pct(100), ta_h);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(row, 0, 0);
     lv_obj_set_style_pad_all(row, 0, 0);
@@ -642,17 +687,25 @@ static lv_obj_t *make_money_field(lv_obj_t *parent, const char *label_text,
     lv_obj_t *ta = lv_textarea_create(row);
     lv_textarea_set_one_line(ta, true);
     lv_textarea_set_placeholder_text(ta, "0.00");
-    lv_obj_set_size(ta, lv_pct(62), FIELD_TA_H);
-    lv_obj_align(ta, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_set_style_text_font(ta, &lv_font_montserrat_24, 0);
+    lv_obj_set_size(ta, lv_pct(62), ta_h);
+    lv_obj_set_style_pad_top(ta, 0, 0);
+    lv_obj_set_style_pad_bottom(ta, 0, 0);
+    lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(ta, moneda_izda ? LV_ALIGN_RIGHT_MID : LV_ALIGN_LEFT_MID, 0, 0);
+    /* moneda_izda (Bombona, por ahora): un escalon mas grande que el resto
+     * de sitios que usan este mismo campo (Repostaje, ITV), que se quedan
+     * como estaban. */
+    lv_obj_set_style_text_font(ta, moneda_izda ? &lv_font_montserrat_32
+                                                : &lv_font_montserrat_24, 0);
     lv_textarea_set_accepted_chars(ta, "0123456789.");
     lv_obj_set_user_data(ta, (void *)label_text);
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
 
     lv_obj_t *dd = lv_dropdown_create(row);
     lv_dropdown_set_options(dd, CURRENCY_OPTIONS);
-    lv_obj_set_size(dd, lv_pct(36), FIELD_TA_H);
-    lv_obj_align(dd, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_set_size(dd, lv_pct(36), ta_h);
+    lv_obj_align(dd, moneda_izda ? LV_ALIGN_LEFT_MID : LV_ALIGN_RIGHT_MID, 0, 0);
+    if (moneda_izda) lv_obj_set_style_text_font(dd, &lv_font_montserrat_20, 0);
     if (dd_out) *dd_out = dd;
 
     return ta;
@@ -889,10 +942,10 @@ static uint16_t btnmatrix_checked(lv_obj_t *bm, uint16_t count)
     return 0;
 }
 
-/* Cuantas ruedas hay elegidas ahora mismo (1..4). */
+/* Cuantas ruedas hay elegidas ahora mismo (2 o 4, solo pares). */
 static unsigned ruedas_elegidas(void)
 {
-    return (unsigned)(btnmatrix_checked(s_mant_ruedas_bm, 4) + 1);
+    return (unsigned)((btnmatrix_checked(s_mant_ruedas_bm, 2) + 1) * 2);
 }
 
 /* La casilla de Ruedas lleva el numero elegido pegado ("Ruedas: 4"), para
@@ -963,6 +1016,7 @@ static void clear_forms(void)
 
     lv_textarea_set_text(s_mant_km_ta, "");
     lv_textarea_set_text(s_mant_coste_ta, "");
+    lv_textarea_set_text(s_mant_otros_ta, "");
     for (uint8_t i = 0; i < MANT_COUNT; i++) {
         lv_obj_clear_state(s_mant_chk[i], LV_STATE_CHECKED);
     }
@@ -972,6 +1026,12 @@ static void clear_forms(void)
      * rehacerlos aqui; si no, ruedas_toggle_cb no se entera. */
     ruedas_actualiza_texto(false);
     lv_obj_add_flag(lv_obj_get_parent(s_mant_ruedas_bm), LV_OBJ_FLAG_HIDDEN);
+
+    for (uint8_t i = 0; i < MANT_FILTRO_COUNT; i++) {
+        lv_obj_clear_state(s_mant_filtro_chk[i], LV_STATE_CHECKED);
+    }
+    filtros_sincroniza();
+    lv_obj_add_flag(s_filtros_screen, LV_OBJ_FLAG_HIDDEN);
 
     for (uint8_t i = 0; i < AGUA_COUNT; i++) {
         lv_obj_clear_state(s_agua_chk[i], LV_STATE_CHECKED);
@@ -1035,6 +1095,107 @@ static void ruedas_release_cb(lv_event_t *e)
     (void)e;
     ruedas_actualiza_texto(true);
     lv_obj_add_flag(lv_obj_get_parent(s_mant_ruedas_bm), LV_OBJ_FLAG_HIDDEN);
+}
+
+/* Filtros: a diferencia de Ruedas, aqui se puede marcar mas de uno (aceite Y
+ * aire en la misma revision), asi que en vez de un desplegable en la propia
+ * fila se abre una PANTALLA aparte (build_filtros_screen) con las cuatro
+ * opciones y un "Aceptar". Esta funcion repasa lo marcado ahi y deja la
+ * casilla "Filtros" (marca + texto con la lista) de acuerdo -- se llama al
+ * aceptar esa pantalla, no en cada toque: a medias no hay nada que mostrar. */
+static void filtros_sincroniza(void)
+{
+    lv_obj_t *cb = s_mant_chk[MANT_IDX_FILTROS];
+    char buf[80];
+    size_t used = (size_t)snprintf(buf, sizeof(buf), "%s: ",
+                                   MANT_OPCIONES[MANT_IDX_FILTROS]);
+    bool alguno = false;
+    for (uint8_t i = 0; i < MANT_FILTRO_COUNT; i++) {
+        if (!lv_obj_has_state(s_mant_filtro_chk[i], LV_STATE_CHECKED)) continue;
+        int w = snprintf(buf + used, sizeof(buf) - used, "%s%s",
+                         alguno ? ", " : "", MANT_FILTRO_OPCIONES[i]);
+        if (w < 0 || (size_t)w >= sizeof(buf) - used) break;
+        used += (size_t)w;
+        alguno = true;
+    }
+    lv_checkbox_set_text(cb, alguno ? buf : MANT_OPCIONES[MANT_IDX_FILTROS]);
+    if (alguno) lv_obj_add_state(cb, LV_STATE_CHECKED);
+    else        lv_obj_clear_state(cb, LV_STATE_CHECKED);
+}
+
+/* Tocar la casilla "Filtros" abre su pantalla (el toque tambien la marca/
+ * desmarca sola, cosa del checkbox de serie; da igual, filtros_sincroniza()
+ * deja el estado real al aceptar). */
+static void filtros_abrir_cb(lv_event_t *e)
+{
+    (void)e;
+    lv_obj_clear_flag(s_filtros_screen, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void filtros_aceptar_cb(lv_event_t *e)
+{
+    (void)e;
+    filtros_sincroniza();
+    lv_obj_add_flag(s_filtros_screen, LV_OBJ_FLAG_HIDDEN);
+}
+
+/* Pantalla de filtros: tapa TODO (lv_layer_top(), mismo patron que
+ * splash_create() en main.c) y no un hijo del formulario -- si el formulario
+ * de mantenimiento hiciera scroll, un hijo suyo se iria con el scroll y
+ * dejaria de tapar la cabecera. Sin boton de volver -- la unica salida es
+ * "Aceptar", a proposito: no hay nada que cancelar, solo casillas que se
+ * pueden dejar todas sin marcar. */
+static void build_filtros_screen(void)
+{
+    s_filtros_screen = lv_obj_create(lv_layer_top());
+    lv_obj_remove_style_all(s_filtros_screen);
+    lv_obj_set_size(s_filtros_screen, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(s_filtros_screen, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(s_filtros_screen, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_all(s_filtros_screen, 12, 0);
+    lv_obj_set_style_pad_row(s_filtros_screen, 12, 0);
+    lv_obj_clear_flag(s_filtros_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(s_filtros_screen, LV_FLEX_FLOW_COLUMN);
+    lv_obj_add_flag(s_filtros_screen, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t *t = lv_label_create(s_filtros_screen);
+    lv_label_set_text(t, "FILTROS");
+    lv_obj_set_style_text_color(t, lv_color_hex(COL_MANTENIMIENTO), 0);
+    lv_obj_set_style_text_font(t, &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_letter_space(t, 1, 0);
+
+    make_check_grid(s_filtros_screen, MANT_FILTRO_OPCIONES, MANT_FILTRO_COUNT,
+                    s_mant_filtro_chk, COL_MANTENIMIENTO, CHK_GAP);
+
+    lv_obj_t *ok = lv_btn_create(s_filtros_screen);
+    lv_obj_set_size(ok, lv_pct(100), 52);
+    lv_obj_set_style_bg_color(ok, lv_color_hex(COL_MANTENIMIENTO), 0);
+    lv_obj_set_style_radius(ok, 10, 0);
+    lv_obj_add_event_cb(ok, filtros_aceptar_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *ok_lbl = lv_label_create(ok);
+    lv_label_set_text(ok_lbl, "Aceptar");
+    lv_obj_set_style_text_font(ok_lbl, &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_color(ok_lbl, lv_color_hex(0x000000), 0);
+    lv_obj_center(ok_lbl);
+}
+
+/* "Otros": no es un si/no, lleva motivo escrito. Igual que "destino del
+ * viaje" (view_info.c mas abajo), el texto vive en un textarea invisible de
+ * tamano 0 y se edita con el editor a pantalla completa (entry_screen.c); la
+ * casilla en si no se toca al tocarla, solo abre el editor. */
+static void otros_click_cb(lv_event_t *e)
+{
+    (void)e;
+    entry_screen_open(s_mant_otros_ta, "Motivo", false);
+}
+
+/* Al aceptar el editor, si quedo algo escrito se marca "Otros" sola -- igual
+ * que precio_marca_cb con los importes: escribir el motivo YA implica que
+ * hubo "otros". Solo marca, nunca desmarca (ver precio_marca_cb). */
+static void otros_texto_marca_cb(lv_event_t *e)
+{
+    const char *t = lv_textarea_get_text(lv_event_get_target(e));
+    if (t && t[0]) lv_obj_add_state(s_mant_chk[MANT_IDX_OTROS], LV_STATE_CHECKED);
 }
 
 /* === Valoracion del sitio ================================================= */
@@ -1177,6 +1338,12 @@ static lv_obj_t *add_header(lv_obj_t *form, const char *title, lv_color_t color,
     lv_obj_set_style_text_color(t, color, 0);
     lv_obj_set_style_text_font(t, &lv_font_montserrat_22, 0);
     lv_obj_set_width(t, HEADER_TITLE_MAX_W);
+    /* LONG_DOT necesita alto FIJO de una linea ademas del ancho: con alto
+     * automatico (el por defecto) LVGL calcula el texto partido en dos
+     * lineas antes de recortar con puntos, y algun caracter suelto (la "O"
+     * final de "MANTENIMIENTO") se colaba en esa segunda linea en vez de
+     * recortarse. */
+    lv_obj_set_height(t, lv_font_get_line_height(&lv_font_montserrat_22) + 6);
     lv_label_set_long_mode(t, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(t, LV_ALIGN_CENTER, 0, 0);
@@ -1210,8 +1377,12 @@ static const char *CAT_NOMBRE[CAT_COUNT] = {
 #define CAT_CLAVE CAT_NOMBRE
 
 static const char *const MANT_CLAVE[MANT_COUNT] = {
-    "aceite", "filtro_aceite", "filtro_aire", "filtro_habitaculo",
-    "correa", "ruedas"
+    "aceite", "filtros", "correa", "ruedas", "lavado", "otros"
+};
+/* Columnas propias para el detalle de cada filtro, igual que "ruedas_n" va
+ * aparte de "ruedas": permite sumar/filtrar cada uno en la hoja de calculo. */
+static const char *const MANT_FILTRO_CLAVE[MANT_FILTRO_COUNT] = {
+    "filtro_aceite", "filtro_gasoil", "filtro_aire", "filtro_habitaculo"
 };
 /* Solo los seis servicios; el septimo de SERV_OPCIONES es la puerta a la
  * pantalla de valoracion, no un servicio. */
@@ -1351,10 +1522,10 @@ static float serv_total(void)
 
 static void build_resumen(categoria_t cat)
 {
-    /* 96: con las SEIS casillas marcadas la lista es "Aceite, Filtro aceite,
-     * Filtro aire, Filtro habitaculo, Correa, Ruedas x4" -- 72 caracteres.
-     * Si se anaden opciones, recalcular. */
-    char tipo[96];
+    /* 220: lo de arriba (96) mas ", Lavado, Otros: " y hasta 40 caracteres de
+     * motivo (el tope de s_mant_otros_ta) -- unos 155. Margen si se anaden
+     * opciones. */
+    char tipo[220];
     switch (cat) {
         case CAT_REPOSTAJE:
             snprintf(s_resumen, sizeof(s_resumen),
@@ -1383,18 +1554,40 @@ static void build_resumen(categoria_t cat)
             size_t used = 0;
             for (uint8_t i = 0; i < MANT_COUNT; i++) {
                 if (!lv_obj_has_state(s_mant_chk[i], LV_STATE_CHECKED)) continue;
-                /* Las ruedas se anotan con su cantidad: "Ruedas x2". */
+                /* Las ruedas se anotan con su cantidad: "Ruedas x2". Los
+                 * filtros, con cuales: "Filtros: Filtro aceite, Filtro aire". */
                 int w;
                 if (i == MANT_IDX_RUEDAS) {
                     w = snprintf(tipo + used, sizeof(tipo) - used, "%sRuedas x%u",
                                  used ? ", " : "",
                                  ruedas_elegidas());
+                    if (w < 0 || (size_t)w >= sizeof(tipo) - used) break;
+                    used += (size_t)w;
+                } else if (i == MANT_IDX_FILTROS) {
+                    w = snprintf(tipo + used, sizeof(tipo) - used, "%s%s: ",
+                                 used ? ", " : "", MANT_OPCIONES[MANT_IDX_FILTROS]);
+                    if (w < 0 || (size_t)w >= sizeof(tipo) - used) break;
+                    used += (size_t)w;
+                    bool alguno = false;
+                    for (uint8_t j = 0; j < MANT_FILTRO_COUNT; j++) {
+                        if (!lv_obj_has_state(s_mant_filtro_chk[j], LV_STATE_CHECKED)) continue;
+                        w = snprintf(tipo + used, sizeof(tipo) - used, "%s%s",
+                                     alguno ? ", " : "", MANT_FILTRO_OPCIONES[j]);
+                        if (w < 0 || (size_t)w >= sizeof(tipo) - used) break;
+                        used += (size_t)w;
+                        alguno = true;
+                    }
+                } else if (i == MANT_IDX_OTROS) {
+                    w = snprintf(tipo + used, sizeof(tipo) - used, "%sOtros: %s",
+                                 used ? ", " : "", val_or_dash(s_mant_otros_ta));
+                    if (w < 0 || (size_t)w >= sizeof(tipo) - used) break;
+                    used += (size_t)w;
                 } else {
                     w = snprintf(tipo + used, sizeof(tipo) - used, "%s%s",
                                  used ? ", " : "", MANT_OPCIONES[i]);
+                    if (w < 0 || (size_t)w >= sizeof(tipo) - used) break;
+                    used += (size_t)w;
                 }
-                if (w < 0 || (size_t)w >= sizeof(tipo) - used) break;
-                used += (size_t)w;
             }
             snprintf(s_resumen, sizeof(s_resumen), "%s\nKm:  %s\nCoste:  %s",
                      used ? tipo : "--", val_or_dash(s_mant_km_ta),
@@ -1588,8 +1781,16 @@ static void apunte_encolar(categoria_t cat)
             u = apunte_campo_num(b, sizeof(b), u, "ruedas_n",
                                  lv_obj_has_state(s_mant_chk[MANT_IDX_RUEDAS], LV_STATE_CHECKED)
                                  ? (long)ruedas_elegidas() : 0);
+            /* Mismo patron: columna propia por filtro, para poder sumar y
+             * filtrar cada uno por separado en la hoja de calculo. */
+            for (uint8_t i = 0; i < MANT_FILTRO_COUNT; i++) {
+                u = apunte_campo_num(b, sizeof(b), u, MANT_FILTRO_CLAVE[i],
+                                     lv_obj_has_state(s_mant_filtro_chk[i], LV_STATE_CHECKED) ? 1 : 0);
+            }
             u = apunte_campo_txt(b, sizeof(b), u, "km",    lv_textarea_get_text(s_mant_km_ta));
             u = apunte_campo_txt(b, sizeof(b), u, "coste", lv_textarea_get_text(s_mant_coste_ta));
+            u = apunte_campo_txt(b, sizeof(b), u, "otros_motivo",
+                                 lv_textarea_get_text(s_mant_otros_ta));
             break;
         case CAT_AGUAS:
             /* Dos columnas por cosa: el 0/1 de si se hizo y su importe. Lo que
@@ -1967,9 +2168,9 @@ static void build_repostaje(lv_obj_t *form)
      * Los KILOMETROS son nuevos del rediseno del 23-ago: con ellos salen solos
      * los litros a los cien y el coste por kilometro. Si no se piden desde el
      * primer dia, los repostajes viejos no los tendran nunca. */
-    s_repo_importe_ta = make_money_field(form, "Importe", &s_repo_currency_dd);
+    s_repo_importe_ta = make_money_field(form, "Importe", &s_repo_currency_dd, false);
     make_dual_number_row(form, "Litros",     &s_repo_litros_ta,
-                               "Kilometros", &s_repo_km_ta);
+                               "Kilometros", &s_repo_km_ta, false);
     lv_obj_add_event_cb(s_repo_importe_ta, repo_recalc_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s_repo_litros_ta, repo_recalc_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s_repo_km_ta, repo_recalc_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -2006,7 +2207,7 @@ static void build_bombona(lv_obj_t *form)
     s_bombona_cuantas_bm = make_choice_row(form, "Cuantas has comprado",
                                            bombona_map);
     s_bombona_precio_ta  = make_money_field(form, "Precio total",
-                                            &s_bombona_currency_dd);
+                                            &s_bombona_currency_dd, true);
 
     make_save_button(form, "Guardar bombona", save_generic_cb, (void *)(uintptr_t)CAT_BOMBONA);
 }
@@ -2021,9 +2222,31 @@ static void build_mantenimiento(lv_obj_t *form)
     make_check_grid(form, MANT_OPCIONES, MANT_COUNT, s_mant_chk, COL_MANTENIMIENTO,
                     CHK_GAP);
 
+    /* Filtros: al tocar la casilla se abre una pantalla propia con las
+     * cuatro opciones (aqui SI se puede marcar mas de una: aceite Y aire en
+     * la misma revision) y un "Aceptar" que vuelve aqui. */
+    lv_obj_add_event_cb(s_mant_chk[MANT_IDX_FILTROS], filtros_abrir_cb,
+                        LV_EVENT_CLICKED, NULL);
+    build_filtros_screen();
+
+    /* Otros: casilla con motivo escrito, no un si/no. El textarea que guarda
+     * el texto es invisible (0x0, fuera del layout): el editor a pantalla
+     * completa (entry_screen) es la unica forma de tocarlo. */
+    s_mant_otros_ta = lv_textarea_create(form);
+    lv_obj_add_flag(s_mant_otros_ta, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_mant_otros_ta, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_size(s_mant_otros_ta, 0, 0);
+    lv_textarea_set_one_line(s_mant_otros_ta, true);
+    lv_textarea_set_max_length(s_mant_otros_ta, 40);
+    lv_obj_add_event_cb(s_mant_otros_ta, otros_texto_marca_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_mant_chk[MANT_IDX_OTROS], otros_click_cb,
+                        LV_EVENT_CLICKED, NULL);
+
     /* Cuantas ruedas. Oculto salvo que se marque Ruedas: la mayoria de los
      * mantenimientos no las tocan y no tiene sentido ocupar sitio siempre. */
-    static const char *ruedas_map[] = { "1", "2", "3", "4", "" };
+    /* Solo pares: las ruedas se cambian por eje, no sueltas. */
+    static const char *ruedas_map[] = { "2", "4", "" };
     s_mant_ruedas_bm = make_choice_row(form, "Cuantas ruedas", ruedas_map);
     lv_obj_add_flag(lv_obj_get_parent(s_mant_ruedas_bm), LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(s_mant_chk[MANT_IDX_RUEDAS], ruedas_toggle_cb,
@@ -2035,7 +2258,7 @@ static void build_mantenimiento(lv_obj_t *form)
 
     /* Km y coste comparten linea: los dos son numeros cortos y asi caben los
      * dos grandes sin robarle altura a las seis casillas. */
-    make_dual_number_row(form, "Km", &s_mant_km_ta, "Coste", &s_mant_coste_ta);
+    make_dual_number_row(form, "Km", &s_mant_km_ta, "Coste", &s_mant_coste_ta, true);
 
     make_save_button(form, "Guardar mantenimiento", save_generic_cb, (void *)(uintptr_t)CAT_MANTENIMIENTO);
 }
@@ -2096,7 +2319,7 @@ static void build_itv(lv_obj_t *form)
      * las ITV viejas no los tendran nunca y no habra manera de saber a que
      * kilometraje toco cada una. */
     s_itv_km_ta = make_number_field(form, "Kilometros");
-    s_itv_precio_ta = make_money_field(form, "Precio", &s_itv_currency_dd);
+    s_itv_precio_ta = make_money_field(form, "Precio", &s_itv_currency_dd, false);
 
     make_save_button(form, "Guardar ITV", save_generic_cb,
                      (void *)(uintptr_t)CAT_ITV);
@@ -2609,7 +2832,7 @@ static lv_obj_t *boton_grande(lv_obj_t *padre, const char *icono,
     lv_obj_set_style_pad_all(b, 6, 0);
     lv_obj_set_flex_flow(b, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(b, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(b, 2, 0);
+    lv_obj_set_style_pad_row(b, 8, 0);
     if (cb) lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, ud);
 
     if (icono) {
@@ -2673,7 +2896,7 @@ static lv_obj_t *casilla(lv_obj_t *padre, const char *icono, const char *texto,
     lv_obj_set_style_pad_all(b, 4, 0);
     lv_obj_set_flex_flow(b, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(b, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(b, 2, 0);
+    lv_obj_set_style_pad_row(b, 8, 0);
     if (cb) lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, ud);
 
     if (icono) {
@@ -2681,11 +2904,19 @@ static lv_obj_t *casilla(lv_obj_t *padre, const char *icono, const char *texto,
         lv_label_set_text(ic, icono);
         lv_obj_set_style_text_color(ic, lv_color_hex(COL_TILE_FG), 0);
         lv_obj_set_style_text_font(ic, &iconos_32, 0);
+        /* Se probo lv_obj_set_style_transform_zoom para agrandarlo sin
+         * generar una fuente nueva: esta fuente de iconos no se escala bien
+         * por software con zoom (el glifo desaparece). Revertido -- para
+         * agrandarlo de verdad hace falta generar una iconos_XX mayor. */
     }
     lv_obj_t *l = lv_label_create(b);
     lv_label_set_text(l, texto);
     lv_obj_set_style_text_color(l, lv_color_hex(COL_TILE_FG), 0);
-    lv_obj_set_style_text_font(l, icono ? &lv_font_montserrat_16 : &lv_font_montserrat_22, 0);
+    /* Las casillas CON apoyo (VIAJE/PUNTUAL) son mas grandes y tenian sitio
+     * de sobra: suben un escalon respecto al resto de casillas normales. */
+    lv_obj_set_style_text_font(l, apoyo ? &lv_font_montserrat_32
+                                : icono ? &lv_font_montserrat_24
+                                        : &lv_font_montserrat_22, 0);
     lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(l, lv_pct(100));
@@ -2695,7 +2926,13 @@ static lv_obj_t *casilla(lv_obj_t *padre, const char *icono, const char *texto,
         lv_label_set_text(s, apoyo);
         lv_obj_set_style_text_color(s, lv_color_hex(COL_TILE_FG), 0);
         lv_obj_set_style_text_opa(s, LV_OPA_70, 0);
-        lv_obj_set_style_text_font(s, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(s, &lv_font_montserrat_24, 0);
+        /* Centrado (el texto trae un \n interno: sin esto la linea mas
+         * corta queda pegada a la izquierda) y un respiro respecto al
+         * titulo de arriba, sin tocar el pad_row general de la casilla
+         * (afectaria tambien al hueco icono-titulo del resto de casillas). */
+        lv_obj_set_style_text_align(s, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_pad_top(s, 8, 0);
     }
     return b;
 }
@@ -2729,7 +2966,7 @@ static lv_obj_t *casilla_sitio(lv_obj_t *padre, const char *nombre, bool de_pago
     lv_obj_t *l = lv_label_create(b);
     lv_label_set_text(l, nombre);
     lv_obj_set_style_text_color(l, lv_color_hex(COL_TILE_FG), 0);
-    lv_obj_set_style_text_font(l, &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_bold_32, 0);
 
     lv_obj_t *tag = lv_obj_create(b);
     lv_obj_remove_style_all(tag);
@@ -2748,7 +2985,7 @@ static lv_obj_t *casilla_sitio(lv_obj_t *padre, const char *nombre, bool de_pago
 
     lv_obj_t *t = lv_label_create(tag);
     lv_label_set_text(t, de_pago ? "DE PAGO" : "gratis");
-    lv_obj_set_style_text_font(t, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(t, &lv_font_montserrat_bold_20, 0);
     lv_obj_set_style_text_color(t, lv_color_hex(de_pago ? 0xFFFFFF : COL_TILE_FG), 0);
     if (!de_pago) lv_obj_set_style_text_opa(t, LV_OPA_70, 0);
     return b;
@@ -3595,7 +3832,9 @@ static void crear_menus(lv_obj_t *parent)
     body = pantalla_crear(parent, PAN_TIPO, "TIPO DE SALIDA", PAN_PRINCIPAL);
     f = fila(body);
     /* Las dos del mismo tamano: ninguna manda sobre la otra. */
-    casilla(f, ICO_VIAJE, "VIAJE", "varios dias\ncon carpeta propia",
+    /* Cadena vacia y no NULL: el tamano del titulo (32) va ligado a si hay
+     * apoyo, y se queria mantener grande al quitar el texto descriptivo. */
+    casilla(f, ICO_VIAJE, "VIAJE", "",
             COL_VIAJE, CEL2_W, lv_pct(100), viaje_iniciar_cb, NULL);
     casilla(f, ICO_PUNTUAL, "PUNTUAL", "repostar, ITV,\nbombona o taller",
             COL_BOMBONA, CEL2_W, lv_pct(100), puntual_cb, NULL);
