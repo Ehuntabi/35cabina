@@ -371,6 +371,8 @@ static const char *const CURRENCY_CODES[] = {
 /* Definidos abajo, junto a los widgets que tocan. */
 static void clear_forms(void);
 static void filtros_sincroniza(void);
+static void filtros_screen_close(void);
+static void precio_marca_cb(lv_event_t *e);
 /* Definidas mas abajo, con el formulario de la pernocta y con el cierre de la
  * parada; el resumen y el apunte, que van antes en el fichero, las necesitan. */
 static uint8_t pern_cobro_actual(void);
@@ -484,6 +486,7 @@ void view_registro_abrir_sin_cerrar(void)
     if (!s_ui_lista || salida_eventos_abiertos() == 0) return;
     entry_screen_close();
     confirm_screen_close();
+    filtros_screen_close();
     mostrar_menu(PAN_ABIERTOS);
 }
 
@@ -492,6 +495,7 @@ void view_registro_reset(void)
     if (!s_ui_lista) return;
     entry_screen_close();
     confirm_screen_close();
+    filtros_screen_close();
     show_grid();
 }
 
@@ -1097,6 +1101,25 @@ static void ruedas_release_cb(lv_event_t *e)
     lv_obj_add_flag(lv_obj_get_parent(s_mant_ruedas_bm), LV_OBJ_FLAG_HIDDEN);
 }
 
+/* Anade a 'out' (que ya tiene 'used' bytes escritos) el listado de filtros
+ * marcados separados por comas. Lo usan filtros_sincroniza() (el texto de la
+ * propia casilla) y el resumen de confirmacion mas abajo -- misma lista, dos
+ * sitios; antes se repetia el bucle en cada uno. Devuelve el nuevo 'used'
+ * (igual al de entrada si no habia ninguno marcado). */
+static size_t filtros_lista_append(char *out, size_t n, size_t used)
+{
+    bool alguno = false;
+    for (uint8_t i = 0; i < MANT_FILTRO_COUNT; i++) {
+        if (!lv_obj_has_state(s_mant_filtro_chk[i], LV_STATE_CHECKED)) continue;
+        int w = snprintf(out + used, n - used, "%s%s",
+                         alguno ? ", " : "", MANT_FILTRO_OPCIONES[i]);
+        if (w < 0 || (size_t)w >= n - used) break;
+        used += (size_t)w;
+        alguno = true;
+    }
+    return used;
+}
+
 /* Filtros: a diferencia de Ruedas, aqui se puede marcar mas de uno (aceite Y
  * aire en la misma revision), asi que en vez de un desplegable en la propia
  * fila se abre una PANTALLA aparte (build_filtros_screen) con las cuatro
@@ -1107,17 +1130,10 @@ static void filtros_sincroniza(void)
 {
     lv_obj_t *cb = s_mant_chk[MANT_IDX_FILTROS];
     char buf[80];
-    size_t used = (size_t)snprintf(buf, sizeof(buf), "%s: ",
-                                   MANT_OPCIONES[MANT_IDX_FILTROS]);
-    bool alguno = false;
-    for (uint8_t i = 0; i < MANT_FILTRO_COUNT; i++) {
-        if (!lv_obj_has_state(s_mant_filtro_chk[i], LV_STATE_CHECKED)) continue;
-        int w = snprintf(buf + used, sizeof(buf) - used, "%s%s",
-                         alguno ? ", " : "", MANT_FILTRO_OPCIONES[i]);
-        if (w < 0 || (size_t)w >= sizeof(buf) - used) break;
-        used += (size_t)w;
-        alguno = true;
-    }
+    size_t prefijo = (size_t)snprintf(buf, sizeof(buf), "%s: ",
+                                      MANT_OPCIONES[MANT_IDX_FILTROS]);
+    size_t used = filtros_lista_append(buf, sizeof(buf), prefijo);
+    bool alguno = used > prefijo;
     lv_checkbox_set_text(cb, alguno ? buf : MANT_OPCIONES[MANT_IDX_FILTROS]);
     if (alguno) lv_obj_add_state(cb, LV_STATE_CHECKED);
     else        lv_obj_clear_state(cb, LV_STATE_CHECKED);
@@ -1179,6 +1195,17 @@ static void build_filtros_screen(void)
     lv_obj_center(ok_lbl);
 }
 
+/* Cierre de seguridad, mismo motivo que entry_screen_close()/
+ * confirm_screen_close(): esta pantalla vive en lv_layer_top() (no dentro
+ * del carrusel) y su unica salida normal es "Aceptar". Si el usuario se va
+ * de Mantenimiento con ella abierta -- un gesto, o un evento externo que
+ * fuerza la navegacion, como salida_eventos_abiertos() -- se quedaria
+ * flotando encima de cualquier pantalla para siempre, tapando toda la app. */
+static void filtros_screen_close(void)
+{
+    if (s_filtros_screen) lv_obj_add_flag(s_filtros_screen, LV_OBJ_FLAG_HIDDEN);
+}
+
 /* "Otros": no es un si/no, lleva motivo escrito. Igual que "destino del
  * viaje" (view_info.c mas abajo), el texto vive en un textarea invisible de
  * tamano 0 y se edita con el editor a pantalla completa (entry_screen.c); la
@@ -1187,15 +1214,6 @@ static void otros_click_cb(lv_event_t *e)
 {
     (void)e;
     entry_screen_open(s_mant_otros_ta, "Motivo", false);
-}
-
-/* Al aceptar el editor, si quedo algo escrito se marca "Otros" sola -- igual
- * que precio_marca_cb con los importes: escribir el motivo YA implica que
- * hubo "otros". Solo marca, nunca desmarca (ver precio_marca_cb). */
-static void otros_texto_marca_cb(lv_event_t *e)
-{
-    const char *t = lv_textarea_get_text(lv_event_get_target(e));
-    if (t && t[0]) lv_obj_add_state(s_mant_chk[MANT_IDX_OTROS], LV_STATE_CHECKED);
 }
 
 /* === Valoracion del sitio ================================================= */
@@ -2238,8 +2256,8 @@ static void build_mantenimiento(lv_obj_t *form)
     lv_obj_set_size(s_mant_otros_ta, 0, 0);
     lv_textarea_set_one_line(s_mant_otros_ta, true);
     lv_textarea_set_max_length(s_mant_otros_ta, 40);
-    lv_obj_add_event_cb(s_mant_otros_ta, otros_texto_marca_cb,
-                        LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_mant_otros_ta, precio_marca_cb,
+                        LV_EVENT_VALUE_CHANGED, s_mant_chk[MANT_IDX_OTROS]);
     lv_obj_add_event_cb(s_mant_chk[MANT_IDX_OTROS], otros_click_cb,
                         LV_EVENT_CLICKED, NULL);
 
