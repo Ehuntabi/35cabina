@@ -23,6 +23,8 @@ CONFIG_ESP_TASK_WDT_PANIC=y
 
 # === LVGL: fuente 22 usada por ui_theme.c (cards) ===
 CONFIG_LV_FONT_MONTSERRAT_22=y
+# === LVGL: fuente 48 usada por el importe de Peaje ===
+CONFIG_LV_FONT_MONTSERRAT_48=y
 
 # === LVGL: usar malloc (PSRAM) en vez del pool interno de 32KB ===
 # Sin esto las asignaciones LVGL se quedan sin sitio y crashea el boot.
