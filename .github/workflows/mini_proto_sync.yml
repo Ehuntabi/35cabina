@@ -1,0 +1,32 @@
+name: mini_proto_sync
+
+# mini_proto.h se mantiene sincronizado A MANO entre este repo y victron
+# (protocolo UDP compartido, ver la cabecera del fichero). Sin esto, editar
+# solo una copia no falla hasta que los dos aparatos se rechazan los
+# paquetes en produccion, semanas despues. Detectado auditando el
+# 07-sep-2026.
+#
+# OJO: este es el UNICO workflow de este repo por ahora -- no hay build de
+# ESP-IDF en CI (a diferencia de victron, que si lo tiene).
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  mini_proto_sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 35cabina
+        uses: actions/checkout@v4
+        with:
+          path: 35cabina
+
+      - name: Checkout victron
+        uses: actions/checkout@v4
+        with:
+          repository: Ehuntabi/victron-jc1060p470c-esp32p4
+          path: victron
+
+      - name: Comparar mini_proto.h entre los dos proyectos
+        run: diff 35cabina/main/net/mini_proto.h victron/main/net/mini_proto.h
