@@ -1,6 +1,7 @@
 # Viajes con nombre y carpeta propia (Fase 4)
 
-**Fecha:** 2026-08-22 · **Estado:** diseño, pendiente de revisión del usuario
+**Fecha:** 2026-08-22 · **Estado:** implementado (verificado contra el código
+el 07-sep-2026)
 
 ## Qué se quiere
 
@@ -147,8 +148,8 @@ el motor, que es el caso normal.
 **Orden garantizado:** se envía siempre desde la cabeza. El `fin` entra en la
 cola como uno más, así que **nunca adelanta** a los registros pendientes.
 
-**Límite:** 64 entradas. Al llenarse se avisa en pantalla en vez de tirar nada en
-silencio.
+**Límite:** 16 entradas (`VIAJE_COLA_CAPACIDAD`, `viaje_cola.h`). Al llenarse se
+avisa en pantalla en vez de tirar nada en silencio.
 
 ### Aviso de pendientes en la 3.5"
 
@@ -236,7 +237,7 @@ directo de contestar con el motor en marcha: el rótulo del teclado dice
 | Iniciar viaje sin la P4 | **No se deja.** Espera unos segundos y avisa: "Enciende la P4 primero" |
 | La P4 se cae a mitad de viaje | Lo apuntado se queda en cola y sale cuando vuelva |
 | Finalizar con parada abierta | Avisa: "Tienes una parada sin cerrar en X. ¿La cierro y termino?" |
-| La P4 no aparece nunca | La cola aguanta 64 entradas y avisa al llenarse |
+| La P4 no aparece nunca | La cola aguanta 16 entradas y avisa al llenarse |
 | Reenvío duplicado | La P4 lo descarta por `id` y responde OK |
 | Mismo destino el mismo día | La P4 añade un sufijo `_2` en vez de mezclar dos viajes |
 

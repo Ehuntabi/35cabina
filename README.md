@@ -19,10 +19,10 @@ Se reutiliza:
   LVGL. Estabilidad heredada de la saga del hang cerrada 18-may-2026 (mismo
   `sdkconfig`).
 - La **arquitectura de red y datos**: recepción UDP broadcast del AP
-  de la P4 (**`ESP_DC078D`**, no `VictronConfig`: ese es sólo el valor de
-  fábrica del código de la P4, y lo que manda es lo guardado en su NVS —
-  comprobado en su log el 21-ago-2026), protocolo `mini_msg_t` (36 bytes,
-  versión 3, puerto 4242).
+  de la P4 (SSID el que tenga guardado en su NVS; de fábrica `VictronConfig`
+  — `ESP_DC078D` fue un valor transitorio causado por un bug de la pantalla
+  de Ajustes de la P4, arreglado el 21-ago-2026), protocolo `mini_msg_t`
+  (38 bytes, versión 4, puerto 4242).
 
 > **El C6 queda descartado (20-ago-2026): esta pantalla lo sustituye.**
 > `mini_proto.h` ya sólo se sincroniza con `~/joint/victron`, y el protocolo
@@ -119,8 +119,8 @@ usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
 
 ## Hoja de ruta
 
-Plan completo en `/home/db3/.claude/plans/polished-chasing-brooks.md` y en
-la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
+Diseños detallados de cada fase en `docs/superpowers/specs/` y en la memoria
+de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 
 - **Fase 0** (hecho): scaffold + bring-up de hardware + splash de arranque
   con el logo del fork anterior (2s sobre el top layer, luego se revela
@@ -152,6 +152,9 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 
   El mensaje pasó de 32 a 36 bytes; **subir la versión obliga a reflashear los
   dos aparatos**.
+
+  **Versión 4** (24-ago-2026): 36→38 bytes, añade `gps_estado` (sin datos /
+  buscando / fijado) — la P4 ya tiene GPS propio, ver más abajo.
 
   El SSID/password se guardan en **NVS**, editables sin reflashear desde la
   **tarjeta de Wi-Fi del menú de registros** → `view_ajustes.c`; pensado
@@ -351,8 +354,9 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   `.git/HEAD` y `.git/index` del `CMakeLists.txt` — sin él, se graba un binario
   nuevo con la versión de hace veinte commits (la P4 llegó a decir `v1.10.0`
   llevando once por encima). La regla que va con esto: **publicar versión antes
-  de grabar**, con `git tag -a vX.Y.Z` (este proyecto todavía no tiene el
-  `release.sh` que sí tiene la P4).
+  de grabar**, con `./release.sh X.Y` (crea el tag, reconfigura+compila y
+  verifica que la versión embebida coincide, desde 24-ago-2026 — mismo
+  patrón que en la P4).
 
   ⏳ **Lo que falta del rediseño**: nada de la lista original. Deshacer se puede
   de dos maneras: en el cartel de «Anotado» y en la pantalla de lo que queda sin
@@ -619,8 +623,10 @@ la memoria de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 
   **Iniciar y finalizar viaje YA se mandan a la P4** (22-ago-2026, probado de
   punta a punta: `{"op":"fin","id":3} -> HTTP 200` en la 3.5" y
-  `VIAJE CERRADO: /sdcard/viajes/2026-08-22_zumaia` en la P4). Los demás
-  botones todavía no envían nada — es la fase 3 del plan, por el mismo canal.
+  `VIAJE CERRADO: /sdcard/viajes/2026-08-22_zumaia` en la P4). **Los demás
+  registros (paradas, aguas, repostajes, peajes, bombonas, avería/mant.)
+  también se mandan ya**, encolados en NVS si la P4 no responde
+  (`main/net/viaje_cola.c`) y repartidos por el mismo canal.
 - **Fase 3** (hecho y validado en placa real el 21-ago-2026): **la zona
   aceptable es un ÓVALO, no un círculo**, porque un frigorífico de absorción no
   aguanta lo mismo en los dos ejes — **3° de lado a lado y 6° de morro a cola**
@@ -738,8 +744,8 @@ Reused:
   I2C bus, LVGL. Stability inherited from the "hang saga" closed on
   2026-05-18 (same `sdkconfig`).
 - The **network/data architecture**: UDP broadcast reception from the P4's
-  Soft-AP (`ESP_DC078D`), `mini_msg_t` protocol (36 bytes, version 3, port
-  4242).
+  Soft-AP (SSID from its NVS; factory default `VictronConfig`), `mini_msg_t`
+  protocol (38 bytes, version 4, port 4242).
 
 See the roadmap above (Fases 0-4) for what's implemented vs. planned.
 

@@ -1,3 +1,8 @@
+[Nota, 07-sep-2026: notas originales del usuario, punto de partida del diseño
+del 23-ago-2026 (docs/superpowers/specs/2026-08-23-pantalla-registros-salidas-design.md),
+que ya está implementado y es la referencia vigente. Este fichero es histórico,
+no describe la pantalla actual.]
+
 En el menu principal tiene que haber solo dos opciones "Nueva Salida" el boton mas grande y "Configuracion" en mucho mas pequeño
 
 Nueva salida

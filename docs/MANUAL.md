@@ -600,10 +600,6 @@ enlacen antes de anotar la parada.
 
 ## 8. Los demás formularios
 
-> De estos, ahora mismo solo se llega al de **Peaje** — es el único que se
-> rellena en el momento. Los otros son los que pedirán los números **al
-> volver a dar el contacto**, cuando se conecte esa parte.
-
 ### Repostaje
 
 Importe (con su moneda), **litros** y **kilómetros**. Abajo, calculado solo: el
@@ -629,10 +625,13 @@ Solo **Importe** y moneda. Es el más rápido de todos.
 Seis casillas, y puedes marcar **varias a la vez** (con el mismo kilometraje
 puedes haber hecho el aceite *y* su filtro):
 
-Aceite · Filtro aceite · Filtro aire · Filtro habitáculo · Correa · Ruedas
+Aceite · Filtros · Correa · Ruedas · Lavado · Otros
 
-Al marcar **Ruedas** aparece **cuántas** (1 a 4); si no, ese selector ni se ve.
-Abajo, **Km** y **Coste**.
+Al marcar **Filtros** se despliegan las cuatro opciones (aceite, gasoil, aire,
+habitáculo) para marcar las que toquen. **Otros** lleva un motivo escrito, no
+es un sí/no. Al marcar **Ruedas** aparece **cuántas** — solo **2 o 4** (se
+cambian por eje, no sueltas); si no, ese selector ni se ve. Abajo, **Km** y
+**Coste**.
 
 ### Configuración
 
@@ -795,10 +794,10 @@ Para no llevarse sorpresas:
    entero desde el principio, porque se rellena en el momento y no queda
    abierto.
 2. **Los apuntes no dicen dónde.** La P4 **ya tiene GPS** (desde el 24-ago-2026)
-   y con él pone su reloj en hora sola, pero **la posición todavía no viaja**
-   hasta esta pantalla, así que ningún apunte guarda el lugar. Tampoco hay
-   kilómetros en el resumen: no hay cuentakilómetros, y el fichero lo dice
-   explícitamente en vez de callarlo, para que no parezca un viaje de 0 km.
+   y con él pone su reloj en hora sola, y ya mide el **recorrido del viaje**
+   (ver §9, `Recorrido: ... km` en el resumen y `ruta.csv`). Lo que todavía no
+   viaja es la posición de **cada apunte suelto**: ningún repostaje, parada o
+   avería guarda el lugar donde se hizo, solo el viaje en conjunto.
 3. **Las monedas no se convierten.** Si el viaje cruza a Suiza, sumar euros con
    francos daría un total que no significa nada. El resumen **avisa** cuando ha
    habido más de una moneda y te manda a los CSV, que llevan cada uno la suya.
@@ -809,5 +808,5 @@ Para no llevarse sorpresas:
    las básicas; poner acentos sacaría cuadraditos vacíos. Decisión consciente:
    compilar fuentes nuevas era mucho lío para poco.
 
-Lo que viene, cuando llegue el GPS: la posición de cada apunte y los kilómetros
-del viaje.
+Lo que viene: la posición de cada apunte suelto (el recorrido y los kilómetros
+del viaje ya están, ver §9).

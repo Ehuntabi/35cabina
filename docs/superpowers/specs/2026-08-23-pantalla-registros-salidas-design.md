@@ -2,10 +2,8 @@
 
 **23-ago-2026. Diseño aprobado.**
 
-**Estado:** el estado en NVS (`main/salida.{c,h}`) y **las siete pantallas de
-menú** están hechos. Falta la parte de **«Qué pasa al arrancar»** —rellenar lo
-que quedó abierto, prolongar/finalizar parada y el aviso de la parada
-olvidada— y los cambios de la P4.
+**Estado:** implementado (verificado contra el código el 07-sep-2026) — NVS,
+las siete pantallas de menú, «Qué pasa al arrancar» y los cambios de la P4.
 
 Sustituye al diseño anterior del mismo día (proponía ocho casillas en el menú),
 borrado por equivocado. Parte de `docs/menus.txt`, escrito por el usuario, más
