@@ -18,6 +18,20 @@ CONFIG_BT_ENABLED=n
 
 CONFIG_ESP_TASK_WDT_PANIC=y
 
+# ── Flash: QIO, decision explicita ──────────────────────────────────────────
+# Sin fijar aqui, este proyecto dependia de que Kconfig eligiera QIO y
+# auto-detect por su cuenta (son el default de fabrica para ESP32-S3, pero
+# eso podria cambiar en una version futura de ESP-IDF sin que nadie se
+# enterase). Se fija a mano para que un sdkconfig borrado o un set-target no
+# dependan de un default ajeno.
+CONFIG_ESPTOOLPY_FLASH_MODE_AUTO_DETECT=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+# Con QIO elegido, el sdkconfig generado lleva CONFIG_ESPTOOLPY_FLASHMODE="dio"
+# (no "qio"). No es una contradiccion: es upstream, universal ESP-IDF (ver
+# Kconfig.projbuild de esptool_py, identico en victron) -- el arranque es en
+# dio (tolera cualquier chip de flash) y el bootloader pasa a QIO de verdad
+# despues. Auditado el 07-sep-2026.
+
 # === LVGL: fuente 22 usada por ui_theme.c (cards) ===
 CONFIG_LV_FONT_MONTSERRAT_22=y
 # === LVGL: fuente 48 usada por el importe de Peaje ===
