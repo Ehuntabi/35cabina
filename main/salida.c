@@ -321,7 +321,7 @@ uint32_t salida_evento_abrir(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
     e->tipo      = (uint8_t)tipo;
     e->sub       = sub;
     e->sub2      = sub2;
-    e->_pad      = 0;
+    e->contado   = 0;
     e->epoch_ini = ahora;
     e->id        = id;
 
@@ -381,6 +381,15 @@ bool salida_evento_set_inicio(int idx, uint32_t epoch_local)
     s_st.eventos[idx].epoch_ini = epoch_local;
     guardar();
     refrescar_vista();
+    return true;
+}
+
+bool salida_evento_marcar_contado(int idx)
+{
+    if (idx < 0 || idx >= (int)s_st.n_eventos) return false;
+    if (s_st.eventos[idx].contado) return true;   /* ya estaba, nada que hacer */
+    s_st.eventos[idx].contado = 1;
+    guardar();
     return true;
 }
 

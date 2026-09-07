@@ -2,8 +2,13 @@
 
 **23-ago-2026. Diseño aprobado.**
 
-**Estado:** implementado (verificado contra el código el 07-sep-2026) — NVS,
-las siete pantallas de menú, «Qué pasa al arrancar» y los cambios de la P4.
+**Estado:** implementado (verificado contra el código el 07-sep-2026, tras
+corregir dos huecos reales de «Qué pasa al arrancar» encontrados esa misma
+auditoría: solo se preguntaba por el primer evento abierto, no por cada uno
+en orden — decisión #2 —, y la oferta de «parada olvidada» —decisión #3—
+nunca llegaba a dispararse porque el temporizador que la comprueba solo se
+creaba cuando SÍ había algo que cerrar, justo lo contrario de lo que esa
+oferta necesita).
 
 Sustituye al diseño anterior del mismo día (proponía ocho casillas en el menú),
 borrado por equivocado. Parte de `docs/menus.txt`, escrito por el usuario, más

@@ -1943,8 +1943,18 @@ static bool apunte_encolar(categoria_t cat)
     u = apunte_cerrar(b, sizeof(b), u, resumen);
 
     /* Se cuenta ANTES de encolar y pase lo que pase: si el apunte se pierde,
-     * la P4 tiene que enterarse de que le falta uno. */
-    trip_eventos_inc();
+     * la P4 tiene que enterarse de que le falta uno. PERO solo una vez por
+     * evento: si se esta cerrando uno (s_cerrando >= 0) y el push de un
+     * intento anterior fallo, el evento sigue abierto para reintentar con el
+     * MISMO id -- y sin este guard, cada reintento volvia a contar el mismo
+     * evento, inflando "esperados" de mas. Los apuntes que nacen aqui (Peaje,
+     * sin evento que cerrar) no tienen este riesgo: cada intento lleva un id
+     * nuevo de verdad. Detectado auditando el 07-sep-2026. */
+    const salida_evento_t *ev_cerrando = (s_cerrando >= 0) ? salida_evento_en(s_cerrando) : NULL;
+    if (!ev_cerrando || !ev_cerrando->contado) {
+        trip_eventos_inc();
+        if (s_cerrando >= 0) salida_evento_marcar_contado(s_cerrando);
+    }
 
     if (u == 0) {
         /* No cabe. No deberia pasar nunca -- el buffer se dimensiono para el
@@ -3414,6 +3424,32 @@ static const char *const MOTIVO_CLAVE[MOTIVO_COUNT] = {
 static char s_parada_txt[192];
 static bool s_parada_ya_preguntada;   /* una sola vez por encendido */
 
+/* Eventos ya ofrecidos ESTE arranque (Rellenarlo o Luego, da igual): sin
+ * esto, con dos o mas eventos abiertos a la vez (pernocta + repostaje...) el
+ * timer de abajo solo preguntaba por el primero y se paraba -- el diseno
+ * pide preguntar por CADA UNO, en orden (docs/superpowers/specs/2026-08-23).
+ * Vive en RAM, no en NVS: es solo para no repetir la pregunta cada 2s dentro
+ * del mismo encendido, no para recordarla entre apagones. Detectado
+ * auditando el 07-sep-2026. */
+static uint32_t s_boot_preguntados[SALIDA_EVENTOS_MAX];
+static int      s_boot_n_preguntados;
+
+static bool boot_ya_preguntado(uint32_t id)
+{
+    for (int i = 0; i < s_boot_n_preguntados; i++) {
+        if (s_boot_preguntados[i] == id) return true;
+    }
+    return false;
+}
+
+static void boot_marcar_preguntado(uint32_t id)
+{
+    if (boot_ya_preguntado(id)) return;
+    if (s_boot_n_preguntados < SALIDA_EVENTOS_MAX) {
+        s_boot_preguntados[s_boot_n_preguntados++] = id;
+    }
+}
+
 /* "45 min" o "2 h 15 min". Las horas sueltas se leen mucho peor en minutos. */
 static void duracion_texto(uint32_t seg, char *buf, size_t n)
 {
@@ -3499,8 +3535,14 @@ static void parada_terminar(void *ud)
      * para el resto de categorias (ver su comentario): antes esta cuenta no
      * incluia las paradas, asi que una parada perdida no hacia bajar
      * "esperados" y podia compensar la perdida de otro apunte, dando el viaje
-     * por completo sin estarlo. */
-    trip_eventos_inc();
+     * por completo sin estarlo. Pero solo la PRIMERA vez: si el push de mas
+     * abajo falla, la parada sigue abierta para reintentar con el mismo id, y
+     * sin este guard cada reintento la volveria a contar. Detectado auditando
+     * el 07-sep-2026. */
+    if (!ev->contado) {
+        trip_eventos_inc();
+        salida_evento_marcar_contado(idx);
+    }
 
     /* u == 0 significa que el JSON no cabia y quedo cortado: NO se manda. */
     viaje_cola_error_t motivo_cola = VIAJE_COLA_ERR_NINGUNO;
@@ -3646,15 +3688,25 @@ static bool cierre_preguntar_en(int idx)
     return true;
 }
 
-/* La del arranque: el PRIMERO de la cola que se sepa cerrar. En orden de
- * apertura, que es como manda el diseno; los que no se saben cerrar todavia se
- * saltan en vez de bloquear a los de detras. */
+/* La del arranque: el PRIMERO de la cola que se sepa cerrar Y que no se haya
+ * ofrecido ya este mismo encendido. En orden de apertura, que es como manda
+ * el diseno; los que no se saben cerrar todavia se saltan en vez de bloquear
+ * a los de detras. El timer que llama a esto (parada_boot_timer_cb) sigue
+ * vivo mientras queden por preguntar, asi que esta funcion "consume" uno cada
+ * vez que consigue mostrar el dialogo -- solo se marca como preguntado si
+ * cierre_preguntar_en() de verdad lo enseño (si devuelve false, p.ej. sin
+ * hora de la P4 todavia, se reintenta el mismo en el siguiente tick). */
 static bool parada_preguntar(void)
 {
     int n = salida_eventos_abiertos();
     for (int i = 0; i < n; i++) {
         const salida_evento_t *ev = salida_evento_en(i);
-        if (ev && cierre_sabe(ev->tipo)) return cierre_preguntar_en(i);
+        if (ev && cierre_sabe(ev->tipo) && !boot_ya_preguntado(ev->id)) {
+            uint32_t id = ev->id;
+            bool mostrado = cierre_preguntar_en(i);
+            if (mostrado) boot_marcar_preguntado(id);
+            return mostrado;
+        }
     }
     return true;                          /* nada que preguntar */
 }
@@ -3671,14 +3723,16 @@ static void ab_terminar_cb(lv_event_t *e)
                          COL_ACCION_STOP, "Entendido");
 }
 
-/* Al encender: esperar a que la P4 diga la hora y preguntar UNA vez. Cada 2 s,
- * que la fecha llega a 1 Hz y no hay ninguna prisa. */
+/* Al encender: esperar a que la P4 diga la hora y preguntar por CADA evento
+ * abierto que se sepa cerrar, en orden -- no solo el primero (ver el
+ * comentario de s_boot_preguntados). Cada 2 s, que la fecha llega a 1 Hz y no
+ * hay ninguna prisa. */
 static bool hay_algo_que_cerrar(void)
 {
     int n = salida_eventos_abiertos();
     for (int i = 0; i < n; i++) {
         const salida_evento_t *ev = salida_evento_en(i);
-        if (ev && cierre_sabe(ev->tipo)) return true;
+        if (ev && cierre_sabe(ev->tipo) && !boot_ya_preguntado(ev->id)) return true;
     }
     return false;
 }
@@ -3728,10 +3782,14 @@ static void parada_boot_timer_cb(lv_timer_t *t)
 
     if (s_parada_ya_preguntada) { lv_timer_del(t); return; }
 
-    /* Primero lo que quedo abierto; el hueco solo se mira si no habia nada, que
-     * es ademas la condicion que pone salida_olvido_pendiente(). */
+    /* Primero lo que quedo abierto, uno por tick hasta agotarlos (ver
+     * s_boot_preguntados): el timer SIGUE vivo tras preguntar por uno, no se
+     * borra hasta que hay_algo_que_cerrar() diga que ya no queda ninguno sin
+     * ofrecer. El hueco de "parada olvidada" solo se mira si no quedaba nada
+     * que cerrar, que es ademas la condicion que pone
+     * salida_olvido_pendiente(). */
     if (hay_algo_que_cerrar()) {
-        if (parada_preguntar()) { s_parada_ya_preguntada = true; lv_timer_del(t); }
+        parada_preguntar();
         return;
     }
 
@@ -4139,13 +4197,17 @@ void view_registro_create(lv_obj_t *parent)
         clear_parada_abierta();
     }
 
-    /* Si quedo una parada abierta de VERDAD (un evento de la salida), vigilar
-     * en segundo plano hasta que la P4 diga la hora y preguntar entonces. El
-     * dialogo se muda solo a la pantalla que este activa (ver
-     * confirm_screen.c). Cada 2 s: la fecha llega a 1 Hz y no hay prisa. */
-    if (hay_algo_que_cerrar()) {
-        lv_timer_create(parada_boot_timer_cb, 2000, NULL);
-    }
+    /* Vigilar en segundo plano hasta que la P4 diga la hora y preguntar
+     * entonces -- por si quedo una parada abierta de VERDAD (un evento de la
+     * salida), O por si no quedo nada abierto pero hay un hueco sin explicar
+     * (parada olvidada, ver salida_olvido_pendiente). parada_boot_timer_cb ya
+     * distingue los dos casos por dentro; el timer se crea SIEMPRE, no solo
+     * si hay_algo_que_cerrar(): antes esa condicion tapaba justo el caso que
+     * la parada olvidada necesita (nada abierto), asi que esa oferta nunca
+     * llegaba a dispararse. Detectado auditando el 07-sep-2026. El dialogo se
+     * muda solo a la pantalla que este activa (ver confirm_screen.c). Cada
+     * 2 s: la fecha llega a 1 Hz y no hay prisa. */
+    lv_timer_create(parada_boot_timer_cb, 2000, NULL);
 
     /* --- Editor de campo --- */
     /* Editor de campo a pantalla completa. Se crea el ULTIMO a proposito: asi

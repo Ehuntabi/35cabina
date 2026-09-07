@@ -77,7 +77,14 @@ typedef struct {
     uint8_t  tipo;        /* evento_tipo_t */
     uint8_t  sub;         /* parada_motivo_t, o 0 */
     uint8_t  sub2;        /* pernocta_sitio_t, o 0 */
-    uint8_t  _pad;
+    /* 1 = ya se llamo trip_eventos_inc() para este evento. El id se reserva al
+     * ABRIR justo para que un reintento (push a la cola fallado) lleve el
+     * mismo numero y la P4 pueda deduplicar -- pero "contar lo generado" solo
+     * debe pasar UNA VEZ por evento, no en cada reintento del mismo cierre.
+     * Sin esto, un fallo de encolado + reintento contaba el mismo evento dos
+     * veces y la P4 veia "eventos" de mas (INCOMPLETO falso). Detectado
+     * auditando el 07-sep-2026. */
+    uint8_t  contado;
     uint32_t epoch_ini;   /* hora local de la P4 al declararlo */
     uint32_t id;          /* reservado al ABRIR: id estable aunque se reintente */
 } salida_evento_t;
@@ -163,6 +170,11 @@ const salida_evento_t *salida_evento_en(int idx);
  * elige el motivo puede haberse declarado otra cosa, y entonces la nuestra ya
  * no es la primera de la cola. false si el indice no existe. */
 bool salida_evento_set_inicio(int idx, uint32_t epoch_local);
+
+/* Marca un evento como ya contado en trip_eventos_inc() (ver el comentario del
+ * campo 'contado' arriba). Idempotente: llamarla varias veces no vuelve a
+ * incrementar nada por si sola, solo deja la marca puesta. */
+bool salida_evento_marcar_contado(int idx);
 
 /* --- La marca de vida y el olvido ---------------------------------------- */
 
