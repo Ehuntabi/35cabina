@@ -214,36 +214,62 @@ static void rx_task(void *arg)
     xEventGroupWaitBits(s_wifi_events, WIFI_BIT_GOT_IP,
                         pdFALSE, pdTRUE, portMAX_DELAY);
 
-    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sock < 0) {
-        ESP_LOGE(TAG, "socket() errno=%d", errno);
-        vTaskDelete(NULL);
-        return;
-    }
-
+    /* Crear (o recrear) el socket con reintento. Antes un fallo aqui hacia
+     * vTaskDelete -> la tarea moria para siempre y la 3.5" se quedaba muda
+     * hasta reboot, mientras que udp_tx.c (el emisor, en la P4) ya tenia este
+     * mismo fallo arreglado con reintento cada 5s. Detectado auditando el
+     * 07-sep-2026. */
     struct sockaddr_in bind_addr = {0};
     bind_addr.sin_family      = AF_INET;
     bind_addr.sin_port        = htons(MINI_PROTO_UDP_PORT);
     bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (bind(sock, (struct sockaddr *)&bind_addr, sizeof(bind_addr)) < 0) {
-        ESP_LOGE(TAG, "bind(:%d) errno=%d", MINI_PROTO_UDP_PORT, errno);
-        close(sock);
-        vTaskDelete(NULL);
-        return;
+
+    int sock = -1;
+    while (sock < 0) {
+        sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (sock < 0) {
+            ESP_LOGE(TAG, "socket() fallo: errno=%d (reintento en 5s)", errno);
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            continue;
+        }
+        if (bind(sock, (struct sockaddr *)&bind_addr, sizeof(bind_addr)) < 0) {
+            ESP_LOGE(TAG, "bind(:%d) fallo: errno=%d (reintento en 5s)",
+                     MINI_PROTO_UDP_PORT, errno);
+            close(sock);
+            sock = -1;
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            continue;
+        }
     }
     ESP_LOGI(TAG, "Escuchando UDP :%d (sizeof(mini_msg_t)=%u)",
              MINI_PROTO_UDP_PORT, (unsigned)sizeof(mini_msg_t));
 
     uint8_t buf[256];
     struct sockaddr_in src;
-    socklen_t slen = sizeof(src);
+    /* IP fija del AP de la P4 (igual que P4_URL en p4_api.c): es el gateway
+     * por defecto de cualquier SoftAP de ESP-IDF, y esta pantalla es una
+     * STA asociada a el, no otra cosa. Cualquier otro emisor en la misma
+     * red (un vecino, un dispositivo ajeno) que mandara algo con el formato
+     * correcto se aceptaba igual -- sin autenticacion, es la unica valla.
+     * Detectado auditando el 07-sep-2026. */
+    const in_addr_t p4_addr = inet_addr("192.168.4.1");
 
     for (;;) {
+        /* recvfrom() SOBREESCRIBE slen con el tamano real de src; sin
+         * resetearlo antes de cada llamada, una iteracion que lo dejara mas
+         * corto de lo normal se arrastraria a las siguientes. */
+        socklen_t slen = sizeof(src);
         int n = recvfrom(sock, buf, sizeof(buf), 0,
                          (struct sockaddr *)&src, &slen);
         if (n < 0) {
             ESP_LOGW(TAG, "recvfrom errno=%d", errno);
             vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+        if (src.sin_addr.s_addr != p4_addr) {
+            ESP_LOGW(TAG, "drop: origen %s no es la P4",
+                     inet_ntoa(src.sin_addr));
+            s_msgs_bad++;
             continue;
         }
         if (n != (int)sizeof(mini_msg_t)) {

@@ -585,6 +585,11 @@ static lv_obj_t *make_money_field_stacked(lv_obj_t *parent, const char *label_te
     lv_obj_set_style_text_font(ta, &lv_font_montserrat_48, 0);
     lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, 0);
     lv_textarea_set_accepted_chars(ta, "0123456789.");
+    /* Sin esto no habia tope: un importe/precio de 30+ digitos (tecleado o
+     * pegado) desbordaba el snprintf encadenado de repo_recalc_cb (buf[40]) --
+     * ver el comentario alli. 10 cifras cubre cualquier importe real de sobra.
+     * Detectado auditando el 07-sep-2026. */
+    lv_textarea_set_max_length(ta, 10);
     lv_obj_set_user_data(ta, (void *)label_text);
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
 
@@ -639,6 +644,11 @@ static lv_obj_t *make_half_number(lv_obj_t *row, const char *label_text,
     lv_obj_set_style_pad_top(ta, 0, 0);
     lv_obj_set_style_pad_bottom(ta, 0, 0);
     lv_textarea_set_accepted_chars(ta, "0123456789.");
+    /* Sin esto no habia tope: un importe/precio de 30+ digitos (tecleado o
+     * pegado) desbordaba el snprintf encadenado de repo_recalc_cb (buf[40]) --
+     * ver el comentario alli. 10 cifras cubre cualquier importe real de sobra.
+     * Detectado auditando el 07-sep-2026. */
+    lv_textarea_set_max_length(ta, 10);
     lv_obj_set_user_data(ta, (void *)label_text);
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
     return ta;
@@ -702,6 +712,11 @@ static lv_obj_t *make_money_field(lv_obj_t *parent, const char *label_text,
     lv_obj_set_style_text_font(ta, moneda_izda ? &lv_font_montserrat_32
                                                 : &lv_font_montserrat_24, 0);
     lv_textarea_set_accepted_chars(ta, "0123456789.");
+    /* Sin esto no habia tope: un importe/precio de 30+ digitos (tecleado o
+     * pegado) desbordaba el snprintf encadenado de repo_recalc_cb (buf[40]) --
+     * ver el comentario alli. 10 cifras cubre cualquier importe real de sobra.
+     * Detectado auditando el 07-sep-2026. */
+    lv_textarea_set_max_length(ta, 10);
     lv_obj_set_user_data(ta, (void *)label_text);
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
 
@@ -877,6 +892,11 @@ static void make_check_money_row(lv_obj_t *parent, const char *label_text,
     lv_obj_set_style_pad_ver(ta, 1, 0);
     lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, 0);
     lv_textarea_set_accepted_chars(ta, "0123456789.");
+    /* Sin esto no habia tope: un importe/precio de 30+ digitos (tecleado o
+     * pegado) desbordaba el snprintf encadenado de repo_recalc_cb (buf[40]) --
+     * ver el comentario alli. 10 cifras cubre cualquier importe real de sobra.
+     * Detectado auditando el 07-sep-2026. */
+    lv_textarea_set_max_length(ta, 10);
     lv_obj_set_user_data(ta, (void *)label_text);
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
     *ta_out = ta;
@@ -931,6 +951,10 @@ static lv_obj_t *make_number_field(lv_obj_t *parent, const char *label_text)
     lv_obj_set_style_text_align(ta, LV_TEXT_ALIGN_CENTER, 0);
     /* Sin punto: un cuentakilometros no tiene decimales. */
     lv_textarea_set_accepted_chars(ta, "0123456789");
+    /* Tope por la misma razon que en make_money_field* (ver alli): sin el, un
+     * cuentakilometros con demasiadas cifras alimentaria el mismo calculo de
+     * repo_recalc_cb. 9 cifras cubre cualquier odometro real de sobra. */
+    lv_textarea_set_max_length(ta, 9);
     lv_obj_set_user_data(ta, (void *)label_text);
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)true);
     return ta;
@@ -1749,13 +1773,34 @@ static bool p4_a_la_escucha(void)
     return d.last_update_ms != 0 && (ms - d.last_update_ms) < 5000;
 }
 
+/* Texto del aviso segun por que ha fallado viaje_cola_push(), no siempre el
+ * mismo cartel: antes "cola llena, la P4 no la vacia" salia igual para un
+ * fallo de NVS que nada tiene que ver con que la P4 este apagada -- daba un
+ * diagnostico enganoso justo cuando mas hacia falta acertar. Detectado
+ * auditando el 07-sep-2026. */
+static const char *cola_fallo_texto(viaje_cola_error_t motivo)
+{
+    switch (motivo) {
+        case VIAJE_COLA_ERR_LLENA:
+            return "La cola de pendientes esta\nllena y la P4 no la vacia.\nMira si tiene corriente.";
+        case VIAJE_COLA_ERR_NVS:
+            return "No he podido guardarlo en la\nmemoria del aparato (puede estar\nllena o dando fallos). Avisa de esto.";
+        default:
+            return "No se ha podido guardar, sin\nmas detalle. Avisa de esto.";
+    }
+}
+
 /* Monta el apunte de la categoria y lo mete en la cola.
  *
  * El resumen que va al diario del viaje se reaprovecha de s_resumen, el mismo
  * que acabas de ver en la confirmacion: si lo que se guarda no coincidiera con
  * lo que te enseño la pantalla, seria un fallo dificil de pillar. Se le quitan
  * los saltos de linea, que ahi eran para leerlo y en un CSV sobran. */
-static void apunte_encolar(categoria_t cat)
+/* Devuelve si el apunte ha llegado a la cola. El aviso al usuario ya se
+ * muestra aqui dentro en los dos casos de fallo; quien llama solo tiene que
+ * decidir si puede seguir adelante (por ejemplo, si puede dar por cerrado el
+ * evento que se estaba editando) o no. */
+static bool apunte_encolar(categoria_t cat)
 {
     /* 896 y no 640: la PERNOCTA es el apunte mas largo -- lo de una parada
      * (motivo, horas, minutos, noches) mas precio, SEIS servicios con su importe
@@ -1909,14 +1954,16 @@ static void apunte_encolar(categoria_t cat)
         confirm_screen_aviso("No he podido apuntarlo",
                              "Este apunte es demasiado largo\ny no se ha guardado. Avisa de\nesto, es un fallo del programa.",
                              COL_ACCION_STOP, "Entendido");
-        return;
+        return false;
     }
 
-    if (!viaje_cola_push(b)) {
-        confirm_screen_aviso("No he podido apuntarlo",
-                             "La cola de pendientes esta\nllena y la P4 no la vacia.\nMira si tiene corriente.",
+    viaje_cola_error_t motivo;
+    if (!viaje_cola_push(b, &motivo)) {
+        confirm_screen_aviso("No he podido apuntarlo", cola_fallo_texto(motivo),
                              COL_ACCION_STOP, "Entendido");
+        return false;
     }
+    return true;
 }
 
 /* La accion de verdad, ya confirmada. */
@@ -1936,7 +1983,14 @@ static void do_save(void *user_data)
         return;
     }
 
-    apunte_encolar(cat);
+    if (!apunte_encolar(cat)) {
+        /* El aviso ya lo ha mostrado apunte_encolar(). Si se estaba cerrando
+         * un evento, se deja ABIERTO -- igual que hace parada_terminar() --
+         * para no perderlo: antes se borraba igual y no habia forma de
+         * reintentarlo. */
+        show_grid();
+        return;
+    }
 
     /* El cuentakilometros del repostaje se guarda para el SIGUIENTE: es lo que
      * permite sacar los litros a los cien sin tener el historico delante. */
@@ -1961,13 +2015,26 @@ static void save_generic_cb(lv_event_t *e)
                         NULL, do_save, (void *)(uintptr_t)cat);
 }
 
-static void viaje_set_activo(bool activo)
+/* activo/destino/n_eventos se guardan JUNTOS en un solo commit (ver
+ * save_trip_inicio/save_trip_fin en config_storage) -- antes eran 2-3
+ * llamadas sueltas y un apagon entre medias podia dejar activo=true con
+ * destino="" o al reves. Detectado auditando el 07-sep-2026. */
+static void viaje_marcar_iniciado(void)
 {
-    s_viaje_activo = activo;
-    esp_err_t err = save_trip_active(activo);
+    s_viaje_activo = true;
+    esp_err_t err = save_trip_inicio(s_viaje_destino);
     if (err != ESP_OK) {
         /* Se sigue adelante: el viaje vale para esta sesion, solo se pierde si
          * se va la luz. Peor seria no dejar iniciarlo por un fallo de NVS. */
+        ESP_LOGW(TAG, "No se pudo guardar el estado del viaje: %s", esp_err_to_name(err));
+    }
+}
+
+static void viaje_marcar_terminado(void)
+{
+    s_viaje_activo = false;
+    esp_err_t err = save_trip_fin();
+    if (err != ESP_OK) {
         ESP_LOGW(TAG, "No se pudo guardar el estado del viaje: %s", esp_err_to_name(err));
     }
 }
@@ -2008,9 +2075,7 @@ static void inicio_resultado_cb(bool ok, int estado)
      * puede cerrarlo es ESTE, y la P4 vive en la parte de atras. */
     if (!ok && estado == 409) { mostrar_menu(PAN_VIAJE_P4); return; }
     if (!ok) { aviso_envio_fallo(estado, "Viaje"); return; }
-    save_trip_destino(s_viaje_destino);
-    trip_eventos_reset();
-    viaje_set_activo(true);
+    viaje_marcar_iniciado();
     /* La P4 ya ha creado su carpeta; aqui se abre la salida que sostiene los
      * menus. Si fallase (sin hora no puede ser: la acabamos de usar) el viaje
      * quedaria en la P4 y no en la pantalla, y se veria al momento. */
@@ -2063,14 +2128,13 @@ static void viaje_do_finalizar(void *ud)
     char cuerpo[80];
     p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), trip_eventos_get() + 1);
 
-    if (!viaje_cola_push(cuerpo)) {
-        confirm_screen_aviso("No he podido apuntarlo",
-                             "La cola de pendientes esta\nllena y la P4 no la vacia.\nMira si tiene corriente.",
+    viaje_cola_error_t motivo;
+    if (!viaje_cola_push(cuerpo, &motivo)) {
+        confirm_screen_aviso("No he podido apuntarlo", cola_fallo_texto(motivo),
                              COL_ACCION_STOP, "Entendido");
         return;
     }
-    save_trip_destino("");
-    viaje_set_activo(false);
+    viaje_marcar_terminado();
     salida_cerrar();
     show_grid();
 }
@@ -2147,6 +2211,14 @@ static void repo_recalc_cb(lv_event_t *e)
     } else {
         u = snprintf(buf, sizeof(buf), "--");
     }
+    /* snprintf devuelve lo que HABRIA escrito sin el limite del buffer, no lo
+     * que cupo de verdad: importe no tiene max_length en su textarea, y con un
+     * importe/litros enorme (p.ej. importe con 39+ digitos, litros pequeno)
+     * "%.3f" puede pasarse de los 40 bytes de buf. Sin este guard, u > sizeof
+     * buf y "sizeof(buf) - (size_t)u" (size_t, sin signo) desborda a un numero
+     * gigante -- el segundo snprintf de abajo escribiria fuera de buf[40], en
+     * pila, con ese tamano. Bug real, detectado auditando el 07-sep-2026. */
+    if (u < 0 || (size_t)u >= sizeof(buf)) u = (int)sizeof(buf) - 1;
 
     /* Los litros a los cien salen solos comparando con el cuentakilometros del
      * repostaje ANTERIOR. Solo si el numero tiene sentido: sin km previo, con
@@ -2399,6 +2471,7 @@ static lv_obj_t *make_precio_row(lv_obj_t *parent, precio_row_t *o,
     lv_obj_set_style_text_font(o->ta, &lv_font_montserrat_32, 0);
     lv_obj_set_style_text_align(o->ta, LV_TEXT_ALIGN_CENTER, 0);
     lv_textarea_set_accepted_chars(o->ta, "0123456789.");
+    lv_textarea_set_max_length(o->ta, 10);   /* mismo motivo que make_money_field* */
     lv_obj_set_user_data(o->ta, (void *)"Precio por noche");
     lv_obj_add_event_cb(o->ta, ta_click_cb, LV_EVENT_CLICKED,
                         (void *)(uintptr_t)true);
@@ -3267,9 +3340,9 @@ static void borrar_cb(lv_event_t *e)
  * mucho, de ahi el "unos segundos" del cartel. */
 static void viaje_p4_manda(const char *cuerpo, const char *titulo)
 {
-    if (!viaje_cola_push(cuerpo)) {
-        confirm_screen_aviso("No he podido pedirlo",
-                             "La cola de pendientes esta\nllena y la P4 no la vacia.\nMira si tiene corriente.",
+    viaje_cola_error_t motivo;
+    if (!viaje_cola_push(cuerpo, &motivo)) {
+        confirm_screen_aviso("No he podido pedirlo", cola_fallo_texto(motivo),
                              COL_ACCION_STOP, "Entendido");
         return;
     }
@@ -3422,10 +3495,23 @@ static void parada_terminar(void *ud)
              MOTIVO_NOMBRE[motivo], hi, hf);
     u = apunte_cerrar(cuerpo, sizeof(cuerpo), u, resumen);
 
+    /* Se cuenta ANTES de encolar y pase lo que pase, igual que build_resumen()
+     * para el resto de categorias (ver su comentario): antes esta cuenta no
+     * incluia las paradas, asi que una parada perdida no hacia bajar
+     * "esperados" y podia compensar la perdida de otro apunte, dando el viaje
+     * por completo sin estarlo. */
+    trip_eventos_inc();
+
     /* u == 0 significa que el JSON no cabia y quedo cortado: NO se manda. */
-    if (!u || !viaje_cola_push(cuerpo)) {
-        confirm_screen_aviso("No he podido apuntarlo",
-                             "La parada NO se ha guardado\ny sigue abierta. Enciende la\nP4 para vaciar la cola.",
+    viaje_cola_error_t motivo_cola = VIAJE_COLA_ERR_NINGUNO;
+    if (!u || !viaje_cola_push(cuerpo, &motivo_cola)) {
+        /* Mismo motivo que cola_fallo_texto(), pero con la coletilla de que
+         * la parada sigue abierta -- aqui SI importa decirlo, porque no hay
+         * temporizador ni nada que la cierre sola. */
+        const char *razon = (motivo_cola == VIAJE_COLA_ERR_NVS)
+            ? "La parada NO se ha guardado\ny sigue abierta: fallo al escribir\nen la memoria del aparato."
+            : "La parada NO se ha guardado\ny sigue abierta. Enciende la\nP4 para vaciar la cola.";
+        confirm_screen_aviso("No he podido apuntarlo", razon,
                              COL_ACCION_STOP, "Entendido");
         return;
     }

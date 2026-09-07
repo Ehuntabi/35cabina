@@ -1,10 +1,9 @@
 /* main.c
  *
  * 35cabina — satelite tactil de la P4 (ver README.md). Bring-up de
- * hardware (pantalla+tactil+LVGL), recepcion UDP del broadcast de la P4 y
- * el carrusel de 3 pantallas (nav.c). Fase 4 (canal de vuelta hacia la P4)
- * sigue fuera de este repo — ver
- * /home/db3/.claude/plans/polished-chasing-brooks.md.
+ * hardware (pantalla+tactil+LVGL), recepcion UDP del broadcast de la P4,
+ * el carrusel de 3 pantallas (nav.c) y el canal de vuelta hacia la P4
+ * (viajes y registros sueltos, main/net/p4_api.c + viaje_cola.c).
  */
 #include <stdio.h>
 #include <inttypes.h>
@@ -71,7 +70,7 @@ static void splash_create(void) {
 }
 
 static void reboot_timer_cb(void *arg) {
-    ESP_LOGI(TAG, "Rebooting after 24h uptime (timer)...");
+    ESP_LOGI(TAG, "Rebooting after 12h uptime (timer)...");
     esp_restart();
 }
 
@@ -204,7 +203,7 @@ void setup(void) {
         .callback = &reboot_timer_cb,
         .arg = NULL,
         .dispatch_method = ESP_TIMER_TASK,
-        .name = "24h_reboot"
+        .name = "12h_reboot"
     };
     esp_timer_create(&reboot_timer_args, &reboot_timer);
     esp_timer_start_periodic(reboot_timer, REBOOT_INTERVAL_US);

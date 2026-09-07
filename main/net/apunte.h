@@ -6,7 +6,7 @@
  *     u = apunte_campo_txt(b, sizeof b, u, "moneda", "EUR");
  *     u = apunte_campo_txt(b, sizeof b, u, "importe", "62.40");
  *     u = apunte_cerrar(b, sizeof b, u, "62.40 EUR, 41.2 L");
- *     viaje_cola_push(b);
+ *     viaje_cola_push(b, NULL);
  *
  * El orden de los campos IMPORTA: la P4 hace con ellos la cabecera del CSV.
  * Ver la cabecera del .c para el porque del sello de tiempo.

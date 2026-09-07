@@ -41,8 +41,11 @@
  * @brief Tear configuration structure
  *
  */
-/* tear task: pin a core 1 junto a LVGL para evitar starvation desde la
- * radio (core 0). Stack 2048->4096: holgura ante stack canary activado. */
+/* tear task: SIN afinidad (-1), igual que la tarea LVGL (ver lv_port.h).
+ * Antes se fijaba a core 1 junto con LVGL para evitar starvation desde la
+ * radio (core 0), pero esa contention era parte de la saga del hang LCD
+ * cerrada 18-may-2026 -- se revirtio al comportamiento upstream. Stack
+ * 2048->4096: holgura ante stack canary activado. */
 #define BSP_SYNC_TASK_CONFIG(te_io, intr_type)  \
     {                                           \
         .task_priority = 4,                     \

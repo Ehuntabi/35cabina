@@ -28,6 +28,7 @@
 #include "net/viaje_cola.h"   /* VIAJE_COLA_CAPACIDAD, para el aviso de casi llena */
 #include "nav.h"
 #include "../data_model.h"
+#include "../lv_port.h"       /* lvgl_port_lock/unlock, ver view_info_set_pendientes() */
 #include "esp_timer.h"
 #include <stdio.h>
 
@@ -188,9 +189,19 @@ static void led_blink_cb(void *var, int32_t v)
     lv_obj_set_style_border_opa((lv_obj_t *)var, v, 0);
 }
 
-/* mode: 0 = apagado - 1 = lleno (azul) - 2 = alarma (rojo parpadeando) */
+/* mode: 0 = apagado - 1 = lleno (azul) - 2 = alarma (rojo parpadeando)
+ *
+ * Idempotente: si ya estaba en ese modo, no hace nada. Sin esto, cada tick
+ * del refresco (cada 500 ms, aunque el estado no haya cambiado) borraba la
+ * animacion de parpadeo y la volvia a arrancar desde cero -- el parpadeo
+ * nunca llegaba a completar ni un ciclo (400 ms subida + 400 ms bajada,
+ * reiniciado cada 500 ms). El modo se guarda en el user_data del propio LED
+ * (libre, nada mas lo usa aqui). Detectado auditando el 07-sep-2026. */
 static void led_set(lv_obj_t *led, uint8_t mode)
 {
+    if ((uint8_t)(uintptr_t)lv_obj_get_user_data(led) == mode) return;
+    lv_obj_set_user_data(led, (void *)(uintptr_t)mode);
+
     lv_anim_del(led, led_blink_cb);
     if (mode == 2) {
         lv_obj_set_style_bg_color(led, COL_VAL_BAD, 0);
@@ -258,6 +269,10 @@ static lv_obj_t *make_led(lv_obj_t *parent, bool round)
     lv_obj_set_style_border_width(led, 2, 0);
     lv_obj_set_style_pad_all(led, 0, 0);
     lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    /* Sentinela que no es ningun modo real (0/1/2): fuerza a que la primera
+     * llamada a led_set() de verdad aplique el estilo en vez de creerse que
+     * "ya esta en modo 0" solo porque el user_data por defecto tambien es 0. */
+    lv_obj_set_user_data(led, (void *)(uintptr_t)0xFF);
     led_set(led, 0);
     return led;
 }
@@ -444,10 +459,17 @@ static void refresh_bat(const mini_data_t *d)
  * bateria y solo tiene un dato que ensenar.
  * Mismo criterio de formato que ui_format_aux_value() en la P4: aux_value_raw
  * crudo, la unidad depende de aux_input (0/1=V*100, 2=Kelvin*100). */
+/* Mismo sentinel que usa la P4 en ui_format_aux_value() para "sin dato": si
+ * el canal auxiliar esta configurado (aux_input valido) pero la LECTURA en
+ * si es 0xFFFF, no es un voltaje/temperatura real, es "N/A" propagado desde
+ * el shunt. Antes solo se miraba aux_input, y esto se pintaba como
+ * "655.35 V". Detectado auditando el 07-sep-2026. */
+#define AUX_NA 0xFFFFu
+
 static void refresh_aux(const mini_data_t *d)
 {
     char buf[32];
-    if (d->aux_has_data) {
+    if (d->aux_has_data && d->aux_value_raw != AUX_NA) {
         /* El canal auxiliar del shunt esta configurado como bateria de arranque
          * (aux_input 0 = voltage2), que es lo que dice el titulo MOTOR. Los
          * otros dos modos que admite -- punto medio de un banco (1) y sonda de
@@ -455,10 +477,20 @@ static void refresh_aux(const mini_data_t *d)
          * rotulan; si algun dia se configuraran, aqui saldria un voltaje o unos
          * grados sin avisar de cual es. */
         if (d->aux_input == 2) {
+            /* Signo aparte del entero: con -0,5 grados, temp_centi/100 da 0 (la
+             * division trunca hacia cero) y el "-" se perdia -- salia "0.5" en
+             * vez de "-0.5". Bug de signo real, detectado auditando el
+             * 07-sep-2026: este calculo reimplementaba a mano lo que ya hacia
+             * bien ui_format_aux_value() en la P4 (victron/main/ui/widgets/
+             * ui_format.c), sin llamarlo -- ver tambien componente borrado
+             * ui_format.c de este proyecto, que tampoco se llamaba nunca. */
             int temp_centi = (int)d->aux_value_raw - 27315;
-            int ti = temp_centi / 100;
-            int td = (temp_centi >= 0 ? temp_centi : -temp_centi) % 100 / 10;
-            snprintf(buf, sizeof(buf), "%d.%d\xC2\xB0" "C", ti, td);
+            bool negativo = temp_centi < 0;
+            int abs_centi = negativo ? -temp_centi : temp_centi;
+            int ti = abs_centi / 100;
+            int td = abs_centi % 100 / 10;
+            snprintf(buf, sizeof(buf), "%s%d.%d\xC2\xB0" "C",
+                     negativo ? "-" : "", ti, td);
         } else {
             snprintf(buf, sizeof(buf), "%d.%02d V",
                      d->aux_value_raw / 100, d->aux_value_raw % 100);
@@ -542,14 +574,23 @@ static void refresh_temp(lv_obj_t *val, bool has, int16_t centi, bool is_frigo)
     }
 }
 
+/* Cada tanque se dibuja segun SU PROPIO flag, no un flag combinado: una
+ * trama nativa NE185 (sin NE187) trae limpia valida pero grises siempre a
+ * "sin dato" (ver ne185.c), y antes eso apagaba tambien el bloque de limpia
+ * aunque su lectura fuera buena. Detectado auditando el 07-sep-2026. */
 static void refresh_aguas(const mini_data_t *d)
 {
-    if (d->water_has_data) {
+    if (d->water_clean_has_data) {
         uint8_t cl = d->water_clean > 4 ? 4 : d->water_clean;
         for (int i = 0; i < 4; i++) {
             uint8_t mode = (cl == 0) ? 2 : (i < cl ? 1 : 0);
             led_set(s_led_clean[i], mode);
         }
+    } else {
+        for (int i = 0; i < 4; i++) led_set(s_led_clean[i], 0);
+    }
+
+    if (d->water_gray_has_data) {
         /* Grises: 0 = vacio (OK), cualquier cosa por encima = lleno. Mismo
          * criterio que la P4 (ver r1 en ne185.h). */
         bool lleno = d->water_gray > 0;
@@ -559,7 +600,6 @@ static void refresh_aguas(const mini_data_t *d)
         lv_obj_set_style_text_color(s_lbl_gray,
                                     lleno ? lv_color_hex(0x000000) : COL_TEXT_DIM, 0);
     } else {
-        for (int i = 0; i < 4; i++) led_set(s_led_clean[i], 0);
         led_set(s_led_gray, 0);
         lv_label_set_text(s_lbl_gray, "grises");
         lv_obj_set_style_text_color(s_lbl_gray, COL_TEXT_DIM, 0);
@@ -1005,13 +1045,28 @@ static void pendientes_aplicar(void *arg)
      * ya no se puede anotar. Tres de margen: da tiempo a reaccionar sin dar la
      * lata por uno o dos. */
     bool casi = s_pend_valor + 3 >= VIAJE_COLA_CAPACIDAD;
-    if (casi) {
+    /* Un 409 sostenido no se arregla solo aunque la P4 este encendida y
+     * respondiendo (es un choque de numeracion, no que este apagada) -- por
+     * eso lleva su propio aviso, distinto de "casi llena". Ver el comentario
+     * de INTENTOS_409_ATASCO en viaje_cola.c. */
+    bool atascada = viaje_cola_bloqueada();
+    /* Credenciales mal puestas NO se arreglan solas ni encendiendo la P4 (a
+     * diferencia de "sin llegar" a secas, que puede ser solo que este
+     * apagada): aviso propio para no hacer perder el tiempo mirando el cable
+     * o la alimentacion cuando el problema esta en Ajustes. Ver el comentario
+     * de INTENTOS_401_ATASCO en viaje_cola.c. */
+    bool cred_mal = viaje_cola_credenciales_mal();
+    if (cred_mal) {
+        lv_label_ins_text(s_pendientes, LV_LABEL_POS_LAST, "  -  CLAVE MAL, AJUSTES");
+    } else if (atascada) {
+        lv_label_ins_text(s_pendientes, LV_LABEL_POS_LAST, "  -  ATASCADO, MIRA LA P4");
+    } else if (casi) {
         lv_label_ins_text(s_pendientes, LV_LABEL_POS_LAST, "  -  CASI LLENA");
     }
     lv_obj_set_style_bg_color(s_pendientes,
-                              lv_color_hex(casi ? 0xFF4444 : 0xFF9800), 0);
+                              lv_color_hex((casi || atascada || cred_mal) ? 0xFF4444 : 0xFF9800), 0);
     lv_obj_set_style_text_color(s_pendientes,
-                                lv_color_hex(casi ? 0xFFFFFF : 0x000000), 0);
+                                lv_color_hex((casi || atascada || cred_mal) ? 0xFFFFFF : 0x000000), 0);
 
     lv_obj_clear_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
     lv_obj_align(s_pendientes, LV_ALIGN_BOTTOM_MID, 0, -6);
@@ -1024,17 +1079,31 @@ static void pendientes_click_cb(lv_event_t *e)
     nav_ir_a_sin_cerrar();
 }
 
+/* lv_async_call() por si solo NO es seguro llamado desde otra tarea en esta
+ * version de LVGL (8.4): toca la lista global de timers sin ningun lock
+ * propio, y lv_timer_handler() la recorre desde la tarea LVGL al mismo
+ * tiempo. view_info_set_pendientes() SI llega de otra tarea (viaje_cola.c);
+ * se protege aqui con el mismo lock que ya usa el bucle principal de LVGL.
+ * Detectado auditando el 07-sep-2026. */
 void view_info_set_pendientes(size_t pendientes)
 {
     s_pend_valor = pendientes;
-    lv_async_call(pendientes_aplicar, NULL);
+    if (lvgl_port_lock(1000)) {
+        lv_async_call(pendientes_aplicar, NULL);
+        lvgl_port_unlock();
+    }
 }
 
 void view_info_set_sin_cerrar(size_t sin_cerrar)
 {
-    /* Esta llega DESDE LVGL (la pantalla de registros), pero se aplaza igual:
-     * asi las dos entradas hacen lo mismo y no hay que acordarse de cual es
-     * cual el dia que se toque. */
+    /* Esta llega DESDE LVGL (la pantalla de registros), pero se aplaza y se
+     * protege igual: asi las dos entradas hacen lo mismo y no hay que
+     * acordarse de cual es cual el dia que se toque (o de que una de ellas
+     * empiece a llamarse tambien desde otro sitio). El lock es reentrante,
+     * asi que tomarlo aqui aunque ya se este en la tarea LVGL no bloquea. */
     s_sin_cerrar = sin_cerrar;
-    lv_async_call(pendientes_aplicar, NULL);
+    if (lvgl_port_lock(1000)) {
+        lv_async_call(pendientes_aplicar, NULL);
+        lvgl_port_unlock();
+    }
 }

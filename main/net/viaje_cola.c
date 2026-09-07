@@ -129,12 +129,15 @@ static void avisar_cambio(void)
     if (s_cambio_cb) s_cambio_cb(viaje_cola_pendientes());
 }
 
-bool viaje_cola_push(const char *cuerpo)
+bool viaje_cola_push(const char *cuerpo, viaje_cola_error_t *motivo_out)
 {
+    if (motivo_out) *motivo_out = VIAJE_COLA_ERR_NINGUNO;
+
     if (!cuerpo || !cuerpo[0]) return false;
     if (strlen(cuerpo) >= CUERPO_MAX) {
         ESP_LOGE(TAG, "apunte demasiado largo (%u bytes), NO se encola",
                  (unsigned)strlen(cuerpo));
+        if (motivo_out) *motivo_out = VIAJE_COLA_ERR_NVS;
         return false;
     }
 
@@ -145,6 +148,7 @@ bool viaje_cola_push(const char *cuerpo)
     if (cola - cabeza >= CAPACIDAD) {
         xSemaphoreGive(s_mutex);
         ESP_LOGE(TAG, "cola LLENA (%d): no se encola nada mas", CAPACIDAD);
+        if (motivo_out) *motivo_out = VIAJE_COLA_ERR_LLENA;
         return false;
     }
 
@@ -154,6 +158,7 @@ bool viaje_cola_push(const char *cuerpo)
     nvs_handle_t h;
     if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) {
         xSemaphoreGive(s_mutex);
+        if (motivo_out) *motivo_out = VIAJE_COLA_ERR_NVS;
         return false;
     }
     esp_err_t e = nvs_set_str(h, clave, cuerpo);
@@ -162,6 +167,10 @@ bool viaje_cola_push(const char *cuerpo)
     if (e != ESP_OK) {
         xSemaphoreGive(s_mutex);
         ESP_LOGE(TAG, "no puedo guardar el apunte: %s", esp_err_to_name(e));
+        /* NVS_NOT_ENOUGH_SPACE aqui NO es "la cola logica esta llena" (eso ya
+         * se ha descartado arriba): es la particion entera sin sitio, por lo
+         * demas que comparte con ella. Un apagon/reset la P4 no lo arregla. */
+        if (motivo_out) *motivo_out = VIAJE_COLA_ERR_NVS;
         return false;
     }
 
@@ -171,6 +180,7 @@ bool viaje_cola_push(const char *cuerpo)
         borrar_entrada(clave);
         xSemaphoreGive(s_mutex);
         ESP_LOGE(TAG, "el apunte NO se ha encolado (no cabe el indice)");
+        if (motivo_out) *motivo_out = VIAJE_COLA_ERR_NVS;
         return false;
     }
     xSemaphoreGive(s_mutex);
@@ -225,10 +235,59 @@ static bool leer_cabeza(char *out, size_t n)
 
 /* ── El repartidor ────────────────────────────────────────────────────────── */
 
+/* Cuantas veces se le da el beneficio de la duda a un 400 antes de tirarlo
+ * de verdad. No es solo "el apunte esta mal formado": un recorte por timeout
+ * de recv() en el portal de la P4 (red lenta, WiFi flojo) puede producir el
+ * mismo 400 sobre un apunte que en realidad estaba bien. Descartarlo al
+ * primer intento perdia esos casos para siempre. 409/408/429/401/5xx siguen
+ * reintentando sin limite (ver el comentario de mas abajo, no cambia).
+ * Detectado auditando el 07-sep-2026. */
+#define MAX_INTENTOS_400 3
+
+/* Un 409 sostenido sobre el MISMO apunte durante mucho rato (no unos pocos
+ * ciclos: eso es normal mientras el inicio, que puede ir justo delante en la
+ * cola, termina de procesarse) es la señal de un caso concreto: si se borro
+ * la NVS de esta 35cabina a mitad de viaje, next_trip_seq() vuelve a
+ * numerar desde 1 mientras la P4 sigue recordando un id mucho mas alto del
+ * viaje de antes -- y como el inicio de un viaje nuevo choca con el viaje que
+ * la P4 cree que sigue abierto, ningun apunte de este vuelve a entrar nunca
+ * mientras no se intervenga a mano. 20 intentos (~5 min a 15s) no lo dispara
+ * nunca en el caso normal, pero si detecta el atasco de verdad. NO se toca
+ * el protocolo entre dispositivos: solo se avisa mejor de lo que ya pasaba
+ * en silencio. Detectado auditando el 07-sep-2026. */
+#define INTENTOS_409_ATASCO 20
+static volatile bool s_atascada_409 = false;
+
+bool viaje_cola_bloqueada(void)
+{
+    return s_atascada_409;
+}
+
+/* Un 401 sostenido significa credenciales mal puestas en Ajustes -- a
+ * diferencia de "la P4 esta apagada" (mismo sintoma en pantalla: nada entra),
+ * esto NO se arregla solo con encenderla, hace falta que el usuario corrija
+ * usuario/clave. Antes las dos cosas ensenaban el mismo "N pendientes" sin
+ * distincion. 3 intentos (~45s) basta: una clave mal puesta falla siempre,
+ * no hace falta el margen de minutos que si tiene el 409 (que puede ser
+ * normal mientras el inicio del viaje termina de procesarse).
+ * Detectado auditando el 07-sep-2026. */
+#define INTENTOS_401_ATASCO 3
+static volatile bool s_atascada_401 = false;
+
+bool viaje_cola_credenciales_mal(void)
+{
+    return s_atascada_401;
+}
+
 static void reparto_task(void *arg)
 {
     (void)arg;
     char cuerpo[CUERPO_MAX];
+    uint32_t idx_400 = UINT32_MAX;   /* indice de cola del ultimo 400 visto */
+    int intentos_400 = 0;
+    uint32_t idx_409 = UINT32_MAX;   /* indice de cola del ultimo 409 visto */
+    int intentos_409 = 0;
+    int intentos_401 = 0;   /* no distingue apunte: una clave mal puesta falla con cualquiera */
 
     while (1) {
         if (!leer_cabeza(cuerpo, sizeof(cuerpo))) {
@@ -253,9 +312,82 @@ static void reparto_task(void *arg)
         bool ok = p4_api_post(cuerpo, &estado);
 
         if (ok) {
+            idx_400 = UINT32_MAX;
+            idx_409 = UINT32_MAX;
+            intentos_409 = 0;
+            intentos_401 = 0;
+            s_atascada_409 = false;
+            s_atascada_401 = false;
             descartar_cabeza();
             /* Sin espera: si hay mas, se sigue vaciando de seguido. Que la P4
              * este respondiendo es justo el momento de aprovechar. */
+            continue;
+        }
+
+        if (estado == 401) {
+            intentos_401++;
+            if (intentos_401 >= INTENTOS_401_ATASCO && !s_atascada_401) {
+                s_atascada_401 = true;
+                ESP_LOGE(TAG, "401 sostenido %d veces: usuario/clave del portal "
+                              "mal en Ajustes, no se van a arreglar solos",
+                         intentos_401);
+                avisar_cambio();   /* mismo motivo que el aviso de 409 atascado */
+            }
+            vTaskDelay(pdMS_TO_TICKS(REINTENTO_MS));
+            continue;
+        }
+        intentos_401 = 0;
+        s_atascada_401 = false;
+
+        if (estado == 409) {
+            uint32_t cabeza, cola;
+            indices_leer(&cabeza, &cola);
+            if (cabeza == idx_409) {
+                intentos_409++;
+            } else {
+                idx_409 = cabeza;
+                intentos_409 = 1;
+                s_atascada_409 = false;   /* apunte distinto: cuenta desde cero */
+            }
+            if (intentos_409 >= INTENTOS_409_ATASCO && !s_atascada_409) {
+                s_atascada_409 = true;
+                ESP_LOGE(TAG, "409 sostenido %d veces sobre el mismo apunte: "
+                              "probable choque de numeracion con la P4 (se "
+                              "borro la NVS a mitad de viaje?). No se pierde "
+                              "nada, sigue en cola, pero no entrara solo.",
+                         intentos_409);
+                /* El numero de pendientes no ha cambiado (sigue siendo el
+                 * mismo apunte atascado), asi que sin esto la pantalla no se
+                 * enteraria hasta el siguiente cambio real de la cola. */
+                avisar_cambio();
+            }
+            vTaskDelay(pdMS_TO_TICKS(REINTENTO_MS));
+            continue;
+        }
+
+        /* 400 aparte: unos pocos intentos antes de tirarlo (ver el comentario
+         * de MAX_INTENTOS_400), no al primero. */
+        if (estado == 400) {
+            uint32_t cabeza, cola;
+            indices_leer(&cabeza, &cola);
+            if (cabeza == idx_400) {
+                intentos_400++;
+            } else {
+                idx_400 = cabeza;
+                intentos_400 = 1;
+            }
+
+            if (intentos_400 < MAX_INTENTOS_400) {
+                ESP_LOGW(TAG, "la P4 rechaza con 400 (intento %d/%d, puede ser "
+                              "un recorte de red): %s",
+                         intentos_400, MAX_INTENTOS_400, cuerpo);
+                vTaskDelay(pdMS_TO_TICKS(REINTENTO_MS));
+                continue;
+            }
+            ESP_LOGE(TAG, "la P4 rechaza el apunte con 400 tras %d intentos, "
+                          "lo DESCARTO: %s", intentos_400, cuerpo);
+            descartar_cabeza();
+            idx_400 = UINT32_MAX;
             continue;
         }
 
@@ -263,15 +395,16 @@ static void reparto_task(void *arg)
          * reintentarlo eternamente atascaria la cola entera detras de el. Se
          * tira, pero dejando constancia bien visible en el log.
          *
-         * Tres se EXCLUYEN porque significan "ahora no" y no "esto no vale":
+         * Cuatro se EXCLUYEN porque significan "ahora no" y no "esto no vale":
+         *   400 tiene su propio tratamiento arriba (unos intentos, no al primero).
          *   401 credenciales mal puestas -> se arreglan en Ajustes y entonces
          *       el mismo apunte entra bien. Tirarlo seria perder un repostaje
          *       por un dedazo.
          *   409 no hay viaje abierto todavia en la P4 -> el inicio puede estar
          *       aun por delante en esta misma cola.
          *   408 / 429 son "vuelve luego" por definicion. */
-        if (estado >= 400 && estado < 500 && estado != 401 && estado != 408 &&
-            estado != 409 && estado != 429) {
+        if (estado >= 400 && estado < 500 && estado != 400 && estado != 401 &&
+            estado != 408 && estado != 409 && estado != 429) {
             ESP_LOGE(TAG, "la P4 rechaza el apunte con %d, lo DESCARTO: %s",
                      estado, cuerpo);
             descartar_cabeza();
@@ -325,6 +458,36 @@ static void migrar_cola(void)
         }
         nvs_set_u32(h, K_CABEZA, 0);
         nvs_set_u32(h, K_COLA, 0);
+        nvs_commit(h);
+        nvs_close(h);
+        return;
+    }
+
+    /* Apunte huerfano: viaje_cola_push() graba el CUERPO y lo comitea, y solo
+     * DESPUES avanza 'cola' con un commit aparte (ver el comentario ahi mismo).
+     * Un apagon justo entre los dos deja el cuerpo grabado de verdad en la
+     * tarjeta pero invisible para siempre: 'cola' nunca llego a incluirlo, asi
+     * que ni el repartidor lo ve ni un push nuevo lo pisaria (usa la MISMA
+     * clave modulo CAPACIDAD, asi que sin este recorte un push futuro lo
+     * habria sobrescrito igualmente, pero mientras tanto ocupa sitio en una
+     * particion que va muy justa).
+     *
+     * La clave que le tocaria a 'cola' es la unica donde esto puede pasar: si
+     * hay algo escrito ahi es justo el cuerpo del ultimo push que no llego a
+     * contarse. Se recupera incluyendolo (cola++) en vez de dejarlo perdido.
+     * Detectado auditando el 07-sep-2026 (ver el hallazgo de robustez #7). */
+    char clave_borde[16];
+    snprintf(clave_borde, sizeof(clave_borde), "q%lu", (unsigned long)(cola % CAPACIDAD));
+    /* Solo se pregunta el TAMAÑO (out_value=NULL), sin leer el cuerpo entero a
+     * una pila que no lo necesita: es el modo documentado de NVS para
+     * comprobar si una clave existe. */
+    size_t len = 0;
+    if (nvs_get_str(h, clave_borde, NULL, &len) == ESP_OK &&
+        (uint32_t)(cola - cabeza) < CAPACIDAD) {
+        ESP_LOGW(TAG, "apunte huerfano recuperado en '%s' (el indice nunca "
+                      "llego a incluirlo tras un apagon a medio guardar)",
+                 clave_borde);
+        nvs_set_u32(h, K_COLA, cola + 1);
         nvs_commit(h);
     }
     nvs_close(h);

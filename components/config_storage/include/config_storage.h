@@ -15,18 +15,6 @@ esp_err_t save_brightness(uint8_t brightness);
 esp_err_t load_screensaver_settings(bool *enabled, uint8_t *brightness, uint16_t *timeout);
 esp_err_t save_screensaver_settings(bool enabled, uint8_t brightness, uint16_t timeout);
 
-// Relay tab configuration persistence (NVS namespace: "relay")
-esp_err_t load_relay_config(bool *enabled_out,
-                            uint8_t *count_out,
-                            uint8_t *pins_out,
-                            char (*labels_out)[20],
-                            size_t max_pins);
-
-esp_err_t save_relay_config(bool enabled,
-                            const uint8_t *pins,
-                            const char (*labels)[20],
-                            uint8_t count);
-
 // STA Wi-Fi (AP de la P4 a la que se asocia, NVS namespace: "wifi").
 // Permite cambiar de P4 (ej. la de repuesto) sin reflashear -- ver
 // main/wifi_credentials.h para el valor de fabrica usado la primera vez
@@ -42,23 +30,40 @@ esp_err_t save_wifi_config(const char *ssid, const char *pass);
 // apaga al confirmar "Finalizar viaje". Se guarda para que un corte de
 // corriente en mitad de un viaje no devuelva el menu a "sin viaje".
 // La P4 sigue siendo la duena del viaje de verdad; esto es solo lo que la
-// 35cabina cree, hasta que la Fase 4 abra el canal de vuelta.
+// 35cabina cree -- confirmado por HTTP en cada inicio/fin (main/net/p4_api.c).
+//
+// activo/destino/n_eventos viven en UN SOLO blob (ver el .c), no en claves
+// sueltas: iniciar y terminar viaje antes hacian 2-3 nvs_commit seguidos
+// (destino, luego contador, luego activo), y un apagon entre medias -- el
+// contacto se corta a menudo con la 3.5" en marcha -- dejaba activo=true con
+// destino="" o al reves. Detectado auditando el 07-sep-2026.
+//
 // Si no hay nada guardado devuelve false (sin error).
 esp_err_t load_trip_active(bool *active_out);
-esp_err_t save_trip_active(bool active);
 
 /* Destino del viaje en curso (da nombre a la carpeta en la SD de la P4). */
 esp_err_t load_trip_destino(char *out, size_t *len);
-esp_err_t save_trip_destino(const char *destino);
+
+/* Arranca el viaje de un tiron: activo=true, destino y n_eventos=1 (el
+ * inicio ya cuenta) en un solo commit. Sustituye a llamar por separado
+ * save_trip_destino + trip_eventos_reset + save_trip_active. */
+esp_err_t save_trip_inicio(const char *destino);
+
+/* Termina el viaje de un tiron: activo=false y destino="" en un solo commit.
+ * n_eventos no se toca (lo resetea el proximo save_trip_inicio). Sustituye a
+ * llamar por separado save_trip_destino("") + save_trip_active(false). */
+esp_err_t save_trip_fin(void);
 
 /* Siguiente numero de apunte. Creciente y sin huecos: la P4 lo usa para
- * descartar duplicados cuando un reintento llega dos veces. */
+ * descartar duplicados cuando un reintento llega dos veces. Contador propio,
+ * fuera del blob de arriba: se llama por cada apunte (mucho mas a menudo que
+ * inicio/fin) y ya era atomico por si solo. */
 uint32_t next_trip_seq(void);
 
 /* Cuenta de apuntes GENERADOS por el viaje en curso (el inicio incluido). Va en
  * el mensaje de fin para que la P4 sepa si le falta algo. Se cuenta lo generado
- * y no lo entregado: ver el porque en el .c. */
-void     trip_eventos_reset(void);
+ * y no lo entregado: ver el porque en el .c. Vive en el mismo blob que
+ * activo/destino, pero se actualiza sola (cada apunte, no solo inicio/fin). */
 uint32_t trip_eventos_inc(void);
 uint32_t trip_eventos_get(void);   /* sin incrementar: para el mensaje de fin */
 

@@ -10,8 +10,14 @@
  *
  * NO se llama desde la tarea de LVGL. Cada envio abre un socket y espera
  * respuesta, y bloquear ahi congelaria la pantalla varios segundos. Se hace en
- * una tarea corta de usar y tirar, y el resultado vuelve por lv_async_call, que
- * es la unica forma segura de tocar widgets desde fuera de LVGL.
+ * una tarea corta de usar y tirar, y el resultado vuelve por lv_async_call.
+ *
+ * OJO: lv_async_call() por si solo NO es seguro llamado desde otra tarea en
+ * esta version de LVGL (8.4) -- toca la lista global de timers sin ningun
+ * lock propio, y lv_timer_handler() la recorre desde la tarea LVGL al mismo
+ * tiempo. Por eso aqui se llama con lvgl_port_lock()/unlock() alrededor,
+ * igual que ya hace el bucle principal con lv_timer_handler(). Detectado
+ * auditando el 07-sep-2026.
  */
 #include "p4_api.h"
 #include "config_storage.h"
@@ -20,6 +26,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
+#include "lv_port.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -102,7 +109,14 @@ static void envio_task(void *arg)
 {
     trabajo_t *t = (trabajo_t *)arg;
     t->ok = p4_api_post(t->cuerpo, &t->estado);
-    lv_async_call(avisar_cb, t);
+    /* Ver el comentario de cabecera: lv_async_call() en si mismo no basta. */
+    if (lvgl_port_lock(1000)) {
+        lv_async_call(avisar_cb, t);
+        lvgl_port_unlock();
+    } else {
+        ESP_LOGE(TAG, "no consegui el lock de LVGL para avisar del resultado "
+                      "(perdido, no se llama a %p)", (void *)avisar_cb);
+    }
     vTaskDelete(NULL);
 }
 

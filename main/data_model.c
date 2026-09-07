@@ -78,13 +78,21 @@ void data_model_update_from_msg(const struct mini_msg *msg)
         tmp.frigo_has_data   = false;
     }
 
-    /* Aguas */
-    if (msg->water_clean != MINI_NO_DATA_U8 && msg->water_gray != MINI_NO_DATA_U8) {
-        tmp.water_clean    = msg->water_clean;
-        tmp.water_gray     = msg->water_gray;
-        tmp.water_has_data = true;
+    /* Aguas: cada tanque se evalua por separado -- una trama nativa NE185
+     * (sin NE187) trae limpia valida pero grises siempre a "sin dato" (ver
+     * ne185.c), y con un unico flag combinado eso apagaba tambien el bloque
+     * de limpia. */
+    if (msg->water_clean != MINI_NO_DATA_U8) {
+        tmp.water_clean          = msg->water_clean;
+        tmp.water_clean_has_data = true;
     } else {
-        tmp.water_has_data = false;
+        tmp.water_clean_has_data = false;
+    }
+    if (msg->water_gray != MINI_NO_DATA_U8) {
+        tmp.water_gray          = msg->water_gray;
+        tmp.water_gray_has_data = true;
+    } else {
+        tmp.water_gray_has_data = false;
     }
 
     /* Exterior */

@@ -98,11 +98,18 @@ void entry_screen_open(lv_obj_t *target, const char *label, bool numeric)
     /* Los caracteres aceptados se fijan ANTES de meter el texto: si no, un valor
      * previo con caracteres ahora prohibidos entraria igual.
      *
+     * Se COPIAN del campo de destino, no un fijo "0123456789." para todo lo
+     * numerico: un cuentakilometros (ver make_number_field) no lleva punto a
+     * proposito, y con el fijo se podia teclear "123.5" aqui y que al volcarlo
+     * a un destino sin punto LVGL lo dejara mudo en "1235", sin ningun aviso
+     * (el filtro de accepted_chars se aplica tambien al hacer set_text, no
+     * solo al teclear). Detectado auditando el 07-sep-2026.
+     *
      * El limite de caracteres tambien se copia del campo de destino: sin esto
      * se podia escribir sin tope aqui (el textarea del editor es uno propio,
      * no el 'target'), y el limite puesto en el destino -- 40 en el motivo de
      * "Otros", por ejemplo -- no protegia nada mientras se tecleaba. */
-    lv_textarea_set_accepted_chars(s_value, numeric ? "0123456789." : NULL);
+    lv_textarea_set_accepted_chars(s_value, lv_textarea_get_accepted_chars(target));
     lv_textarea_set_max_length(s_value, lv_textarea_get_max_length(target));
     lv_textarea_set_text(s_value, lv_textarea_get_text(target));
     lv_keyboard_set_mode(s_kb, numeric ? LV_KEYBOARD_MODE_NUMBER

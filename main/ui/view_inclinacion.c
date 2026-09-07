@@ -225,6 +225,18 @@ static void refresh_cb(lv_timer_t *t)
     lv_label_set_text(s_label_status, "");
 }
 
+/* Pausa/reanuda la lectura periodica del ADXL345 segun si esta pantalla es
+ * la que se ve ahora mismo. Ver el comentario de la creacion del timer. */
+static void screen_evento_cb(lv_event_t *e)
+{
+    if (!s_timer) return;
+    if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
+        lv_timer_resume(s_timer);
+    } else {
+        lv_timer_pause(s_timer);
+    }
+}
+
 void view_inclinacion_create(lv_obj_t *parent)
 {
     lv_obj_set_style_bg_color(parent, lv_color_hex(0x000000), 0);
@@ -339,4 +351,13 @@ void view_inclinacion_create(lv_obj_t *parent)
     lv_obj_center(calib_lbl);
 
     s_timer = lv_timer_create(refresh_cb, 200, NULL);
+    /* Arranca en pausa: esta pantalla nace oculta (NAV_INFO es la que se ve
+     * al arrancar, ver nav.c) y sin esto el ADXL345 se leeria por I2C real
+     * (hasta 100 ms de timeout, ver tilt.c) 5 veces por segundo aunque nadie
+     * este mirando esta vista. Se reanuda/pausa con los eventos de carga de
+     * pantalla de LVGL, que "parent" (la screen entera) ya recibe al navegar
+     * con el carrusel. Detectado auditando el 07-sep-2026. */
+    lv_timer_pause(s_timer);
+    lv_obj_add_event_cb(parent, screen_evento_cb, LV_EVENT_SCREEN_LOADED, NULL);
+    lv_obj_add_event_cb(parent, screen_evento_cb, LV_EVENT_SCREEN_UNLOADED, NULL);
 }

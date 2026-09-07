@@ -45,10 +45,15 @@ typedef struct {
     bool     frigo_has_data;
     bool     exterior_has_data;
 
-    /* Aguas (NE185 de la P4). Niveles 0..3. */
+    /* Aguas (NE185 de la P4). Niveles 0..3. Flags INDEPENDIENTES: una trama
+     * nativa NE185 (sin NE187) trae limpia valida pero grises siempre a
+     * "sin dato" (ver ne185.c) -- con un unico flag combinado, eso apagaba
+     * tambien el bloque de limpia aunque su dato fuera bueno. Detectado
+     * auditando el 07-sep-2026. */
     uint8_t  water_clean;          /* limpia */
     uint8_t  water_gray;           /* grises */
-    bool     water_has_data;
+    bool     water_clean_has_data;
+    bool     water_gray_has_data;
 
     /* Reloj de la P4: segundos desde 1970 ya desplazados a SU hora local, o 0
      * si aun no ha dicho la hora. Es el UNICO reloj que tiene esta pantalla,
