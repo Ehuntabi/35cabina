@@ -97,10 +97,30 @@ fi
 if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
     echo "[ok] la Release $TAG ya existe, no la toco"
 else
-    git tag -l --format='%(contents)' "$TAG" > "/tmp/notas-35cabina-$TAG.md"
+    NOTAS_TMP="/tmp/notas-35cabina-$TAG.md"
+    # Si se paso un mensaje a mano (segundo argumento), ese es la nota. Si no,
+    # el mensaje del tag se queda en el generico "Release vX.Y" (linea 41) y
+    # una Release con eso no dice nada -- paso con la v1.14 (07-sep-2026):
+    # se publico practicamente en blanco. Mismo criterio que el proyecto
+    # hermano (victron/release.sh): sin mensaje a mano, las notas salen del
+    # HISTORIAL, no de un texto vacio.
+    if [ -n "${2:-}" ]; then
+        printf '%s\n' "$MSG" > "$NOTAS_TMP"
+    else
+        ANTERIOR=$(git describe --tags --abbrev=0 --match "v*.*" "$TAG^" 2>/dev/null || true)
+        {
+            if [ -n "$ANTERIOR" ]; then
+                echo "Cambios desde $ANTERIOR:"
+                echo
+                git log --no-merges --format='- %s' "$ANTERIOR..$TAG"
+            else
+                echo "Primera version publicada."
+            fi
+        } > "$NOTAS_TMP"
+    fi
     gh release create "$TAG" -R "$REPO" \
         --title "35cabina $TAG" \
-        --notes-file "/tmp/notas-35cabina-$TAG.md" \
+        --notes-file "$NOTAS_TMP" \
         "$OUT"
     echo "[ok] Release $TAG publicada"
 fi
