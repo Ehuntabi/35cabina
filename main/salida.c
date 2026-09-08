@@ -134,7 +134,9 @@ void salida_init(void)
         ESP_LOGI(TAG, "sin salida en curso");
     }
 
-    xTaskCreate(vida_task, "salida_vida", 3072, NULL, 3, NULL);
+    if (xTaskCreate(vida_task, "salida_vida", 3072, NULL, 3, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "xTaskCreate(vida_task) fallo: sin marca de vida de la salida");
+    }
 }
 
 const salida_vista_t *salida_get(void)

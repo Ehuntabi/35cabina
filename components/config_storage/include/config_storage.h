@@ -11,10 +11,6 @@
 esp_err_t load_brightness(uint8_t *brightness_out);
 esp_err_t save_brightness(uint8_t brightness);
 
-// Screensaver settings (NVS namespace: "screensaver")
-esp_err_t load_screensaver_settings(bool *enabled, uint8_t *brightness, uint16_t *timeout);
-esp_err_t save_screensaver_settings(bool enabled, uint8_t brightness, uint16_t timeout);
-
 // STA Wi-Fi (AP de la P4 a la que se asocia, NVS namespace: "wifi").
 // Permite cambiar de P4 (ej. la de repuesto) sin reflashear -- ver
 // main/wifi_credentials.h para el valor de fabrica usado la primera vez

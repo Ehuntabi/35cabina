@@ -205,11 +205,24 @@ void setup(void) {
         .dispatch_method = ESP_TIMER_TASK,
         .name = "12h_reboot"
     };
-    esp_timer_create(&reboot_timer_args, &reboot_timer);
-    esp_timer_start_periodic(reboot_timer, REBOOT_INTERVAL_US);
+    esp_err_t reboot_err = esp_timer_create(&reboot_timer_args, &reboot_timer);
+    if (reboot_err == ESP_OK) {
+        esp_timer_start_periodic(reboot_timer, REBOOT_INTERVAL_US);
+    } else {
+        /* Sin el reinicio periodico de seguridad -- no es fatal para arrancar,
+         * pero se pierde sin ningun aviso si no se comprueba. */
+        ESP_LOGE(TAG, "esp_timer_create(12h_reboot) fallo (%s): sin reinicio periodico",
+                 esp_err_to_name(reboot_err));
+    }
 
-    xTaskCreate(heartbeat_task, "hb", 3072, NULL, 1, NULL);
-    xTaskCreate(lvgl_wdog_task, "lvgl_wdog", 3072, NULL, 6, NULL);
+    if (xTaskCreate(heartbeat_task, "hb", 3072, NULL, 1, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "xTaskCreate(heartbeat_task) fallo: sin diagnostico periodico");
+    }
+    /* lvgl_wdog_task es el respaldo anti-cuelgue de verdad (ver su comentario):
+     * si esto no llega a crearse, un cuelgue de LVGL ya no se recupera solo. */
+    if (xTaskCreate(lvgl_wdog_task, "lvgl_wdog", 3072, NULL, 6, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "xTaskCreate(lvgl_wdog_task) fallo: SIN recuperacion anti-cuelgue de LVGL");
+    }
 
     logSection("Setup complete");
 }

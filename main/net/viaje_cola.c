@@ -23,6 +23,7 @@
 #include "nvs.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdatomic.h>
 
 static const char *TAG = "viaje_cola";
 
@@ -251,7 +252,15 @@ static bool leer_cabeza(char *out, size_t n)
  * el protocolo entre dispositivos: solo se avisa mejor de lo que ya pasaba
  * en silencio. Detectado auditando el 07-sep-2026. */
 #define INTENTOS_409_ATASCO 20
-static volatile bool s_atascada_409 = false;
+/* _Atomic y no volatile: lo escribe reparto_task y lo lee la UI (LVGL) --
+ * volatile evita que el compilador cachee el valor en un registro, pero NO
+ * da ninguna garantia formal de visibilidad entre nucleos (esto es un
+ * esp32s3 dual-core). Con un bool de un writer y un reader no habia
+ * corrupcion real posible en la practica, pero era una carrera de datos en
+ * sentido formal. _Atomic cuesta lo mismo en el binario para un bool
+ * alineado (misma carga/almacen de un byte) y cierra el hueco de verdad.
+ * Detectado auditando el 08-sep-2026. */
+static _Atomic bool s_atascada_409 = false;
 
 bool viaje_cola_bloqueada(void)
 {
@@ -267,7 +276,7 @@ bool viaje_cola_bloqueada(void)
  * normal mientras el inicio del viaje termina de procesarse).
  * Detectado auditando el 07-sep-2026. */
 #define INTENTOS_401_ATASCO 3
-static volatile bool s_atascada_401 = false;
+static _Atomic bool s_atascada_401 = false;   /* ver el porque de _Atomic arriba */
 
 bool viaje_cola_credenciales_mal(void)
 {
@@ -501,6 +510,10 @@ void viaje_cola_init(viaje_cola_cambio_cb cb)
 
     /* 6 KB por el cliente HTTP, igual que la tarea de envio directo que
      * sustituye. Prioridad 4: por debajo de LVGL, esto nunca corre prisa. */
-    xTaskCreate(reparto_task, "viaje_cola", 6144, NULL, 4, NULL);
+    if (xTaskCreate(reparto_task, "viaje_cola", 6144, NULL, 4, NULL) != pdPASS) {
+        /* Sin el repartidor, la cola se llena y nunca se vacia: los apuntes
+         * pendientes se acumulan sin entregarse nunca a la P4, en silencio. */
+        ESP_LOGE(TAG, "xTaskCreate(reparto_task) fallo: la cola no se va a repartir");
+    }
     avisar_cambio();
 }

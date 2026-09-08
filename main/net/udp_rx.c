@@ -370,5 +370,9 @@ void udp_rx_start(void)
     esp_wifi_get_mac(WIFI_IF_STA, mac);
     ESP_LOGI(TAG, "STA listo. MAC=" MACSTR " esperando IP por DHCP...", MAC2STR(mac));
 
-    xTaskCreate(rx_task, "udp_rx", 4096, NULL, 4, NULL);
+    if (xTaskCreate(rx_task, "udp_rx", 4096, NULL, 4, NULL) != pdPASS) {
+        /* Sin esto la pantalla se queda sin telemetria de la P4 para
+         * siempre, en silencio -- STA conectada y todo, pero muda. */
+        ESP_LOGE(TAG, "xTaskCreate(rx_task) fallo: SIN telemetria de la P4");
+    }
 }

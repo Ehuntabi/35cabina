@@ -7,10 +7,6 @@ static const char *TAG = "config_storage";
 
 #define BRIGHTNESS_NAMESPACE "display"
 #define BRIGHTNESS_KEY       "brightness"
-#define SCREENSAVER_NAMESPACE "screensaver"
-#define SS_ENABLED_KEY        "enabled"
-#define SS_BRIGHT_KEY         "brightness"
-#define SS_TIMEOUT_KEY        "timeout"
 #define SALIDA_NAMESPACE      "salida"
 #define SALIDA_ESTADO_KEY     "estado"
 #define SALIDA_VIDA_KEY       "vida"
@@ -52,42 +48,6 @@ esp_err_t save_brightness(uint8_t brightness) {
     if (err != ESP_OK) return err;
     err = nvs_set_u8(h, BRIGHTNESS_KEY, brightness);
     if (err == ESP_OK) err = nvs_commit(h);
-    nvs_close(h);
-    return err;
-}
-
-esp_err_t load_screensaver_settings(bool *enabled, uint8_t *brightness, uint16_t *timeout) {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(SCREENSAVER_NAMESPACE, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-
-    uint8_t en = 1, bright = 1;
-    uint16_t tout = 10;
-    nvs_get_u8(h, SS_ENABLED_KEY, &en);
-    nvs_get_u8(h, SS_BRIGHT_KEY, &bright);
-    nvs_get_u16(h, SS_TIMEOUT_KEY, &tout);
-
-    if (enabled) *enabled = en;
-    if (brightness) *brightness = bright;
-    if (timeout) *timeout = tout;
-
-    // Save defaults if not present
-    nvs_set_u8(h, SS_ENABLED_KEY, en);
-    nvs_set_u8(h, SS_BRIGHT_KEY, bright);
-    nvs_set_u16(h, SS_TIMEOUT_KEY, tout);
-    nvs_commit(h);
-    nvs_close(h);
-    return ESP_OK;
-}
-
-esp_err_t save_screensaver_settings(bool enabled, uint8_t brightness, uint16_t timeout) {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(SCREENSAVER_NAMESPACE, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-    nvs_set_u8(h, SS_ENABLED_KEY, enabled ? 1 : 0);
-    nvs_set_u8(h, SS_BRIGHT_KEY, brightness);
-    nvs_set_u16(h, SS_TIMEOUT_KEY, timeout);
-    err = nvs_commit(h);
     nvs_close(h);
     return err;
 }

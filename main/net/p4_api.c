@@ -109,13 +109,21 @@ static void envio_task(void *arg)
 {
     trabajo_t *t = (trabajo_t *)arg;
     t->ok = p4_api_post(t->cuerpo, &t->estado);
-    /* Ver el comentario de cabecera: lv_async_call() en si mismo no basta. */
-    if (lvgl_port_lock(1000)) {
+    /* Ver el comentario de cabecera: lv_async_call() en si mismo no basta.
+     *
+     * Espera SIN LIMITE (lvgl_port_lock(0)): con un timeout de 1s, si la
+     * tarea LVGL tardaba un pelin mas (una transicion de pantalla pesada,
+     * p.ej.), el aviso se perdia EN SILENCIO -- ni exito ni fallo, el que
+     * inicia/cierra un viaje se quedaba sin saber si se aplico, y de paso 't'
+     * (calloc) se fugaba porque avisar_cb() -- el unico que lo libera -- no
+     * llegaba a llamarse. Esta tarea es de usar y tirar, dedicada solo a este
+     * envio: no pasa nada por esperar lo que haga falta, la tarea LVGL nunca
+     * espera a su vez por esta (el aviso vuelve por lv_async_call, no hay
+     * rendezvous sincrono que pueda formar un interbloqueo). Detectado
+     * auditando el 08-sep-2026. */
+    if (lvgl_port_lock(0)) {
         lv_async_call(avisar_cb, t);
         lvgl_port_unlock();
-    } else {
-        ESP_LOGE(TAG, "no consegui el lock de LVGL para avisar del resultado "
-                      "(perdido, no se llama a %p)", (void *)avisar_cb);
     }
     vTaskDelete(NULL);
 }
