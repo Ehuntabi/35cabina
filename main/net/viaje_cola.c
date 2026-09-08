@@ -43,16 +43,11 @@ static const char *TAG = "viaje_cola";
  * para evitar. */
 #define CAPACIDAD   VIAJE_COLA_CAPACIDAD
 
-/* El mas largo es la parada con todo marcado: 505 bytes MEDIDOS, no estimados
- * -- la estimacion anterior decia "ronda los 300" y se quedaba corta, con lo que
- * el apunte se cortaba a medias y acababa descartado por la P4.
- *
- * 896 desde el 24-ago-2026: el mas largo pasa a ser la PERNOCTA -- lo de una
- * parada (motivo, horas, minutos, noches) mas precio, SEIS servicios con su
- * importe cada uno, valoracion, dos pegas y la inclinacion. Peor caso MEDIDO:
- * 693 bytes. Los 200 que sobran son para los dos campos de posicion del GPS.
- * Va a la par con el buffer de apunte_encolar() en view_registro.c. */
-#define CUERPO_MAX  896
+/* CUERPO_MAX vive en viaje_cola.h (publica): apunte_encolar() en
+ * view_registro.c necesita el MISMO numero para su buffer local, y antes lo
+ * llevaba duplicado a mano como el literal 896 -- sin CI que lo vigilara,
+ * bastaba con tocar uno de los dos sitios para que divergieran en silencio.
+ * Detectado auditando el 08-sep-2026. */
 
 /* Cada cuanto se reintenta la cabeza cuando hay algo pendiente. 15 s: lo
  * bastante seguido para que al encender la P4 se vacie enseguida, y lo bastante

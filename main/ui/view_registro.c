@@ -1802,14 +1802,14 @@ static const char *cola_fallo_texto(viaje_cola_error_t motivo)
  * evento que se estaba editando) o no. */
 static bool apunte_encolar(categoria_t cat)
 {
-    /* 896 y no 640: la PERNOCTA es el apunte mas largo -- lo de una parada
-     * (motivo, horas, minutos, noches) mas precio, SEIS servicios con su importe
-     * cada uno, valoracion, dos pegas y la inclinacion. Peor caso MEDIDO: 693
-     * bytes. Lo que sobra es para los dos campos de posicion que traera el GPS.
-     *
-     * OJO: 896 tiene que ir a la par con CUERPO_MAX de viaje_cola.c, que es
-     * quien rechaza (con aviso) lo que no le cabe. */
-    char b[896];
+    /* CUERPO_MAX (viaje_cola.h): la PERNOCTA es el apunte mas largo -- lo de
+     * una parada (motivo, horas, minutos, noches) mas precio, SEIS servicios
+     * con su importe cada uno, valoracion, dos pegas y la inclinacion. Peor
+     * caso MEDIDO: 693 bytes. Lo que sobra es para los dos campos de posicion
+     * que traera el GPS. Antes era el literal 896 duplicado a mano; ahora es
+     * el mismo #define que usa viaje_cola.c para rechazar (con aviso) lo que
+     * no le cabe -- no pueden divergir. */
+    char b[CUERPO_MAX];
     /* El id: el reservado al declarar el evento si se esta cerrando uno, o uno
      * nuevo si el apunte nace aqui (peaje, o los formularios del menu). */
     size_t u = apunte_cabecera(b, sizeof(b),

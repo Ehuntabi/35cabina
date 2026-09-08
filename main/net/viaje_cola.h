@@ -7,6 +7,14 @@
  * ANTES de llegar al tope; el porque de este numero esta en viaje_cola.c. */
 #define VIAJE_COLA_CAPACIDAD  16
 
+/* Tamano maximo de un cuerpo JSON de apunte. Publica (y no en viaje_cola.c)
+ * porque view_registro.c necesita el MISMO numero para el buffer local de
+ * apunte_encolar() -- un solo #define en vez de dos copias a mano evita que
+ * diverjan en silencio. El porque de 896 esta en viaje_cola.c. Tambien tiene
+ * que caber con margen en VIAJE_BODY_MAX del lado P4 (config_server_viaje.c
+ * en victron), vigilado por el job de CI viaje_body_sync. */
+#define CUERPO_MAX  896
+
 #include <stdbool.h>
 #include <stddef.h>
 
