@@ -10,6 +10,20 @@ nunca llegaba a dispararse porque el temporizador que la comprueba solo se
 creaba cuando SÍ había algo que cerrar, justo lo contrario de lo que esa
 oferta necesita).
 
+**09-sep-2026 — Puntual rediseñada, superada la sección de más abajo.** Ya no
+es «un apunte y se acabó»: se trata como un viaje de una sola parada, con
+carpeta propia en la P4 (abierta al elegir la categoría, ANTES de declarar
+nada) y ciclo de vida separado en tres pasos — abrir (sale del garaje),
+declarar (llega al sitio, boton "Ya he llegado" o aviso equivalente en la
+pantalla de datos) y terminar (boton "Terminar salida", de vuelta en el
+garaje). Motivo: se quería el trayecto de ida grabado en `ruta.csv`, no solo
+la vuelta, y que la salida quedara descargable igual que un viaje. El
+`/sdcard/vehiculo` de la sección "En la P4" queda solo como red de
+seguridad para un apunte sin ninguna salida abierta, ya no es el camino
+normal de una puntual. Sin cambios del lado de la P4: `op_inicio`/
+`op_registro`/`op_fin` nunca distinguieron viaje de puntual, solo si había
+carpeta abierta.
+
 Sustituye al diseño anterior del mismo día (proponía ocho casillas en el menú),
 borrado por equivocado. Parte de `docs/menus.txt`, escrito por el usuario, más
 las decisiones que se cerraron después y que constan aquí.

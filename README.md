@@ -210,8 +210,12 @@ de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 
   El **repostaje pide kilómetros** y saca solo el precio/litro y los litros a los
   cien (guarda el cuentakilómetros anterior en NVS). En la P4, los apuntes **sin
-  viaje van a `/sdcard/vehiculo`** en vez de dar 409, que dejaba a la cola
-  reintentando para siempre en una salida puntual.
+  viaje abierto van a `/sdcard/vehiculo`** en vez de dar 409 (rediseño del
+  09-sep-2026: antes era el camino habitual de una salida puntual, que no abría
+  carpeta propia; ahora la puntual se trata como un viaje de una sola parada
+  —carpeta propia, descargable, con inicio/llegada/fin separados— y
+  `/sdcard/vehiculo` queda solo de red de seguridad para el caso raro de que se
+  declare algo sin ninguna salida en curso).
 
   El aviso de que queda algo se ve **en la pantalla de datos**, no solo en el
   cuaderno: comparte pastilla con «N sin enviar» y **se toca** para ir a la lista.

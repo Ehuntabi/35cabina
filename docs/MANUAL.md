@@ -167,7 +167,7 @@ Un solo botón: **NUEVA SALIDA**. Debajo, pequeño, Configuración.
 | | Qué es |
 |---|---|
 | 🔵 **Viaje** | Dura días, tiene nombre y carpeta propia, y dentro caben muchos apuntes |
-| 🟠 **Puntual** | Sales a repostar, a la ITV, a por una bombona o al taller. Un apunte y se acabó |
+| 🟠 **Puntual** | Sales a repostar, a la ITV, a por una bombona o al taller. Se trata como un viaje de una sola parada: carpeta propia, descargable igual |
 
 ### Mientras dura el viaje
 
@@ -214,11 +214,29 @@ formulario de siete campos.
 
 ### Salida puntual
 
-Cuatro opciones: **Repostaje · Bombona · ITV · Avería/Mant.**
+Cuatro opciones: **Repostaje · Bombona · ITV · Avería/Mant.** Al tocar una, la P4
+abre su carpeta ahí mismo —igual que un viaje— y empieza a grabar el trayecto:
+sirve para que quede el recorrido de ida completo, no solo el de vuelta.
 
-La flecha «Atrás» de esta pantalla **cancela la salida** (no navega: la salida ya
-está abierta y no hay menú anterior). Si ya has anotado algo no se cancela, para
-no perder el apunte sin decírtelo.
+Ese toque **todavía no declara nada**: es solo la salida del garaje. Mientras
+conduces hacia el sitio, la **pantalla de datos** (la de batería, aguas y
+temperaturas) enseña abajo un aviso ámbar, **«Toca al llegar a Repostaje»**.
+Tócalo al llegar —o el botón **Ya he llegado** de esta misma pantalla, hace lo
+mismo— y ahí sí se guarda la hora y se abre el apunte, como cualquier otra
+declaración.
+
+Antes de llegar (sin declarar todavía), la flecha «Atrás» de esta pantalla
+**cancela la salida**: no hay progreso real que perder, así que deshacerla es lo
+único que tiene sentido si te arrepientes. **En cuanto declaras**, la flecha
+cambia de comportamiento: solo navega, sin cancelar nada — esta pantalla ya no
+lleva ningún dato útil para el trayecto de vuelta, así que puedes irte a mirar
+la de datos sin miedo a perder la salida. **Terminar salida** te espera aquí,
+como botón grande, para cuando vuelvas a entrar en Puntual ya en el garaje.
+
+Una salida puntual es **siempre una sola parada**: en cuanto declaras, no se
+vuelve a ofrecer «Ya he llegado». La carpeta en la P4 se cierra al pulsar
+**Terminar salida**, no al rellenar el dato — puede que rellenes el repostaje
+mucho antes de llegar de vuelta, y eso no es lo mismo que terminar la salida.
 
 ### Qué pasa cuando declaras algo
 
@@ -444,6 +462,10 @@ delante para que se ordenen solas:
 - **El nombre no se puede cambiar después.** Te avisa antes de empezar.
 - **Hace falta la P4 encendida.** Si no, avisa («Enciende la P4 primero») y no
   empieza: la carpeta lleva la fecha en el nombre y esta pantalla no tiene reloj.
+- **Si el GPS todavía no tiene posición**, pregunta si esperar unos segundos o
+  continuar igual: sin fix no se graba nada del trayecto hasta que lo encuentre,
+  y así te enteras antes de arrancar en vez de descubrirlo al volver a casa. Lo
+  mismo pasa al empezar una salida puntual.
 
 ### Si la P4 dice que ya hay un viaje abierto
 
