@@ -107,7 +107,6 @@ esp_err_t clear_parada_abierta(void);
 // significa cada campo. Aqui solo se guarda y se recupera.
 esp_err_t load_salida_blob(void *out, size_t *len);
 esp_err_t save_salida_blob(const void *data, size_t len);
-esp_err_t clear_salida_blob(void);
 
 // Marca de vida: la hora local de la P4, reescrita cada pocos minutos mientras
 // la pantalla esta encendida.

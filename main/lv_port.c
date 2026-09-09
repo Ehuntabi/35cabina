@@ -589,7 +589,7 @@ static void lvgl_port_flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, 
                 x_start_tmp += max_width;
             } else if (LV_DISP_ROT_270 == rotate) {
                 x_end_tmp -= max_width;
-            } if (LV_DISP_ROT_NONE == rotate) {
+            } else if (LV_DISP_ROT_NONE == rotate) {
                 y_start_tmp += max_height;
             } else {
                 y_end_tmp -= max_height;

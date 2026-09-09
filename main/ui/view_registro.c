@@ -3820,8 +3820,22 @@ static void parada_terminar(void *ud)
      * sin este guard cada reintento la volveria a contar. Detectado auditando
      * el 07-sep-2026. */
     if (!ev->contado) {
-        trip_eventos_inc();
+        /* Marcar ANTES de contar, no al reves: son dos commits NVS
+         * independientes (blobs de modulos distintos), y un apagon justo
+         * entre medias no se puede evitar del todo. Con el orden viejo
+         * (contar, luego marcar), un corte ahi dejaba el contador YA
+         * incrementado pero sin la marca -- el reintento del siguiente
+         * arranque volvia a incrementar, "esperados" quedaba UNO DE MAS
+         * respecto a lo que de verdad se manda, y la P4 daba el viaje por
+         * INCOMPLETO sin haber perdido nada (alli aplicados < esperados
+         * dispara la marca, ver config_server_viaje.c). Con este orden, el
+         * mismo corte deja la marca puesta pero el contador sin subir: el
+         * reintento la ve ya marcada y no vuelve a tocar nada, asi que
+         * "esperados" se queda UNO DE MENOS -- inofensivo, la P4 solo mira
+         * si aplicados < esperados, nunca al reves. Detectado el
+         * 09-sep-2026. */
         salida_evento_marcar_contado(idx);
+        trip_eventos_inc();
     }
 
     /* u == 0 significa que el JSON no cabia y quedo cortado: NO se manda. */

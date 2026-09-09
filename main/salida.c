@@ -319,9 +319,16 @@ void salida_cerrar(void)
                  (unsigned)s_st.n_eventos);
     }
     memset(&s_st, 0, sizeof(s_st));
-    s_st.version = SALIDA_BLOB_VERSION;
     s_st.tipo    = SALIDA_NINGUNA;
-    clear_salida_blob();
+    /* guardar() y no clear_salida_blob(): la version anterior ignoraba el
+     * resultado del borrado -- si fallaba (NVS con problemas justo en ese
+     * instante), la salida quedaba cerrada en memoria pero seguia abierta
+     * de verdad en el disco, y "resucitaba" al siguiente arranque
+     * (salida_init() carga lo que haya en NVS, no lo que se creyo cerrado).
+     * guardar() escribe este mismo estado (ya a SALIDA_NINGUNA) por el
+     * camino normal, que ya avisa por su cuenta si el commit falla.
+     * Detectado el 09-sep-2026. */
+    guardar();
     refrescar_vista();
     ESP_LOGI(TAG, "salida cerrada");
 }

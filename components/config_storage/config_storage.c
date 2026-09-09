@@ -81,18 +81,6 @@ esp_err_t save_salida_blob(const void *data, size_t len)
     return err;
 }
 
-esp_err_t clear_salida_blob(void)
-{
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(SALIDA_NAMESPACE, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-    err = nvs_erase_key(h, SALIDA_ESTADO_KEY);
-    if (err == ESP_ERR_NVS_NOT_FOUND) err = ESP_OK;   /* ya no estaba: bien */
-    if (err == ESP_OK) err = nvs_commit(h);
-    nvs_close(h);
-    return err;
-}
-
 uint32_t load_ultimo_km(void)
 {
     nvs_handle_t h;
