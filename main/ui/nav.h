@@ -17,6 +17,14 @@ void nav_init(void);
 /* Abre la pantalla de Ajustes (Wi-Fi) por encima del carrusel. */
 void nav_open_ajustes(void);
 
+/* Lleva el carrusel a inclinacion o a info directamente (sin gesto). Ademas
+ * del modo captura de pantallas (ver capture_carousel.h), nav_ir_a_info()
+ * la usa view_registro.c al abrir/salir de una salida puntual: es la
+ * pagina con datos (bateria, aguas, temperaturas...), y quedarse en
+ * Registro no aporta nada mientras se conduce hacia el sitio. */
+void nav_ir_a_inclinacion(void);
+void nav_ir_a_info(void);
+
 /* Lleva el carrusel a la pagina de registros, sin tocar en que menu esta.
  * La necesita el cierre de un apunte: la pregunta del arranque salta sobre la
  * pagina que estes mirando, pero el formulario vive en la de registros. */

@@ -64,6 +64,26 @@ static void gesture_cb(lv_event_t *e)
     lv_scr_load_anim(s_screens[s_current], anim, NAV_ANIM_MS, 0, false);
 }
 
+void nav_ir_a_inclinacion(void)
+{
+    if (s_current == NAV_INCLINACION) return;
+    if (s_current == NAV_REGISTRO) view_registro_reset();
+    lv_scr_load_anim_t anim = (s_current > NAV_INCLINACION)
+        ? LV_SCR_LOAD_ANIM_MOVE_RIGHT : LV_SCR_LOAD_ANIM_MOVE_LEFT;
+    s_current = NAV_INCLINACION;
+    lv_scr_load_anim(s_screens[NAV_INCLINACION], anim, NAV_ANIM_MS, 0, false);
+}
+
+void nav_ir_a_info(void)
+{
+    if (s_current == NAV_INFO) return;
+    if (s_current == NAV_REGISTRO) view_registro_reset();
+    lv_scr_load_anim_t anim = (s_current < NAV_INFO)
+        ? LV_SCR_LOAD_ANIM_MOVE_LEFT : LV_SCR_LOAD_ANIM_MOVE_RIGHT;
+    s_current = NAV_INFO;
+    lv_scr_load_anim(s_screens[NAV_INFO], anim, NAV_ANIM_MS, 0, false);
+}
+
 void nav_ir_a_registros(void)
 {
     /* Ya estando en registros no se recarga la pantalla: recargarla haria una
