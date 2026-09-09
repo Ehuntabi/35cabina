@@ -302,6 +302,14 @@ void salida_puntual_marcar_declarada(void)
     ESP_LOGI(TAG, "salida puntual declarada: '%s'", s_st.nombre);
 }
 
+void salida_puntual_desmarcar_declarada(void)
+{
+    s_st.declarado = 0;
+    guardar();
+    refrescar_vista();
+    ESP_LOGI(TAG, "salida puntual desdeclarada (deshacer): '%s'", s_st.nombre);
+}
+
 void salida_cerrar(void)
 {
     if (s_st.n_eventos > 0) {

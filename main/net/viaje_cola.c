@@ -515,6 +515,11 @@ void viaje_cola_init(viaje_cola_cambio_cb cb)
 {
     s_mutex = xSemaphoreCreateMutex();
     s_despertar = xSemaphoreCreateBinary();
+    /* Solo puede fallar sin heap, y ahi ya hay problemas mayores que este --
+     * pero un xSemaphoreTake/Give sobre NULL es peor: crashea sin decir por
+     * que. Dejarlo dicho en el log al menos explica la causa real. */
+    if (!s_mutex)     ESP_LOGE(TAG, "xSemaphoreCreateMutex fallo: sin memoria?");
+    if (!s_despertar) ESP_LOGE(TAG, "xSemaphoreCreateBinary fallo: sin memoria?");
     s_cambio_cb = cb;
 
     migrar_cola();

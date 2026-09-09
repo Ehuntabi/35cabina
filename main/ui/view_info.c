@@ -1104,8 +1104,13 @@ static void pendientes_click_cb(lv_event_t *e)
  * Detectado auditando el 07-sep-2026. */
 void view_info_set_pendientes(size_t pendientes)
 {
-    s_pend_valor = pendientes;
+    /* La asignacion va DENTRO del lock, no antes: s_pend_valor lo lee
+     * pendientes_aplicar() desde la tarea LVGL sin ninguna proteccion
+     * propia, asi que dejarla fuera es una carrera de datos de verdad
+     * (aunque en ESP32, con un size_t alineado, en la practica no llegue a
+     * partirse). Detectado el 09-sep-2026. */
     if (lvgl_port_lock(1000)) {
+        s_pend_valor = pendientes;
         lv_async_call(pendientes_aplicar, NULL);
         lvgl_port_unlock();
     }
@@ -1118,8 +1123,8 @@ void view_info_set_sin_cerrar(size_t sin_cerrar)
      * acordarse de cual es cual el dia que se toque (o de que una de ellas
      * empiece a llamarse tambien desde otro sitio). El lock es reentrante,
      * asi que tomarlo aqui aunque ya se este en la tarea LVGL no bloquea. */
-    s_sin_cerrar = sin_cerrar;
     if (lvgl_port_lock(1000)) {
+        s_sin_cerrar = sin_cerrar;
         lv_async_call(pendientes_aplicar, NULL);
         lvgl_port_unlock();
     }
@@ -1129,10 +1134,11 @@ void view_info_set_puntual_pendiente(const char *nombre)
 {
     /* Misma pastilla que "sin cerrar"/"sin enviar" -- ver el comentario de
      * pendientes_aplicar sobre por que se combinan en vez de llevar cada
-     * una la suya. */
-    s_puntual_pendiente = (nombre && nombre[0]);
-    if (s_puntual_pendiente) snprintf(s_puntual_nombre, sizeof(s_puntual_nombre), "%s", nombre);
+     * una la suya. Asignacion DENTRO del lock, mismo motivo que en
+     * view_info_set_pendientes(). */
     if (lvgl_port_lock(1000)) {
+        s_puntual_pendiente = (nombre && nombre[0]);
+        if (s_puntual_pendiente) snprintf(s_puntual_nombre, sizeof(s_puntual_nombre), "%s", nombre);
         lv_async_call(pendientes_aplicar, NULL);
         lvgl_port_unlock();
     }

@@ -147,6 +147,14 @@ bool salida_abrir_puntual(const char *nombre);
  * parada -- de ahi en adelante no se vuelve a ofrecer declararla otra vez. */
 void salida_puntual_marcar_declarada(void);
 
+/* Deshace la marca anterior. Solo tiene sentido en un sitio: si justo el
+ * apunte que se acaba de declarar se deshace con "Deshacer" en el cartel de
+ * "Anotado" (mismo dialogo modal, sin nada de por medio), la puntual se
+ * queda "declarada" pero sin ningun apunte dentro -- el mismo estado
+ * muerto que evita salida_puntual_marcar_declarada, por el otro lado.
+ * Detectado el 09-sep-2026. */
+void salida_puntual_desmarcar_declarada(void);
+
 /* Cierra la salida y OLVIDA los eventos que quedasen abiertos. Quien llama
  * tiene que haberlos despachado antes (salida_eventos_abiertos() == 0). */
 void salida_cerrar(void);

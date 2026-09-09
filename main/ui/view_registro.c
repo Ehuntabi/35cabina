@@ -147,13 +147,6 @@ static bool      s_ui_lista;
 static lv_obj_t *s_peaje_importe_ta;
 static lv_obj_t *s_peaje_currency_dd;
 
-/* --- Viaje: la pantalla cambia segun haya viaje en marcha o no ------------
- *
- * El estado lo lleva la PROPIA pantalla y se guarda en NVS, asi que un corte
- * de corriente no devuelve el menu a "sin viaje". La P4 sigue siendo la duena
- * del viaje de verdad; esto es solo lo que cree la 35cabina hasta que la
- * Fase 4 abra el canal de vuelta y pueda preguntarselo. */
-static bool      s_viaje_activo;
 /* Copia en memoria de si hay parada abierta, para no leer la NVS cada vez que
  * se entra en la pantalla de Viaje. La NVS manda; esto solo la sigue. */
 /* Campo oculto donde el editor a pantalla completa deja el destino tecleado. No
@@ -2042,7 +2035,6 @@ static void save_generic_cb(lv_event_t *e)
  * destino="" o al reves. Detectado auditando el 07-sep-2026. */
 static void viaje_marcar_iniciado(void)
 {
-    s_viaje_activo = true;
     esp_err_t err = save_trip_inicio(s_viaje_destino);
     if (err != ESP_OK) {
         /* Se sigue adelante: el viaje vale para esta sesion, solo se pierde si
@@ -2053,7 +2045,6 @@ static void viaje_marcar_iniciado(void)
 
 static void viaje_marcar_terminado(void)
 {
-    s_viaje_activo = false;
     esp_err_t err = save_trip_fin();
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "No se pudo guardar el estado del viaje: %s", esp_err_to_name(err));
@@ -4085,6 +4076,20 @@ static void deshacer_ultimo(void *ud)
 {
     (void)ud;
     salida_evento_borrar(salida_eventos_abiertos() - 1);
+    /* Si lo que se acaba de deshacer era justo la declaracion de una
+     * puntual (Anotado -> Deshacer, mismo dialogo modal, nada de por
+     * medio), hay que quitar tambien la marca de "declarada": si no, se
+     * queda en el mismo estado muerto que evita salida_puntual_marcar_
+     * declarada por el otro lado -- declarada pero sin ningun apunte
+     * dentro, sin forma de volver a intentarlo. Comprobar aqui "declarado
+     * && 0 abiertos" es seguro SOLO en este sitio: un apunte cerrado
+     * normalmente (do_save) nunca pasa por deshacer_ultimo, asi que no hay
+     * riesgo de desdeclarar una puntual que ya termino su parada de
+     * verdad. Detectado el 09-sep-2026. */
+    if (salida_get()->tipo == SALIDA_PUNTUAL && salida_get()->declarado &&
+        salida_eventos_abiertos() == 0) {
+        salida_puntual_desmarcar_declarada();
+    }
     volver_al_menu();
 }
 
@@ -4546,11 +4551,10 @@ void view_registro_create(lv_obj_t *parent)
     s_forms[CAT_VALORACION] = make_form_container(parent);
     build_valoracion(s_forms[CAT_VALORACION]);
 
-    /* Estado de partida: si se fue la luz en mitad de un viaje, sigue habiendo
-     * viaje. viaje_refresh() deja la pantalla de Viaje y el rotulo de su
-     * casilla acordes; parada_refresh_extras() esconde el precio y el boton de
-     * servicios, que solo salen al marcar area o camping. */
-    load_trip_active(&s_viaje_activo);
+    /* Estado de partida (si se fue la luz en mitad de un viaje, sigue
+     * habiendo viaje) lo recupera salida_init() via salida_get(), no aqui
+     * -- load_trip_active()/s_viaje_activo eran de antes de ese modulo y
+     * ya no los leia nadie; borrados el 09-sep-2026. */
 
     /* La parada del modelo VIEJO (namespace "parada" de NVS) ya no existe: el
      * cuaderno se organiza por salidas y las paradas son eventos de salida.c.
