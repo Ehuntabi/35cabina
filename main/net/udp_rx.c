@@ -72,14 +72,31 @@ static void load_or_init_credentials(void)
 /* Lista las redes que ve la radio. Solo para diagnostico: cuando la P4 no
  * aparece, esto dice si el problema es que no esta emitiendo, que se llama de
  * otra forma o que su cifrado no pasa el filtro de wifi_configure_sta(). */
+/* Backoff tras fallos seguidos: 60s al principio, hasta 5 min si la red
+ * lleva un buen rato sin aparecer. Es solo diagnostico (confirmado con el
+ * usuario el 09-sep-2026) -- el listado en si no cambia, pero cada escaneo
+ * bloquea esp_wifi_scan_start(..., true) la tarea de EVENTOS DEL SISTEMA
+ * (no una tarea propia) ~2s, y en una reconexion larga (fuera de cobertura
+ * varias horas) el minuto fijo lo dispara cientos de veces sin aportar nada
+ * nuevo al log. */
+#define REDES_BACKOFF_MIN_S   60
+#define REDES_BACKOFF_MAX_S  300
+#define REDES_BACKOFF_TRAS_N_FALLOS  5   /* fallos seguidos antes de espaciar al maximo */
+/* Fuera de la funcion (no 'static' local) para que on_wifi_event pueda
+ * ponerlo a 0 en WIFI_EVENT_STA_CONNECTED: sin resetearlo, una desconexion
+ * NUEVA (dias despues, red distinta) heredaba el backoff largo de una
+ * caida anterior ya resuelta, en vez de volver a diagnosticar rapido desde
+ * el principio. */
+static int s_redes_fallos_seguidos = 0;
 static void log_redes_visibles(void)
 {
-    /* Como mucho una vez por minuto: cada escaneo deja la radio ocupada un par
-     * de segundos y aqui se entra cada 0.5 s mientras no haya red. */
     static int64_t ultimo_us = 0;
+    int64_t intervalo_s = (s_redes_fallos_seguidos >= REDES_BACKOFF_TRAS_N_FALLOS)
+                        ? REDES_BACKOFF_MAX_S : REDES_BACKOFF_MIN_S;
     int64_t ahora = esp_timer_get_time();
-    if (ultimo_us != 0 && (ahora - ultimo_us) < 60LL * 1000000LL) return;
+    if (ultimo_us != 0 && (ahora - ultimo_us) < intervalo_s * 1000000LL) return;
     ultimo_us = ahora;
+    s_redes_fallos_seguidos++;
 
     wifi_scan_config_t cfg = { .show_hidden = true };
     if (esp_wifi_scan_start(&cfg, true) != ESP_OK) return;
@@ -181,6 +198,7 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
             case WIFI_EVENT_STA_CONNECTED:
                 ESP_LOGI(TAG, "Asociado a %s", s_ssid);
                 xEventGroupSetBits(s_wifi_events, WIFI_BIT_CONNECTED);
+                s_redes_fallos_seguidos = 0;   /* la proxima caida vuelve a diagnosticar rapido */
                 break;
             case WIFI_EVENT_STA_DISCONNECTED: {
                 wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;

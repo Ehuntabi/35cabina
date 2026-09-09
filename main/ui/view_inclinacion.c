@@ -129,6 +129,14 @@ static void calib_btn_cb(lv_event_t *e)
 {
     (void)e;
     lv_label_set_text(s_label_status, "Calibrando...");
+    /* Este callback corre en la propia tarea de LVGL: sin forzar el
+     * repintado aqui, "Calibrando..." se quedaba en el arbol de objetos
+     * pero nunca llegaba a pintarse en pantalla -- tilt_calibrate() bloquea
+     * esa MISMA tarea ~0.5s (20 muestras x 20ms, ver tilt.c) antes de que
+     * el bucle de LVGL pueda volver a hacer flush. lv_refr_now() dibuja YA
+     * lo pendiente (aqui, esta etiqueta) sin esperar al siguiente ciclo.
+     * Detectado por el usuario el 09-sep-2026. */
+    lv_refr_now(NULL);
     tilt_calibrate();   /* bloquea ~0.5s (ver tilt.h) */
     lv_label_set_text(s_label_status, "Calibrado");
 }

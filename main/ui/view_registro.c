@@ -4275,6 +4275,14 @@ static void puntual_do_cancelar(void *ud)
                                  COL_ACCION_STOP, "Entendido");
             return;
         }
+        /* Simetria con puntual_do_terminar(): si llego a abrirse carpeta en
+         * la P4 (tipo==SALIDA_PUNTUAL), save_trip_inicio() ya puso activo=1
+         * en el blob del contador (inicio_puntual_resultado_cb). Sin este
+         * cierre, cancelar dejaba ese blob diciendo "viaje activo" para
+         * siempre -- mismo orden que terminar: solo tras el push CON EXITO,
+         * antes de salida_cerrar(). Detectado por el usuario el
+         * 09-sep-2026. */
+        save_trip_fin();
     }
     salida_cerrar();
     mostrar_menu(PAN_PRINCIPAL);

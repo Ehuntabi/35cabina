@@ -57,7 +57,17 @@ static void ta_click_cb(lv_event_t *e)
     entry_screen_open(ta, (const char *)lv_obj_get_user_data(ta), false);
 }
 
-static lv_obj_t *make_field(lv_obj_t *parent, const char *label_text)
+/* max_len: sin esto ningun campo tenia tope, y el guardado (save_wifi_config
+ * via udp_rx_set_credentials / save_portal_creds) escribe en NVS sin
+ * truncar -- pero el RECARGADO si usa buffers fijos (s_ssid/s_pass en
+ * udp_rx.c: 32/64; hu/hp en view_ajustes_refresh: 32/64), asi que un valor
+ * mas largo tecleado aqui se guardaba bien la primera vez y luego, en la
+ * siguiente recarga de esta pantalla, fallaba a leerse -- el campo aparecia
+ * vacio, como si "se hubiera olvidado" la credencial. entry_screen_open ya
+ * respeta lv_textarea_get_max_length() del campo origen (entry_screen.c:113),
+ * asi que el editor a pantalla completa hereda el tope sin tocar nada mas
+ * alli. Detectado por el usuario el 09-sep-2026. */
+static lv_obj_t *make_field(lv_obj_t *parent, const char *label_text, uint32_t max_len)
 {
     lv_obj_t *cont = lv_obj_create(parent);
     lv_obj_set_size(cont, lv_pct(100), 56);
@@ -74,6 +84,7 @@ static lv_obj_t *make_field(lv_obj_t *parent, const char *label_text)
 
     lv_obj_t *ta = lv_textarea_create(cont);
     lv_textarea_set_one_line(ta, true);
+    lv_textarea_set_max_length(ta, max_len);
     lv_obj_set_size(ta, lv_pct(100), 34);
     lv_obj_align(ta, LV_ALIGN_TOP_LEFT, 0, 18);
     /* En CLICKED y no en FOCUSED: al volver del editor el campo conserva el
@@ -315,8 +326,8 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_width(hint, lv_pct(100));
 
-    s_ssid_ta = make_field(s_wifi, "SSID");
-    s_pass_ta = make_field(s_wifi, "Password");
+    s_ssid_ta = make_field(s_wifi, "SSID", 32);          /* s_ssid[33] en udp_rx.c */
+    s_pass_ta = make_field(s_wifi, "Password", 64);      /* s_pass[65] en udp_rx.c */
 
     lv_obj_t *hint2 = lv_label_create(s_wifi);
     lv_label_set_text(hint2, "Usuario y clave del PORTAL de la P4 (no del wifi),\npara mandarle los apuntes del viaje");
@@ -324,8 +335,8 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(hint2, &lv_font_montserrat_14, 0);
     lv_obj_set_width(hint2, lv_pct(100));
 
-    s_http_user_ta = make_field(s_wifi, "Usuario del portal");
-    s_http_pass_ta = make_field(s_wifi, "Clave del portal");
+    s_http_user_ta = make_field(s_wifi, "Usuario del portal", 32);   /* hu[33] en view_ajustes_refresh */
+    s_http_pass_ta = make_field(s_wifi, "Clave del portal", 64);     /* hp[65] en view_ajustes_refresh */
 
     lv_obj_t *btn = lv_btn_create(s_wifi);
     lv_obj_set_width(btn, lv_pct(100));
