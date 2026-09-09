@@ -1792,6 +1792,24 @@ static const char *cola_fallo_texto(viaje_cola_error_t motivo)
  * que acabas de ver en la confirmacion: si lo que se guarda no coincidiera con
  * lo que te enseño la pantalla, seria un fallo dificil de pillar. Se le quitan
  * los saltos de linea, que ahi eran para leerlo y en un CSV sobran. */
+/* Guard id-estable para "sueltos" (Peaje y similares SIN evento que cerrar),
+ * mismo papel que "contado" + s_cerrando_id tienen para un evento: si el
+ * primer intento falla, un reintento reutiliza el MISMO id y NO vuelve a
+ * contar -- si simplemente sumaramos otra vez, cada intento fallido dejaria
+ * un conteo fantasma que nunca llega a la cola, inflando "esperados" para
+ * el resto del viaje. Se limpia (pendiente=false) solo al tener EXITO; si el
+ * usuario abandona el intento sin reintentar, el conteo ya hecho se queda
+ * puesto -- eso SI es la perdida real que "esperados" tiene que reflejar
+ * (mismo espiritu que trip_eventos_get(), ver config_storage.c). Requiere
+ * que do_save() NO llame a show_grid()/clear_forms() en el fallo de un
+ * suelto -- si no, no habria forma de distinguir "reintento de lo mismo" de
+ * "entrada nueva" (el formulario vacio no deja ninguna pista). Detectado
+ * por el usuario el 09-sep-2026. */
+static struct {
+    bool     pendiente;
+    uint32_t id;
+} s_suelto_pendiente[CAT_COUNT];
+
 /* Devuelve si el apunte ha llegado a la cola. El aviso al usuario ya se
  * muestra aqui dentro en los dos casos de fallo; quien llama solo tiene que
  * decidir si puede seguir adelante (por ejemplo, si puede dar por cerrado el
@@ -1806,10 +1824,18 @@ static bool apunte_encolar(categoria_t cat)
      * el mismo #define que usa viaje_cola.c para rechazar (con aviso) lo que
      * no le cabe -- no pueden divergir. */
     char b[CUERPO_MAX];
-    /* El id: el reservado al declarar el evento si se esta cerrando uno, o uno
-     * nuevo si el apunte nace aqui (peaje, o los formularios del menu). */
+    /* El id: el reservado al declarar el evento si se esta cerrando uno; si
+     * el apunte nace aqui (peaje, o los formularios del menu), el de un
+     * intento anterior sin exito de ESTA MISMA categoria (ver
+     * s_suelto_pendiente arriba), o uno nuevo si no habia ninguno pendiente. */
+    uint32_t id_suelto = 0;
+    if (s_cerrando < 0) {
+        id_suelto = s_suelto_pendiente[cat].pendiente
+                  ? s_suelto_pendiente[cat].id
+                  : next_trip_seq();
+    }
     size_t u = apunte_cabecera(b, sizeof(b),
-                               s_cerrando >= 0 ? s_cerrando_id : next_trip_seq(),
+                               s_cerrando >= 0 ? s_cerrando_id : id_suelto,
                                CAT_CLAVE[cat]);
 
     switch (cat) {
@@ -1939,17 +1965,21 @@ static bool apunte_encolar(categoria_t cat)
     u = apunte_cerrar(b, sizeof(b), u, resumen);
 
     /* Se cuenta ANTES de encolar y pase lo que pase: si el apunte se pierde,
-     * la P4 tiene que enterarse de que le falta uno. PERO solo una vez por
-     * evento: si se esta cerrando uno (s_cerrando >= 0) y el push de un
-     * intento anterior fallo, el evento sigue abierto para reintentar con el
-     * MISMO id -- y sin este guard, cada reintento volvia a contar el mismo
-     * evento, inflando "esperados" de mas. Los apuntes que nacen aqui (Peaje,
-     * sin evento que cerrar) no tienen este riesgo: cada intento lleva un id
-     * nuevo de verdad. Detectado auditando el 07-sep-2026. */
+     * la P4 tiene que enterarse de que le falta uno. Guard para no recontar
+     * un reintento de lo MISMO: en un evento, "contado" sobre su propio
+     * slot; en un suelto, s_suelto_pendiente[cat] (ver comentario mas
+     * arriba, junto a su declaracion). */
     const salida_evento_t *ev_cerrando = (s_cerrando >= 0) ? salida_evento_en(s_cerrando) : NULL;
-    if (!ev_cerrando || !ev_cerrando->contado) {
+    bool ya_contado = (s_cerrando >= 0) ? (ev_cerrando && ev_cerrando->contado)
+                                        : s_suelto_pendiente[cat].pendiente;
+    if (!ya_contado) {
         trip_eventos_inc();
-        if (s_cerrando >= 0) salida_evento_marcar_contado(s_cerrando);
+        if (s_cerrando >= 0) {
+            salida_evento_marcar_contado(s_cerrando);
+        } else {
+            s_suelto_pendiente[cat].pendiente = true;
+            s_suelto_pendiente[cat].id = id_suelto;
+        }
     }
 
     if (u == 0) {
@@ -1968,6 +1998,12 @@ static bool apunte_encolar(categoria_t cat)
         confirm_screen_aviso("No he podido apuntarlo", cola_fallo_texto(motivo),
                              COL_ACCION_STOP, "Entendido");
         return false;
+    }
+    /* Exito: si era un suelto pendiente, deja de estarlo -- la PROXIMA vez
+     * que se guarde esta categoria (aunque sea la puntual/viaje siguiente)
+     * es una entrada nueva de verdad, con su propio id. */
+    if (s_cerrando < 0) {
+        s_suelto_pendiente[cat].pendiente = false;
     }
     return true;
 }
@@ -1994,8 +2030,20 @@ static void do_save(void *user_data)
         /* El aviso ya lo ha mostrado apunte_encolar(). Si se estaba cerrando
          * un evento, se deja ABIERTO -- igual que hace parada_terminar() --
          * para no perderlo: antes se borraba igual y no habia forma de
-         * reintentarlo. */
-        show_grid();
+         * reintentarlo.
+         *
+         * Si era un SUELTO (Peaje...), NO se vuelve al menu: show_grid()
+         * llama a clear_forms() y vaciaria el dato tecleado, con lo que un
+         * reintento seria indistinguible de una entrada nueva y
+         * s_suelto_pendiente (ver apunte_encolar) no podria evitar recontar.
+         * Se deja el formulario tal cual -- "Guardar" vuelve a intentarlo
+         * con el MISMO id; salir a proposito (flecha atras u otra
+         * categoria) SI pasa por show_grid()/clear_forms() como siempre, y
+         * ahi se da el intento por abandonado (el conteo ya hecho se
+         * queda). */
+        if (s_cerrando >= 0) {
+            show_grid();
+        }
         return;
     }
 
@@ -2041,6 +2089,12 @@ static void viaje_marcar_iniciado(void)
          * se va la luz. Peor seria no dejar iniciarlo por un fallo de NVS. */
         ESP_LOGW(TAG, "No se pudo guardar el estado del viaje: %s", esp_err_to_name(err));
     }
+    /* s_suelto_pendiente es estado de sesion, no de viaje: sin este reset, un
+     * suelto abandonado sin exito en un viaje ANTERIOR dejaria su categoria
+     * "pendiente" para siempre, y la primera vez que se intentase esa misma
+     * categoria en ESTE viaje reutilizaria el id viejo y no contaria -- justo
+     * cuando trip_eventos_get() ya ha vuelto a 1 para este viaje nuevo. */
+    memset(s_suelto_pendiente, 0, sizeof(s_suelto_pendiente));
 }
 
 static void viaje_marcar_terminado(void)
@@ -3402,6 +3456,9 @@ static void inicio_puntual_resultado_cb(bool ok, int estado)
         ESP_LOGW(TAG, "No se pudo resetear el contador de la puntual: %s",
                  esp_err_to_name(err_cnt));
     }
+    /* Mismo motivo que en viaje_marcar_iniciado(): s_suelto_pendiente es
+     * estado de sesion, no debe sobrevivir a un viaje/puntual anterior. */
+    memset(s_suelto_pendiente, 0, sizeof(s_suelto_pendiente));
     /* AQUI NO se declara todavia: esto es solo la salida del garaje, y la
      * ruta ya se esta grabando desde este instante. Declarar (guardar la
      * hora/sitio de la accion) se hace luego, al llegar -- ver
