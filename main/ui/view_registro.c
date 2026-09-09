@@ -4076,12 +4076,25 @@ static void puntual_do_cancelar(void *ud)
     mostrar_menu(PAN_PRINCIPAL);
 }
 
-/* En una salida puntual la flecha de arriba no navega: la CANCELA. No hay a
- * donde volver -- la salida ya esta abierta -- asi que deshacerla es lo unico
- * que tiene sentido. */
+/* En una salida puntual SIN DECLARAR la flecha de arriba no navega: la
+ * CANCELA. Antes de llegar al sitio no hay ningun progreso real que
+ * proteger, asi que deshacerla es lo unico que tiene sentido (te
+ * arrepientes antes de haber hecho nada).
+ *
+ * En cuanto se declara (Ya he llegado) esto cambia: la pantalla de Puntual
+ * solo ensena un estado, no lleva ningun dato util para pasarte todo el
+ * trayecto de vuelta mirandola -- lo logico es volver a la pantalla
+ * principal, que si trae informacion. Por eso, una vez declarada, la
+ * flecha vuelve a navegar sin mas: "Terminar salida" sigue esperando en
+ * Puntual para cuando vuelvas a entrar. Perderia sentido cancelar aqui una
+ * salida que ya tiene progreso real -- para eso esta el boton explicito. */
 static void puntual_cancelar_cb(lv_event_t *e)
 {
     (void)e;
+    if (salida_get()->tipo == SALIDA_PUNTUAL && salida_get()->declarado) {
+        mostrar_menu(PAN_PRINCIPAL);
+        return;
+    }
     if (avisa_de_lo_abierto("Cancelar la salida?", puntual_do_cancelar)) return;
     puntual_do_cancelar(NULL);
 }
