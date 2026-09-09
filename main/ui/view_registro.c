@@ -3285,25 +3285,29 @@ static void volver_al_menu(void)
 /* Abre el evento y vuelve al menu. Los tres motivos por los que puede no
  * poder se dicen por separado: "no se ha podido" a secas deja al usuario sin
  * saber si insistir, encender la P4 o cerrar algo. */
-static void declarar(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
+/* Devuelve si el evento ha quedado realmente abierto. Lo necesita
+ * view_registro_puntual_declarar_llegada(): marcar la salida como
+ * "declarada" cuando esto falla dejaria la puntual sin ningun apunte y sin
+ * forma de volver a intentarlo (ver el comentario de esa funcion). */
+static bool declarar(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
 {
     if (reloj_p4() == 0) {
         confirm_screen_aviso("Enciende la P4 primero",
                              "Sin ella no se que hora es,\ny el apunte va con su hora\nde inicio.",
                              COL_ACCION_STOP, "Entendido");
-        return;
+        return false;
     }
     if (salida_eventos_abiertos() >= SALIDA_EVENTOS_MAX) {
         confirm_screen_aviso("Ya hay cuatro sin cerrar",
                              "No cabe otra. Te preguntare\npor ellas cuando vuelvas a\ndar el contacto.",
                              COL_ACCION_STOP, "Entendido");
-        return;
+        return false;
     }
     if (salida_evento_abrir(tipo, sub, sub2) == 0) {
         confirm_screen_aviso("No he podido anotarlo",
                              "El apunte no se ha guardado.\nAvisa de esto, es un fallo\ndel programa.",
                              COL_ACCION_STOP, "Entendido");
-        return;
+        return false;
     }
 
     /* Viene del aviso de "estuviste parado": la parada no empieza ahora, empieza
@@ -3319,7 +3323,7 @@ static void declarar(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
         s_olvido_anotando = false;
         salida_evento_set_inicio(idx, s_olvido_ini);
         parada_terminar((void *)(intptr_t)idx);
-        return;
+        return true;
     }
 
     /* El cartel no es solo para enterarse: lleva DESHACER. El evento se abre de
@@ -3336,6 +3340,7 @@ static void declarar(evento_tipo_t tipo, uint8_t sub, uint8_t sub2)
                         "Deshacer", "Vale", deshacer_ultimo, NULL);
     confirm_screen_ok_destructivo();
     volver_al_menu();
+    return true;
 }
 
 /* tipo, sub y sub2 caben de sobra en el user_data del evento. */
@@ -3362,8 +3367,20 @@ static void declarar_cb(lv_event_t *e)
 static evento_tipo_t s_puntual_tipo;
 static uint8_t       s_puntual_sub, s_puntual_sub2;
 
+/* Single-flight del inicio: un doble toque en una casilla (facil con la
+ * autocaravana en marcha) disparaba dos p4_api_viaje_inicio() con ids
+ * distintos -- la segunda solia recibir 409 y mandaba a "la P4 ya tiene un
+ * viaje abierto" justo despues de que la primera hubiera abierto bien la
+ * misma salida, ofreciendo apartar lo que se acababa de empezar. Puesto a
+ * true justo antes de la llamada (puntual_iniciar_real) y a false en
+ * cuanto llega la respuesta, por cualquier camino. Detectado el
+ * 09-sep-2026, antes de la primera salida real. */
+static bool s_puntual_iniciando;
+
 static void inicio_puntual_resultado_cb(bool ok, int estado)
 {
+    s_puntual_iniciando = false;
+
     /* Mismo callejon sin salida que un viaje real: si la P4 ya tiene algo
      * abierto que esta pantalla no conocia, el unico sitio para resolverlo
      * es PAN_VIAJE_P4. */
@@ -3411,15 +3428,22 @@ static void inicio_puntual_resultado_cb(bool ok, int estado)
 static void puntual_iniciar_real(void *ud)
 {
     (void)ud;
+    s_puntual_iniciando = true;
     uint32_t ahora = reloj_p4();
     if (!p4_api_viaje_inicio(next_trip_seq(), EV_NOMBRE[s_puntual_tipo],
                              ahora / 86400u, inicio_puntual_resultado_cb)) {
+        /* lanzar() ha fallado en el acto (sin memoria para la tarea): la
+         * respuesta nunca va a llegar, asi que aqui nadie mas va a soltar
+         * el guardian -- hay que hacerlo ya mismo. */
+        s_puntual_iniciando = false;
         aviso_envio_fallo(0, EV_NOMBRE[s_puntual_tipo]);
     }
 }
 
 static void puntual_declarar_cb(lv_event_t *e)
 {
+    if (s_puntual_iniciando) return;   /* ya hay un inicio en el aire, ignora el segundo toque */
+
     uint32_t v = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
     s_puntual_tipo = (evento_tipo_t)(v & 0xFF);
     s_puntual_sub  = (uint8_t)((v >> 8) & 0xFF);
@@ -3468,8 +3492,12 @@ void view_registro_puntual_declarar_llegada(void)
                  salida_get()->nombre);
         return;
     }
-    salida_puntual_marcar_declarada();
-    declarar(tipo, 0, 0);
+    /* Marcar declarada SOLO si el evento ha quedado realmente abierto: si
+     * declarar() falla (P4 se fue justo ahora, etc.) ya ensena su propio
+     * aviso, y aqui no se toca el estado -- para que la pastilla y "Ya he
+     * llegado" se lo sigan ofreciendo en el siguiente intento en vez de
+     * dejar la puntual "declarada" sin ningun apunte dentro. */
+    if (declarar(tipo, 0, 0)) salida_puntual_marcar_declarada();
 }
 
 static void puntual_llegada_cb(lv_event_t *e)
@@ -4116,8 +4144,15 @@ static void puntual_do_cancelar(void *ud)
         p4_api_cuerpo_descartar(cuerpo, sizeof(cuerpo), next_trip_seq());
         viaje_cola_error_t motivo;
         if (!viaje_cola_push(cuerpo, &motivo)) {
-            ESP_LOGW(TAG, "descartar la salida puntual no se pudo encolar: %s",
-                     cola_fallo_texto(motivo));
+            /* Si esto no se encola, la carpeta se queda abierta de verdad
+             * en la P4 -- justo lo que el comentario de arriba dice que hay
+             * que evitar. Cerrar la salida aqui igualmente la dejaria como
+             * "fantasma": nada en la pantalla, pero abierta en la P4 (se
+             * descubriria con el 409 la proxima vez). Se avisa y NO se
+             * cierra, para que se pueda reintentar con la flecha atras. */
+            confirm_screen_aviso("No he podido cancelarla", cola_fallo_texto(motivo),
+                                 COL_ACCION_STOP, "Entendido");
+            return;
         }
     }
     salida_cerrar();
