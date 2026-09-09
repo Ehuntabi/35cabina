@@ -2105,6 +2105,35 @@ static void inicio_resultado_cb(bool ok, int estado)
     show_grid();
 }
 
+/* Comprueba el GPS antes de abrir la carpeta de un viaje o de una salida
+ * puntual: sin fix, la P4 no anota nada en ruta.csv hasta que lo consiga
+ * (ver fila_ruta() en config_server_viaje.c, del lado de la P4), y el
+ * trayecto de ida se perderia sin que nadie se entere hasta revisarlo en
+ * casa. No se obliga a esperar -- a veces no corre prisa (arrancas ya con
+ * el motor en marcha, el GPS tarda un par de minutos en frio) y otras si,
+ * asi que se deja elegir. Con fix, 'seguir' se llama directo sin preguntar
+ * nada. */
+static void con_gps_o_seguir(confirm_cb_t seguir)
+{
+    mini_data_t d;
+    data_model_get(&d);
+    if (d.gps_estado == 2) { seguir(NULL); return; }
+    confirm_screen_open("Sin ubicacion GPS todavia",
+                        "Sin ella no se grabara el\ntrayecto de ida hasta que\nla encuentre.",
+                        COL_BOMBONA, "Continuar igual", "Esperar",
+                        seguir, NULL);
+}
+
+static void viaje_iniciar_real(void *ud)
+{
+    (void)ud;
+    uint32_t ahora = reloj_p4();
+    if (!p4_api_viaje_inicio(next_trip_seq(), s_viaje_destino,
+                             ahora / 86400u, inicio_resultado_cb)) {
+        aviso_envio_fallo(0, "Viaje");
+    }
+}
+
 /* Viaje no lleva resumen: no hay nada tecleado que repasar. Solo el segundo
  * toque, que aqui importa mas que en ningun sitio -- finalizar un viaje por un
  * roce cierra el registro en curso de la P4. */
@@ -2118,10 +2147,7 @@ static void viaje_do_iniciar(void *ud)
                              COL_ACCION_STOP, "Entendido");
         return;
     }
-    if (!p4_api_viaje_inicio(next_trip_seq(), s_viaje_destino,
-                             ahora / 86400u, inicio_resultado_cb)) {
-        aviso_envio_fallo(0, "Viaje");
-    }
+    con_gps_o_seguir(viaje_iniciar_real);
 }
 
 /* El FIN va por la COLA, no directo como el inicio, y la diferencia es a
@@ -3366,6 +3392,16 @@ static void inicio_puntual_resultado_cb(bool ok, int estado)
     mostrar_menu(PAN_PRINCIPAL);
 }
 
+static void puntual_iniciar_real(void *ud)
+{
+    (void)ud;
+    uint32_t ahora = reloj_p4();
+    if (!p4_api_viaje_inicio(next_trip_seq(), EV_NOMBRE[s_puntual_tipo],
+                             ahora / 86400u, inicio_puntual_resultado_cb)) {
+        aviso_envio_fallo(0, EV_NOMBRE[s_puntual_tipo]);
+    }
+}
+
 static void puntual_declarar_cb(lv_event_t *e)
 {
     uint32_t v = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
@@ -3373,17 +3409,13 @@ static void puntual_declarar_cb(lv_event_t *e)
     s_puntual_sub  = (uint8_t)((v >> 8) & 0xFF);
     s_puntual_sub2 = (uint8_t)((v >> 16) & 0xFF);
 
-    uint32_t ahora = reloj_p4();
-    if (ahora == 0) {   /* comprobado tambien en puntual_cb; puede caerse en medio */
+    if (reloj_p4() == 0) {   /* comprobado tambien en puntual_cb; puede caerse en medio */
         confirm_screen_aviso("Enciende la P4 primero",
                              "Sin ella no se que dia es,\ny la carpeta lleva la fecha\nen el nombre.",
                              COL_ACCION_STOP, "Entendido");
         return;
     }
-    if (!p4_api_viaje_inicio(next_trip_seq(), EV_NOMBRE[s_puntual_tipo],
-                             ahora / 86400u, inicio_puntual_resultado_cb)) {
-        aviso_envio_fallo(0, EV_NOMBRE[s_puntual_tipo]);
-    }
+    con_gps_o_seguir(puntual_iniciar_real);
 }
 
 /* --- Declarar la LLEGADA de una SALIDA PUNTUAL ya abierta -------------------
