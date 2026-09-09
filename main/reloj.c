@@ -22,6 +22,10 @@
 #include "reloj.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "esp_log.h"
+#include "net/mini_proto.h"
+
+static const char *TAG = "reloj";
 
 /* Los escribe rx_task y los lee la UI: dos tareas. El portMUX es el mismo
  * patron que data_model.c, y por el mismo motivo -- leer los dos campos por
@@ -33,6 +37,18 @@ static int64_t  s_epoch_us;    /* esp_timer en ese instante */
 void reloj_set_desde_p4(uint32_t epoch_local)
 {
     if (epoch_local == 0) return;          /* la P4 aun no sabe la hora */
+    /* La P4 ya filtra esto en el envio (udp_tx.c: solo manda epoch_local si
+     * ahora > MINI_EPOCH_VALIDO), pero es el otro firmware, por UDP -- no
+     * fiarse ciegamente de ese invariante aqui tambien. Un epoch absurdo
+     * (1970 y pico, si algun dia cambia el filtro del emisor o hay un bug de
+     * protocolo) se trata igual que "sin hora": mejor marcar aproximada la
+     * hora de un apunte que sellarla con una fecha imposible. Detectado por
+     * el usuario el 09-sep-2026. */
+    if (epoch_local < (uint32_t)MINI_EPOCH_VALIDO) {
+        ESP_LOGW(TAG, "epoch_local de la P4 fuera de rango (%lu), lo trato como sin hora",
+                 (unsigned long)epoch_local);
+        return;
+    }
     int64_t ahora_us = esp_timer_get_time();
     portENTER_CRITICAL(&s_mux);
     s_epoch    = epoch_local;

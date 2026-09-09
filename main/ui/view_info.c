@@ -1108,8 +1108,14 @@ void view_info_set_pendientes(size_t pendientes)
      * pendientes_aplicar() desde la tarea LVGL sin ninguna proteccion
      * propia, asi que dejarla fuera es una carrera de datos de verdad
      * (aunque en ESP32, con un size_t alineado, en la practica no llegue a
-     * partirse). Detectado el 09-sep-2026. */
-    if (lvgl_port_lock(1000)) {
+     * partirse). Detectado el 09-sep-2026.
+     * lock(0) = espera SIN LIMITE (ver lvgl_port_lock()), no un timeout de
+     * 1s: con timeout, un flush largo de LVGL perdia el dato en silencio
+     * (ni se actualizaba s_pend_valor ni se programaba el async_call) hasta
+     * el siguiente cambio de cola. Mismo patron ya usado en p4_api.c: mutex
+     * reentrante, la tarea LVGL nunca espera por esta llamada, sin riesgo
+     * de deadlock. Detectado por el usuario el 09-sep-2026. */
+    if (lvgl_port_lock(0)) {
         s_pend_valor = pendientes;
         lv_async_call(pendientes_aplicar, NULL);
         lvgl_port_unlock();
@@ -1123,7 +1129,7 @@ void view_info_set_sin_cerrar(size_t sin_cerrar)
      * acordarse de cual es cual el dia que se toque (o de que una de ellas
      * empiece a llamarse tambien desde otro sitio). El lock es reentrante,
      * asi que tomarlo aqui aunque ya se este en la tarea LVGL no bloquea. */
-    if (lvgl_port_lock(1000)) {
+    if (lvgl_port_lock(0)) {
         s_sin_cerrar = sin_cerrar;
         lv_async_call(pendientes_aplicar, NULL);
         lvgl_port_unlock();
@@ -1136,7 +1142,7 @@ void view_info_set_puntual_pendiente(const char *nombre)
      * pendientes_aplicar sobre por que se combinan en vez de llevar cada
      * una la suya. Asignacion DENTRO del lock, mismo motivo que en
      * view_info_set_pendientes(). */
-    if (lvgl_port_lock(1000)) {
+    if (lvgl_port_lock(0)) {
         s_puntual_pendiente = (nombre && nombre[0]);
         if (s_puntual_pendiente) snprintf(s_puntual_nombre, sizeof(s_puntual_nombre), "%s", nombre);
         lv_async_call(pendientes_aplicar, NULL);

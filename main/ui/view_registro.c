@@ -4168,19 +4168,34 @@ static void parada_boot_timer_cb(lv_timer_t *t)
      * tick 2s despues. Detectado el 09-sep-2026. */
     if (confirm_screen_is_open()) return;
 
-    /* Primero lo que quedo abierto, uno por tick hasta agotarlos (ver
-     * s_boot_preguntados): el timer SIGUE vivo tras preguntar por uno, no se
-     * borra hasta que hay_algo_que_cerrar() diga que ya no queda ninguno sin
-     * ofrecer. El hueco de "parada olvidada" solo se mira si no quedaba nada
-     * que cerrar, que es ademas la condicion que pone
-     * salida_olvido_pendiente(). */
+    /* Sin hora de la P4 no hay NADA que se pueda ofrecer todavia: ni
+     * "hay algo que cerrar" (cierre_preguntar_en devuelve false sin hora, ver
+     * mas abajo) ni "parada olvidada" (necesita calcular cuanto duro el
+     * apagon). Un solo tope para las dos ramas: antes esta comprobacion solo
+     * cubria la rama de "parada olvidada", y si habia algun evento SIN
+     * cerrar (hay_algo_que_cerrar()==true) el timer se quedaba reintentando
+     * cada 2s para siempre si la P4 nunca llegaba a dar la hora -- el evento
+     * nunca se marca como "preguntado" porque cierre_preguntar_en() nunca
+     * consigue mostrar el dialogo. Al agotarse, se deja para el siguiente
+     * arranque con contacto (los eventos siguen abiertos, no se pierde
+     * nada). Detectado por el usuario el 09-sep-2026. */
+    if (reloj_p4() == 0) {
+        if (++intentos < OLVIDO_INTENTOS_MAX) return;
+        ESP_LOGW(TAG, "boot: sin hora de la P4 tras %d intentos, dejo de preguntar por ahora",
+                 OLVIDO_INTENTOS_MAX);
+        s_parada_ya_preguntada = true;
+        lv_timer_del(t);
+        return;
+    }
+
+    /* Ya hay hora: primero lo que quedo abierto, uno por tick hasta
+     * agotarlos (ver s_boot_preguntados). El hueco de "parada olvidada" solo
+     * se mira si no quedaba nada que cerrar, que es ademas la condicion que
+     * pone salida_olvido_pendiente(). */
     if (hay_algo_que_cerrar()) {
         parada_preguntar();
         return;
     }
-
-    /* Sin la hora de la P4 no se sabe cuanto estuvo apagada: se espera. */
-    if (reloj_p4() == 0 && ++intentos < OLVIDO_INTENTOS_MAX) return;
 
     olvido_preguntar();
     s_parada_ya_preguntada = true;

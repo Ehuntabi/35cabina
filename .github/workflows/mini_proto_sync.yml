@@ -30,3 +30,39 @@ jobs:
 
       - name: Comparar mini_proto.h entre los dos proyectos
         run: diff 35cabina/main/net/mini_proto.h victron/main/net/mini_proto.h
+
+  # Espejo del job "viaje_body_sync" de victron (el otro repo del par): el
+  # limite de cuerpo del apunte tambien se mantiene sincronizado A MANO
+  # (CUERPO_MAX en este satelite tiene que caber siempre en VIAJE_BODY_MAX de
+  # la P4, con margen). El guard vivia SOLO en el CI de victron -- el repo
+  # que puede romper el limite (subiendo CUERPO_MAX aqui) no tenia forma de
+  # detectarlo el mismo, solo se enteraba victron, y despues del push, sin
+  # senalar a quien lo causo. Detectado por el usuario el 09-sep-2026 (mismo
+  # motivo que mini_proto_sync).
+  viaje_body_sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 35cabina
+        uses: actions/checkout@v4
+        with:
+          path: 35cabina
+
+      - name: Checkout victron
+        uses: actions/checkout@v4
+        with:
+          repository: Ehuntabi/victron-jc1060p470c-esp32p4
+          path: victron
+
+      - name: Comprobar que CUERPO_MAX (satelite) cabe en VIAJE_BODY_MAX (P4)
+        run: |
+          cuerpo_max=$(grep -oP '#define\s+CUERPO_MAX\s+\K[0-9]+' 35cabina/main/net/viaje_cola.h)
+          body_max=$(grep -oP '#define\s+VIAJE_BODY_MAX\s+\K[0-9]+' victron/main/portal/config_server_viaje.c)
+          echo "CUERPO_MAX (35cabina) = $cuerpo_max"
+          echo "VIAJE_BODY_MAX (victron) = $body_max"
+          if [ -z "$cuerpo_max" ] || [ -z "$body_max" ]; then
+            echo "No se pudo leer alguna de las dos constantes"; exit 1
+          fi
+          if [ "$cuerpo_max" -ge "$body_max" ]; then
+            echo "CUERPO_MAX ($cuerpo_max) ya no cabe con margen en VIAJE_BODY_MAX ($body_max) -- subir VIAJE_BODY_MAX en victron"
+            exit 1
+          fi

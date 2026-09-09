@@ -22,7 +22,15 @@ descartado como producto).
   `docs/superpowers/specs/` para los diseños detallados de cada fase.
 
 ## CI
-- Job `mini_proto_sync` (07-sep-2026, único CI de este repo por ahora): compara
-  byte a byte `main/net/mini_proto.h` contra la copia de `Ehuntabi/victron-
-  jc1060p470c-esp32p4` y falla si difieren. No hay build de ESP-IDF en CI
-  (a diferencia de victron, que sí lo tiene).
+- `.github/workflows/mini_proto_sync.yml` (único workflow de este repo por
+  ahora, dos jobs):
+  - `mini_proto_sync` (07-sep-2026): compara byte a byte
+    `main/net/mini_proto.h` contra la copia de `Ehuntabi/victron-
+    jc1060p470c-esp32p4` y falla si difieren.
+  - `viaje_body_sync` (09-sep-2026, espejo del job del mismo nombre en
+    victron): comprueba que `CUERPO_MAX` (`main/net/viaje_cola.h`, aquí)
+    cabe con margen en `VIAJE_BODY_MAX` (`main/portal/config_server_viaje.c`,
+    victron) — antes el guard solo vivía en el CI de victron, así que este
+    repo, el único que puede romper el límite subiendo `CUERPO_MAX`, no
+    tenía forma de detectarlo él mismo.
+  - No hay build de ESP-IDF en CI (a diferencia de victron, que sí lo tiene).

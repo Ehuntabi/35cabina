@@ -86,6 +86,22 @@ void nav_ir_a_info(void)
 
 void nav_ir_a_registros(void)
 {
+    /* Ajustes se abre como overlay SIN tocar s_current (ver nav_open_ajustes):
+     * si se abrio estando ya en NAV_REGISTRO, el early-return de aqui abajo
+     * no hacia NADA -- la pantalla activa de verdad seguia siendo Ajustes, y
+     * el formulario se montaba detras suya. "Rellenarlo" parecia no
+     * responder. Cerrar Ajustes aqui sin avisar, aunque haya un campo a
+     * medio escribir: coherente con que el propio carrusel ya descarta el
+     * formulario de Registro al cambiar de pantalla sin preguntar (ver
+     * gesture_cb/view_registro_reset). Detectado por el usuario el
+     * 09-sep-2026. */
+    if (lv_scr_act() == s_ajustes_screen) {
+        s_current = NAV_REGISTRO;
+        lv_scr_load_anim(s_screens[NAV_REGISTRO], LV_SCR_LOAD_ANIM_MOVE_BOTTOM,
+                         NAV_ANIM_MS, 0, false);
+        return;
+    }
+
     /* Ya estando en registros no se recarga la pantalla: recargarla haria una
      * animacion de "cambio de pagina" hacia la misma pagina, que se ve como un
      * parpadeo sin motivo. */
