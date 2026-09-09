@@ -3387,6 +3387,21 @@ static void inicio_puntual_resultado_cb(bool ok, int estado)
         return;
     }
     ESP_LOGI(TAG, "salida puntual iniciada en la P4: '%s'", EV_NOMBRE[s_puntual_tipo]);
+    /* Mismo contador que un viaje real (trip_eventos), reseteado a 1 (el
+     * inicio ya cuenta) igual que hace viaje_marcar_iniciado() -- para que
+     * puntual_do_terminar() pueda mandar trip_eventos_get()+1 en vez de un
+     * "3" fijo. El fijo asumia SIEMPRE inicio+registro+fin, pero si la
+     * parada se descarta (avisa_de_lo_abierto en Terminar salida, o un
+     * Deshacer que no llega a redeclararse) el registro de en medio nunca
+     * se manda, y el "3" quedaba de mas -- INCOMPLETO falso en la P4 sin
+     * haberse perdido nada de verdad. 'destino' aqui es solo la categoria
+     * (Repostaje...), no se usa para nada mas que este contador. Detectado
+     * el 09-sep-2026. */
+    esp_err_t err_cnt = save_trip_inicio(EV_NOMBRE[s_puntual_tipo]);
+    if (err_cnt != ESP_OK) {
+        ESP_LOGW(TAG, "No se pudo resetear el contador de la puntual: %s",
+                 esp_err_to_name(err_cnt));
+    }
     /* AQUI NO se declara todavia: esto es solo la salida del garaje, y la
      * ruta ya se esta grabando desde este instante. Declarar (guardar la
      * hora/sitio de la accion) se hace luego, al llegar -- ver
@@ -3519,9 +3534,18 @@ static void puntual_do_terminar(void *ud)
 {
     (void)ud;
     char cuerpo[80];
-    /* Recuento fijo: inicio + el registro de la parada + este fin = 3. Una
-     * puntual lleva SIEMPRE exactamente una parada. */
-    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), 3);
+    /* trip_eventos_get()+1, NO un "3" fijo: una puntual SIEMPRE tiene como
+     * mucho una parada, pero no siempre la tiene DE VERDAD mandada -- si se
+     * descarta con eventos abiertos (avisa_de_lo_abierto ya lo permite,
+     * confirmando que se pierden) el registro de en medio nunca llega a la
+     * cola, y un "3" fijo ahi habria dejado esperados de mas: INCOMPLETO
+     * falso en la P4 sin haberse perdido nada de verdad (aplicados si que
+     * habria sido menor, pero solo porque el propio contador mentia). El
+     * contador se reseteo a 1 al abrir (ver inicio_puntual_resultado_cb), y
+     * apunte_encolar() ya lo incrementa con el mismo trip_eventos_inc() que
+     * usa un viaje real -- mismo patron que viaje_do_finalizar. Detectado
+     * el 09-sep-2026. */
+    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), trip_eventos_get() + 1);
 
     viaje_cola_error_t motivo;
     if (!viaje_cola_push(cuerpo, &motivo)) {
@@ -3529,6 +3553,7 @@ static void puntual_do_terminar(void *ud)
                              COL_ACCION_STOP, "Entendido");
         return;
     }
+    save_trip_fin();   /* mismo cierre del contador que un viaje real; ver arriba */
     salida_cerrar();
     mostrar_menu(PAN_PRINCIPAL);
 }
