@@ -4372,6 +4372,15 @@ static void crear_menus(lv_obj_t *parent)
                                         COL_ACCION_OK, 220, puntual_llegada_cb, NULL);
     s_puntual_fin_btn = boton_grande(s_puntual_fin_cont, NULL, "Terminar salida", NULL,
                                      COL_ACCION_STOP, puntual_terminar_cb, NULL);
+    /* boton_grande trae flex_grow(1): pensado para cuando ES el unico
+     * contenido de una pantalla y se reparte todo el alto disponible. Aqui,
+     * dentro de s_puntual_fin_cont (alto SIZE_CONTENT), ese grow se
+     * descontrolaba y el boton se comia la pantalla entera. Se anula el
+     * grow y se fija un tamano concreto -- mas grande que boton_chico
+     * (46 px) pero acotado. */
+    lv_obj_set_flex_grow(s_puntual_fin_btn, 0);
+    lv_obj_set_width(s_puntual_fin_btn, 260);
+    lv_obj_set_height(s_puntual_fin_btn, 90);
     lv_obj_add_flag(s_puntual_fin_cont, LV_OBJ_FLAG_HIDDEN);
 
     /* --- 6. Por que paras --- */
