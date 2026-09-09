@@ -34,9 +34,6 @@ esp_err_t save_wifi_config(const char *ssid, const char *pass);
 // contacto se corta a menudo con la 3.5" en marcha -- dejaba activo=true con
 // destino="" o al reves. Detectado auditando el 07-sep-2026.
 //
-// Si no hay nada guardado devuelve false (sin error).
-esp_err_t load_trip_active(bool *active_out);
-
 /* Destino del viaje en curso (da nombre a la carpeta en la SD de la P4). */
 esp_err_t load_trip_destino(char *out, size_t *len);
 

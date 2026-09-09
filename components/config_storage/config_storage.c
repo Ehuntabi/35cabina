@@ -210,15 +210,6 @@ static esp_err_t trip_blob_save(const trip_blob_t *in)
     return err;
 }
 
-esp_err_t load_trip_active(bool *active_out)
-{
-    if (!active_out) return ESP_ERR_INVALID_ARG;
-    trip_blob_t b;
-    trip_blob_load(&b);
-    *active_out = (b.activo != 0);
-    return ESP_OK;
-}
-
 /* Destino del viaje en curso. Es lo que da nombre a la carpeta en la SD de la
  * P4, asi que se guarda aqui tambien: si la 3.5" se reinicia a media entrega,
  * tiene que poder repetir el mismo nombre y no crear una carpeta nueva. */

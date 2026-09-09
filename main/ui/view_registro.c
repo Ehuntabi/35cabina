@@ -2111,7 +2111,7 @@ static void con_gps_o_seguir(confirm_cb_t seguir)
     if (d.gps_estado == 2) { seguir(NULL); return; }
     confirm_screen_open("Sin ubicacion GPS todavia",
                         "Sin ella no se grabara el\ntrayecto de ida hasta que\nla encuentre.",
-                        COL_BOMBONA, "Continuar igual", "Esperar",
+                        COL_BOMBONA, "Continuar igual", "Cancelar",
                         seguir, NULL);
 }
 
