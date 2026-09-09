@@ -462,10 +462,11 @@ delante para que se ordenen solas:
 - **El nombre no se puede cambiar después.** Te avisa antes de empezar.
 - **Hace falta la P4 encendida.** Si no, avisa («Enciende la P4 primero») y no
   empieza: la carpeta lleva la fecha en el nombre y esta pantalla no tiene reloj.
-- **Si el GPS todavía no tiene posición**, pregunta si esperar unos segundos o
-  continuar igual: sin fix no se graba nada del trayecto hasta que lo encuentre,
-  y así te enteras antes de arrancar en vez de descubrirlo al volver a casa. Lo
-  mismo pasa al empezar una salida puntual.
+- **Si el GPS todavía no tiene posición**, pregunta si continuar igual o
+  cancelar: sin fix no se graba nada del trayecto hasta que lo encuentre, y así
+  te enteras antes de arrancar en vez de descubrirlo al volver a casa. Nada se
+  ha creado todavía en la P4 en este punto, así que cancelar no deshace nada.
+  Lo mismo pasa al empezar una salida puntual.
 
 ### Si la P4 dice que ya hay un viaje abierto
 
