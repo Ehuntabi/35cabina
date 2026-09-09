@@ -1,5 +1,14 @@
 # Name,    Type, SubType,  Offset,    Size,      Flags
-nvs,       data, nvs,      0x9000,    0x4000,
-otadata,   data, ota,      0xd000,    0x2000,
-factory,   app,  factory,  0x10000,   0x3F0000,
-coredump,  data, coredump, 0x400000,  0x10000,
+# nvs a 64 KB desde el 09-sep-2026 (antes 16 KB): con la cola de apuntes a 16
+# entradas de hasta 896 B cada una (14 KB solo eso) mas todo lo demas que
+# vive en el mismo namespace (Wi-Fi, salida en curso, contador, calibracion),
+# 16 KB nunca llegaba a caber -- y NVS ademas reserva SIEMPRE una pagina
+# entera libre para su propio compactado, asi que de esos 16 KB solo ~12 se
+# podian usar de verdad. El aviso preventivo de "casi llena" no se alcanzaba
+# nunca antes de un fallo real de escritura. factory se desplaza a 0x20000
+# (alineado a 64 KB, que exigen las particiones de tipo app) para que quepa
+# la nvs mas grande entre medias sin solaparse con nada.
+nvs,       data, nvs,      0x9000,    0x10000,
+otadata,   data, ota,      0x19000,   0x2000,
+factory,   app,  factory,  0x20000,   0x3F0000,
+coredump,  data, coredump, 0x410000,  0x10000,

@@ -30,13 +30,16 @@ static const char *TAG = "viaje_cola";
 #define NS          "vcola"
 #define K_CABEZA    "cabeza"     /* indice del proximo a enviar */
 #define K_COLA      "cola"       /* indice donde se escribira el siguiente */
+#define K_CAPACIDAD "capacidad"  /* la CAPACIDAD que estaba en vigor al escribir esto */
 
-/* DIECISEIS, y el numero sale de una cuenta, no de un redondeo: la particion
- * "nvs" son 16 KB (partitions.csv) y ahi dentro viven ademas las credenciales
- * Wi-Fi, la calibracion del nivel, el estado de la salida y los contadores del
- * viaje. Con la pernocta -- el apunte mas largo, 693 bytes medidos -- no caben
- * ni de lejos las 64 que decia antes: se llenaria la NVS mucho antes de llegar,
- * y el aviso saldria como un error raro de escritura en vez de un "cola llena".
+/* DIECISEIS, y el numero sale de una cuenta, no de un redondeo. La particion
+ * "nvs" paso de 16 a 64 KB el 09-sep-2026 (partitions.csv): con 16 KB, entre
+ * la cola (16 entradas de hasta 896 B, ~14 KB) y todo lo demas que vive en el
+ * mismo namespace (Wi-Fi, calibracion, estado de la salida, contadores) mas
+ * la pagina entera que NVS se reserva siempre para su propio compactado, no
+ * cabia de verdad -- el aviso de "casi llena" no se alcanzaba nunca antes de
+ * un fallo real de escritura. Con 64 KB si cabe con margen; el numero de
+ * entradas se deja en 16 porque ya era el que hacia falta, no el problema.
  *
  * Que se acumulen apuntes NO es lo normal: la P4 esta siempre encendida y la
  * cola se vacia sola en segundos. Si crece es que no le llegan. Al llenarse se
@@ -462,13 +465,37 @@ static void migrar_cola(void)
         ESP_LOGW(TAG, "borradas entradas huerfanas de la capacidad anterior");
     }
 
+    /* Detector de verdad: compara la CAPACIDAD que estaba en vigor la
+     * ULTIMA vez que se escribio algo aqui contra la de ahora -- no cuantas
+     * entradas hay pendientes. El chequeo antiguo (cola-cabeza > CAPACIDAD)
+     * se colaba un caso: con pocos apuntes pendientes, el RECUENTO seguia
+     * pareciendo valido bajo la capacidad nueva, pero la clave de cada uno
+     * sale de "indice modulo capacidad" -- un cambio de capacidad cambia a
+     * que clave apunta cada indice aunque el recuento no lo delate, y la
+     * cabeza podia acabar leyendo el cuerpo de OTRO apunte sin que nada lo
+     * detectase. Detectado el 09-sep-2026 (auditando el cambio de NVS a 64
+     * KB). K_CAPACIDAD no existia antes de este mismo arreglo: "primera_vez"
+     * cubre ese arranque de transicion sin tirar una cola que ya era valida. */
+    uint32_t capacidad_anterior = 0;
+    bool primera_vez = (nvs_get_u32(h, K_CAPACIDAD, &capacidad_anterior) != ESP_OK);
+
     uint32_t cabeza = 0, cola = 0;
     nvs_get_u32(h, K_CABEZA, &cabeza);
     nvs_get_u32(h, K_COLA, &cola);
-    if ((uint32_t)(cola - cabeza) > CAPACIDAD) {
-        ESP_LOGE(TAG, "los indices de la cola no cuadran (%lu pendientes para "
-                      "una capacidad de %d): la reinicio",
-                 (unsigned long)(cola - cabeza), CAPACIDAD);
+
+    bool capacidad_cambio = !primera_vez && capacidad_anterior != CAPACIDAD;
+    bool no_cuadra = (uint32_t)(cola - cabeza) > CAPACIDAD;
+
+    if (capacidad_cambio || no_cuadra) {
+        if (capacidad_cambio) {
+            ESP_LOGE(TAG, "la capacidad de la cola cambio de %lu a %d: las claves "
+                          "ya no se corresponden con los indices, la reinicio",
+                     (unsigned long)capacidad_anterior, CAPACIDAD);
+        } else {
+            ESP_LOGE(TAG, "los indices de la cola no cuadran (%lu pendientes para "
+                          "una capacidad de %d): la reinicio",
+                     (unsigned long)(cola - cabeza), CAPACIDAD);
+        }
         for (uint32_t i = 0; i < CAPACIDAD; i++) {
             char clave[16];
             snprintf(clave, sizeof(clave), "q%lu", (unsigned long)i);
@@ -476,9 +503,15 @@ static void migrar_cola(void)
         }
         nvs_set_u32(h, K_CABEZA, 0);
         nvs_set_u32(h, K_COLA, 0);
+        nvs_set_u32(h, K_CAPACIDAD, CAPACIDAD);
         nvs_commit(h);
         nvs_close(h);
         return;
+    }
+
+    if (primera_vez) {
+        nvs_set_u32(h, K_CAPACIDAD, CAPACIDAD);
+        nvs_commit(h);
     }
 
     /* Apunte huerfano: viaje_cola_push() graba el CUERPO y lo comitea, y solo
