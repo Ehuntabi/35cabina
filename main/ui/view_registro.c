@@ -4360,11 +4360,18 @@ static void crear_menus(lv_obj_t *parent)
     /* Los dos son excluyentes -- ver puntual_refresh(): mientras no se ha
      * declarado se ofrece "Ya he llegado" (lo mismo que hace el aviso de la
      * pantalla principal); en cuanto se usa, se cambia por "Terminar salida"
-     * y no vuelve a ensenarse. */
+     * y no vuelve a ensenarse.
+     *
+     * "Terminar salida" va con boton_grande y no boton_chico (a diferencia
+     * de "Terminar salida" en un viaje real, que SI es chico porque ahi
+     * comparte pantalla con "Anadir parada", la accion principal mientras
+     * el viaje sigue en marcha): en una puntual ya declarada no hay nada
+     * mas que hacer en esta pantalla salvo terminar, asi que es ella la
+     * accion principal. */
     s_puntual_llegada_btn = boton_chico(s_puntual_fin_cont, "Ya he llegado",
                                         COL_ACCION_OK, 220, puntual_llegada_cb, NULL);
-    s_puntual_fin_btn = boton_chico(s_puntual_fin_cont, "Terminar salida",
-                                    COL_ACCION_STOP, 220, puntual_terminar_cb, NULL);
+    s_puntual_fin_btn = boton_grande(s_puntual_fin_cont, NULL, "Terminar salida", NULL,
+                                     COL_ACCION_STOP, puntual_terminar_cb, NULL);
     lv_obj_add_flag(s_puntual_fin_cont, LV_OBJ_FLAG_HIDDEN);
 
     /* --- 6. Por que paras --- */
