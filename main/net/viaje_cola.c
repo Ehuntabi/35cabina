@@ -56,6 +56,14 @@ static const char *TAG = "viaje_cola";
 #define REINTENTO_MS 15000
 
 static SemaphoreHandle_t s_mutex;
+/* Despierta a reparto_task al momento cuando se encola algo con la cola
+ * vacia, en vez de esperar a que se cumpla el REINTENTO_MS del sueno en
+ * curso (hasta 15 s de retraso en enviar, p.ej. el "fin" de una salida
+ * puntual justo despues de tocar Terminar salida). SOLO se usa para eso: el
+ * reintento tras un fallo (401/409/400) se queda con el sueno fijo de
+ * siempre, porque ahi despertar antes no ayuda -- la cabeza sigue siendo la
+ * misma entrada problematica. Detectado el 09-sep-2026. */
+static SemaphoreHandle_t s_despertar;
 static viaje_cola_cambio_cb s_cambio_cb;
 
 /* ── NVS ──────────────────────────────────────────────────────────────────── */
@@ -184,6 +192,10 @@ bool viaje_cola_push(const char *cuerpo, viaje_cola_error_t *motivo_out)
     ESP_LOGI(TAG, "encolado #%lu (%u pendientes): %s",
              (unsigned long)cola, (unsigned)(cola + 1 - cabeza), cuerpo);
     avisar_cambio();
+    /* Si reparto_task esta dormida esperando a que la cola deje de estar
+     * vacia, que se entere ya: sin esto, este apunte podia tardar hasta
+     * REINTENTO_MS (15 s) en empezar a enviarse. */
+    if (s_despertar) xSemaphoreGive(s_despertar);
     return true;
 }
 
@@ -306,9 +318,11 @@ static void reparto_task(void *arg)
                 descartar_cabeza();
                 continue;
             }
-            /* Cola vacia: dormir el ciclo entero. No hay nada que hacer y
-             * despertarse mas a menudo solo gasta bateria. */
-            vTaskDelay(pdMS_TO_TICKS(REINTENTO_MS));
+            /* Cola vacia: dormir hasta REINTENTO_MS, pero SIN esperar a que
+             * se cumpla si mientras tanto se encola algo nuevo -- viaje_
+             * cola_push() suelta este semaforo, y aqui se despierta al
+             * momento en vez de quedarse hasta 15 s sin enviar nada. */
+            xSemaphoreTake(s_despertar, pdMS_TO_TICKS(REINTENTO_MS));
             continue;
         }
 
@@ -500,6 +514,7 @@ static void migrar_cola(void)
 void viaje_cola_init(viaje_cola_cambio_cb cb)
 {
     s_mutex = xSemaphoreCreateMutex();
+    s_despertar = xSemaphoreCreateBinary();
     s_cambio_cb = cb;
 
     migrar_cola();
