@@ -201,3 +201,8 @@ void confirm_screen_close(void)
 {
     if (s_root) close_overlay();
 }
+
+bool confirm_screen_is_open(void)
+{
+    return s_root && !lv_obj_has_flag(s_root, LV_OBJ_FLAG_HIDDEN);
+}

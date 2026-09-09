@@ -18,6 +18,7 @@
 #pragma once
 
 #include "lvgl.h"
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,6 +62,13 @@ void confirm_screen_close(void);
  * reloj. El boton dice 'ok_text' y al pulsarlo solo se cierra. */
 void confirm_screen_aviso(const char *title, const char *body,
                           uint32_t color, const char *ok_text);
+
+/* Si el dialogo esta abierto ahora mismo, esperando que se toque un boton.
+ * La necesita el temporizador de preguntas del arranque (parada_boot_timer_cb
+ * en view_registro.c): con dos o mas eventos sin cerrar, sin esto la
+ * siguiente pregunta sustituia a la que seguia en pantalla antes de que le
+ * diera tiempo a contestarla. */
+bool confirm_screen_is_open(void);
 
 #ifdef __cplusplus
 }

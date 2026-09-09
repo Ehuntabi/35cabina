@@ -3488,7 +3488,17 @@ void view_registro_puntual_declarar_llegada(void)
      * aviso, y aqui no se toca el estado -- para que la pastilla y "Ya he
      * llegado" se lo sigan ofreciendo en el siguiente intento en vez de
      * dejar la puntual "declarada" sin ningun apunte dentro. */
-    if (declarar(tipo, 0, 0)) salida_puntual_marcar_declarada();
+    if (declarar(tipo, 0, 0)) {
+        salida_puntual_marcar_declarada();
+        /* declarar() ya hizo su propio volver_al_menu() para ensenar el
+         * cartel "Anotado" -- pero eso corrio ANTES de esta marca, asi que
+         * la pastilla y el panel de Puntual se refrescaron con declarado
+         * todavia en false: pastilla muerta (toque silencioso, ver el
+         * guardian de arriba) y "Terminar salida" oculto hasta la proxima
+         * navegacion o un reinicio. Refrescar otra vez, ya con el estado
+         * bueno. Detectado el 09-sep-2026 (flanco de 7439984). */
+        volver_al_menu();
+    }
 }
 
 static void puntual_llegada_cb(lv_event_t *e)
@@ -4051,6 +4061,16 @@ static void parada_boot_timer_cb(lv_timer_t *t)
     static uint16_t intentos;
 
     if (s_parada_ya_preguntada) { lv_timer_del(t); return; }
+
+    /* Si ya hay un dialogo esperando respuesta -- el que abrio este mismo
+     * timer en un tick anterior, tipicamente -- no lo pises: con dos o mas
+     * eventos sin cerrar, hay_algo_que_cerrar() seguia dando true en el
+     * SIGUIENTE tick (el que se acaba de preguntar ya cuenta como
+     * "preguntado", pero quedan mas), y esto sustituia la pregunta en
+     * pantalla por la siguiente antes de que diera tiempo a contestarla --
+     * riesgo real de responder a la que no tocaba. Se reintenta el mismo
+     * tick 2s despues. Detectado el 09-sep-2026. */
+    if (confirm_screen_is_open()) return;
 
     /* Primero lo que quedo abierto, uno por tick hasta agotarlos (ver
      * s_boot_preguntados): el timer SIGUE vivo tras preguntar por uno, no se
