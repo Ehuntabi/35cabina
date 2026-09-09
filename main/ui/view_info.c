@@ -27,6 +27,7 @@
 #include "brillo.h"
 #include "net/viaje_cola.h"   /* VIAJE_COLA_CAPACIDAD, para el aviso de casi llena */
 #include "nav.h"
+#include "view_registro.h"    /* view_registro_puntual_declarar_llegada() */
 #include "../data_model.h"
 #include "../lv_port.h"       /* lvgl_port_lock/unlock, ver view_info_set_pendientes() */
 #include "esp_timer.h"
@@ -1010,24 +1011,37 @@ void view_info_create(lv_obj_t *parent)
  * lista de objetos y el fallo aparece mucho despues y en otro sitio. */
 static size_t s_pend_valor;
 static size_t s_sin_cerrar;
+/* Salida puntual abierta pero sin declarar todavia (ver salida_vista_t.
+ * declarado en salida.h). En la practica nunca coincide con s_sin_cerrar
+ * (declarar es justo lo que la hace pasar a "sin cerrar"), pero SI puede
+ * coincidir con s_pend_valor si queda algo atascado en la cola de un viaje
+ * anterior -- de ahi que se combine con el mismo criterio que los otros
+ * dos en vez de necesitar una pastilla propia. */
+static bool s_puntual_pendiente;
+static char s_puntual_nombre[32];
 
-/* UNA sola pastilla para las dos cosas, y no dos: son avisos distintos pero
- * comparten el unico hueco de la pantalla donde no tapan un numero. Dos
- * pastillas se pisarian, y moverlas de sitio segun cual haya se ve peor que
- * leerlas juntas. */
+/* UNA sola pastilla para las tres cosas, y no varias: son avisos distintos
+ * pero comparten el unico hueco de la pantalla donde no tapan un numero.
+ * Varias pastillas se pisarian, y moverlas de sitio segun cual haya se ve
+ * peor que leerlas juntas. */
 static void pendientes_aplicar(void *arg)
 {
     (void)arg;
     if (!s_pendientes) return;
-    if (s_pend_valor == 0 && s_sin_cerrar == 0) {
+    if (!s_puntual_pendiente && s_pend_valor == 0 && s_sin_cerrar == 0) {
         lv_obj_add_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
         return;
     }
-    /* Primero lo que pide algo de ti (cerrar un apunte); despues lo que se
-     * arregla solo en cuanto la P4 aparezca. */
-    /* La flecha solo cuando el toque lleva a algun sitio: "sin enviar" no se
-     * arregla tocando nada, se arregla encendiendo la P4. */
-    if (s_sin_cerrar && s_pend_valor) {
+    /* Primero lo que pide algo de ti (llegar a un sitio, o cerrar un
+     * apunte); despues lo que se arregla solo en cuanto la P4 aparezca.
+     * La flecha solo cuando el toque lleva a algun sitio: "sin enviar" no
+     * se arregla tocando nada, se arregla encendiendo la P4. */
+    if (s_puntual_pendiente && s_pend_valor) {
+        lv_label_set_text_fmt(s_pendientes, "Toca al llegar a %s - %u sin enviar  >",
+                              s_puntual_nombre, (unsigned)s_pend_valor);
+    } else if (s_puntual_pendiente) {
+        lv_label_set_text_fmt(s_pendientes, "Toca al llegar a %s  >", s_puntual_nombre);
+    } else if (s_sin_cerrar && s_pend_valor) {
         lv_label_set_text_fmt(s_pendientes, "%u sin cerrar - %u sin enviar  >",
                               (unsigned)s_sin_cerrar, (unsigned)s_pend_valor);
     } else if (s_sin_cerrar) {
@@ -1075,6 +1089,9 @@ static void pendientes_aplicar(void *arg)
 static void pendientes_click_cb(lv_event_t *e)
 {
     (void)e;
+    /* Primero lo que pide algo de ti, en el mismo orden que pendientes_
+     * aplicar(): llegar a un sitio antes que cerrar un apunte. */
+    if (s_puntual_pendiente) { view_registro_puntual_declarar_llegada(); return; }
     if (s_sin_cerrar == 0) return;   /* "sin enviar" no lleva a ningun sitio */
     nav_ir_a_sin_cerrar();
 }
@@ -1102,6 +1119,19 @@ void view_info_set_sin_cerrar(size_t sin_cerrar)
      * empiece a llamarse tambien desde otro sitio). El lock es reentrante,
      * asi que tomarlo aqui aunque ya se este en la tarea LVGL no bloquea. */
     s_sin_cerrar = sin_cerrar;
+    if (lvgl_port_lock(1000)) {
+        lv_async_call(pendientes_aplicar, NULL);
+        lvgl_port_unlock();
+    }
+}
+
+void view_info_set_puntual_pendiente(const char *nombre)
+{
+    /* Misma pastilla que "sin cerrar"/"sin enviar" -- ver el comentario de
+     * pendientes_aplicar sobre por que se combinan en vez de llevar cada
+     * una la suya. */
+    s_puntual_pendiente = (nombre && nombre[0]);
+    if (s_puntual_pendiente) snprintf(s_puntual_nombre, sizeof(s_puntual_nombre), "%s", nombre);
     if (lvgl_port_lock(1000)) {
         lv_async_call(pendientes_aplicar, NULL);
         lvgl_port_unlock();

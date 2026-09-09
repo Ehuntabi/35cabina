@@ -104,11 +104,17 @@ typedef struct {
 
 typedef struct {
     salida_tipo_t tipo;
-    const char   *nombre;    /* "" si es puntual */
-    const char   *carpeta;   /* "" si es puntual */
+    const char   *nombre;    /* "" si no hay salida */
+    const char   *carpeta;   /* "" si no hay salida */
     uint32_t      epoch_ini;
     uint8_t       n_eventos;
     const salida_evento_t *eventos;
+    /* Solo tiene sentido en SALIDA_PUNTUAL: si ya se ha declarado la unica
+     * parada que le corresponde (se llego al sitio de la accion). Antes de
+     * eso solo se ha abierto la carpeta en la P4, sin apuntar nada todavia.
+     * Un viaje real no la usa -- admite cualquier numero de paradas y no
+     * necesita saber si ya hubo alguna. */
+    bool          declarado;
 } salida_vista_t;
 
 /* --- Ciclo de vida ------------------------------------------------------- */
@@ -129,9 +135,17 @@ static inline bool salida_hay(void) { return salida_get()->tipo != SALIDA_NINGUN
  * vacio al sanearlo. */
 bool salida_abrir_viaje(const char *nombre);
 
-/* Una gestion y vuelta. No tiene carpeta: sus apuntes van al historial del
- * vehiculo, no a un viaje. */
-bool salida_abrir_puntual(void);
+/* Una gestion y vuelta (repostar, ITV, bombona, taller). Se trata como un
+ * viaje de una sola parada: crea la misma carpeta "<nombre>_AAAAMMDD" que
+ * salida_abrir_viaje (la P4 la antepone ella sola, ver op_inicio), asi que
+ * queda descargable igual que un viaje. Se llama DESPUES de que la P4 ya
+ * haya confirmado el inicio -- igual que salida_abrir_viaje. */
+bool salida_abrir_puntual(const char *nombre);
+
+/* Marca la salida puntual en curso como ya declarada (ver el campo
+ * 'declarado' de salida_vista_t). Llamar justo antes de declarar su unica
+ * parada -- de ahi en adelante no se vuelve a ofrecer declararla otra vez. */
+void salida_puntual_marcar_declarada(void);
 
 /* Cierra la salida y OLVIDA los eventos que quedasen abiertos. Quien llama
  * tiene que haberlos despachado antes (salida_eventos_abiertos() == 0). */

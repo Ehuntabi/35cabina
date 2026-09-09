@@ -28,6 +28,24 @@ void view_registro_reset(void);
  * de un toque a lo que hay que hacer. No hace nada si no hay nada abierto. */
 void view_registro_abrir_sin_cerrar(void);
 
+/* Declara la llegada de la salida puntual en curso: guarda la hora y la
+ * marca como ya declarada. La usa el aviso "Toca al llegar a <categoria>"
+ * de la pantalla principal (ver view_info_set_puntual_pendiente en
+ * view_info.h) al tocarlo. No hace nada si no hay una salida puntual
+ * esperando declararse. */
+void view_registro_puntual_declarar_llegada(void);
+
+/* Solo para el modo captura de pantallas (ver capture_carousel.h): recorrer
+ * todos los menus y formularios de este carrusel sin pasar por la
+ * navegacion normal (que exige una salida de verdad abierta). No las use
+ * nada mas. */
+int view_registro_num_pantallas(void);
+int view_registro_num_formularios(void);
+void view_registro_mostrar_pantalla(int p);
+void view_registro_mostrar_formulario(int idx);
+const char *view_registro_nombre_pantalla(int p);
+const char *view_registro_nombre_formulario(int idx);
+
 #ifdef __cplusplus
 }
 #endif

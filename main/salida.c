@@ -22,13 +22,13 @@ static const char *TAG = "salida";
 
 /* Version del blob. Si algun dia cambia la forma de la estructura, subir esto
  * hace que lo viejo se descarte en vez de leerse torcido. */
-#define SALIDA_BLOB_VERSION  1
+#define SALIDA_BLOB_VERSION  2
 
 typedef struct {
     uint8_t  version;
     uint8_t  tipo;                     /* salida_tipo_t */
     uint8_t  n_eventos;
-    uint8_t  _pad;
+    uint8_t  declarado;                /* solo se usa en SALIDA_PUNTUAL */
     uint32_t epoch_ini;
     char     nombre[SALIDA_NOMBRE_MAX];
     char     carpeta[SALIDA_CARPETA_MAX];
@@ -66,6 +66,7 @@ static void refrescar_vista(void)
     s_vista.epoch_ini = s_st.epoch_ini;
     s_vista.n_eventos = s_st.n_eventos;
     s_vista.eventos   = s_st.eventos;
+    s_vista.declarado = s_st.declarado != 0;
 }
 
 /* ── La marca de vida ────────────────────────────────────────────────────── */
@@ -128,7 +129,9 @@ void salida_init(void)
         ESP_LOGI(TAG, "viaje en curso: '%s' (%s), %u evento(s) abierto(s)",
                  s_st.nombre, s_st.carpeta, (unsigned)s_st.n_eventos);
     } else if (s_st.tipo == SALIDA_PUNTUAL) {
-        ESP_LOGI(TAG, "salida puntual en curso, %u evento(s) abierto(s)",
+        ESP_LOGI(TAG, "salida puntual en curso: '%s' (%s), %s, %u evento(s) abierto(s)",
+                 s_st.nombre, s_st.carpeta,
+                 s_st.declarado ? "ya declarada" : "esperando llegar",
                  (unsigned)s_st.n_eventos);
     } else {
         ESP_LOGI(TAG, "sin salida en curso");
@@ -262,7 +265,7 @@ bool salida_abrir_viaje(const char *nombre)
     return true;
 }
 
-bool salida_abrir_puntual(void)
+bool salida_abrir_puntual(const char *nombre)
 {
     uint32_t ahora;
     if (!reloj_ahora(&ahora)) {
@@ -270,14 +273,33 @@ bool salida_abrir_puntual(void)
         return false;
     }
 
+    char limpio[SALIDA_NOMBRE_MAX];
+    if (sanear(nombre ? nombre : "", limpio, sizeof(limpio)) == 0) {
+        ESP_LOGW(TAG, "no se abre salida puntual: el nombre queda vacio al sanearlo");
+        return false;
+    }
+
+    char fecha[9];
+    salida_fecha_compacta(ahora, fecha, sizeof(fecha));
+
     memset(&s_st, 0, sizeof(s_st));
     s_st.tipo      = SALIDA_PUNTUAL;
     s_st.epoch_ini = ahora;
+    snprintf(s_st.nombre,  sizeof(s_st.nombre),  "%s", nombre ? nombre : "");
+    snprintf(s_st.carpeta, sizeof(s_st.carpeta), "%s_%s", limpio, fecha);
 
     guardar();
     refrescar_vista();
-    ESP_LOGI(TAG, "salida puntual abierta");
+    ESP_LOGI(TAG, "salida puntual abierta: '%s' -> carpeta '%s'", s_st.nombre, s_st.carpeta);
     return true;
+}
+
+void salida_puntual_marcar_declarada(void)
+{
+    s_st.declarado = 1;
+    guardar();
+    refrescar_vista();
+    ESP_LOGI(TAG, "salida puntual declarada: '%s'", s_st.nombre);
 }
 
 void salida_cerrar(void)

@@ -35,6 +35,17 @@ void view_info_set_pendientes(size_t pendientes);
  * de ir a mirarlo, que es justo lo que no se hace. */
 void view_info_set_sin_cerrar(size_t sin_cerrar);
 
+/* Aviso "Toca al llegar a <nombre>" para una salida puntual que ya abrio la
+ * carpeta en la P4 pero todavia no ha llegado al sitio de la accion (ver el
+ * campo 'declarado' de salida_vista_t en salida.h). NULL o "" lo esconde.
+ *
+ * Va en ESTA pantalla por el mismo motivo que view_info_set_sin_cerrar: es
+ * la que esta puesta mientras conduces hacia el sitio, y ahi es donde hace
+ * falta el recordatorio, no en un menu al que solo se vuelve si te
+ * acuerdas. Al tocarlo, declara la llegada (ver
+ * view_registro_puntual_declarar_llegada en view_registro.h). */
+void view_info_set_puntual_pendiente(const char *nombre);
+
 #ifdef __cplusplus
 }
 #endif

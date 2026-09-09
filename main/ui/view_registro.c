@@ -41,6 +41,7 @@
 #include "esp_timer.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 static const char *TAG = "view_registro";
 
@@ -417,6 +418,8 @@ typedef enum {
 static void ocultar_menus(void);
 static void volver_al_menu(void);
 static void mostrar_menu(pantalla_t p);
+static void puntual_refresh(void);
+static bool avisa_de_lo_abierto(const char *titulo, confirm_cb_t si);
 
 /* Volver al menu deja los formularios EN BLANCO: se vacian sus campos, casillas
  * y selectores. Como es el unico camino de vuelta (boton Volver, guardado
@@ -1981,9 +1984,10 @@ static void do_save(void *user_data)
 {
     categoria_t cat = (categoria_t)(uintptr_t)user_data;
 
-    /* Basta con que haya SALIDA, no viaje: los apuntes de una salida puntual
-     * van al historial del vehiculo en la P4 (/sdcard/vehiculo). Antes se
-     * exigia viaje y un repostaje camino del taller no se podia guardar. */
+    /* Basta con que haya SALIDA, no viaje-de-toda-la-vida: una salida
+     * puntual tiene su propia carpeta en la P4 igual que un viaje (ver
+     * puntual_declarar_cb), asi que esto vale para las dos. Antes se exigia
+     * viaje y un repostaje camino del taller no se podia guardar. */
     if (!salida_hay()) {
         ESP_LOGW(TAG, "'%s' NO se manda: no hay ninguna salida en marcha", CAT_NOMBRE[cat]);
         confirm_screen_aviso("Guardado solo aqui",
@@ -2009,7 +2013,14 @@ static void do_save(void *user_data)
         if (km > 0) save_ultimo_km((uint32_t)km);
     }
 
-    /* Guardado y entregado a la cola: el evento deja de estar abierto. */
+    /* Guardado y entregado a la cola: el evento deja de estar abierto.
+     *
+     * Esto NO termina la salida puntual aunque solo lleve una parada:
+     * rellenar el repostaje/ITV/etc es la parada, pero la salida sigue en
+     * marcha hasta volver al garaje (puede que a horas o dias de aqui). El
+     * cierre de verdad es un boton aparte, "Terminar salida" en la pantalla
+     * de Puntual (ver puntual_terminar_cb) -- mismo criterio que un viaje,
+     * que tampoco se cierra al anadir una parada. */
     if (s_cerrando >= 0) {
         salida_evento_borrar(s_cerrando);
         ESP_LOGI(TAG, "evento cerrado con el formulario de %s", CAT_NOMBRE[cat]);
@@ -3144,10 +3155,11 @@ static void salida_tira_refresh(void)
 {
     const salida_vista_t *s = salida_get();
     char txt[SALIDA_NOMBRE_MAX + 32];
-    /* Una salida puntual no tiene nombre, y dejar el hueco en blanco hacia que
-     * la tira empezase por un guion suelto. */
-    int  n = snprintf(txt, sizeof(txt), "%s",
-                      s->tipo == SALIDA_PUNTUAL ? "Salida puntual" : s->nombre);
+    /* Una salida puntual SI tiene nombre desde que se trata como un viaje de
+     * una sola parada (el tipo elegido: Repostaje, ITV...), asi que se
+     * ensena igual que el de un viaje. Antes no lo tenia y aqui se ponia el
+     * generico "Salida puntual" para no dejar la tira en blanco. */
+    int  n = snprintf(txt, sizeof(txt), "%s", s->nombre);
     /* snprintf devuelve lo que HABRIA escrito: si truncase, txt+n se saldria
      * del buffer. Con los tamanos de ahora no llega a pasar, pero el dia que
      * el nombre crezca esto seria una pisada de memoria muy dificil de ver. */
@@ -3166,6 +3178,12 @@ static void salida_tira_refresh(void)
      * conduces. Aqui, porque por esta funcion pasan TODOS los cambios: abrir,
      * deshacer, borrar, cerrar una parada y terminar la salida. */
     view_info_set_sin_cerrar((size_t)abiertos);
+    /* Aviso "toca al llegar a <categoria>": solo mientras la puntual esta
+     * en camino y todavia no se ha declarado (ver view_registro_puntual_
+     * declarar_llegada). NULL lo esconde -- en cualquier otro momento (sin
+     * salida, viaje real, o puntual ya declarada) no pinta nada aqui. */
+    view_info_set_puntual_pendiente(
+        (s->tipo == SALIDA_PUNTUAL && !s->declarado) ? s->nombre : NULL);
     /* La flecha no es adorno: avisa de que la etiqueta se toca, que es por
      * donde se llega a borrar un apunte puesto por error. */
     char chip[32];
@@ -3218,6 +3236,7 @@ static void mostrar_menu(pantalla_t p)
 
     salida_tira_refresh();
     if (p == PAN_ABIERTOS) abiertos_refresh();
+    if (p == PAN_PUNTUAL) puntual_refresh();
     for (int i = 0; i < PAN_COUNT; i++) {
         if (!s_menus[i]) continue;
         if (i == (int)p) lv_obj_clear_flag(s_menus[i], LV_OBJ_FLAG_HIDDEN);
@@ -3301,6 +3320,190 @@ static void declarar_cb(lv_event_t *e)
     uint32_t v = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
     declarar((evento_tipo_t)(v & 0xFF), (uint8_t)((v >> 8) & 0xFF),
              (uint8_t)((v >> 16) & 0xFF));
+}
+
+/* --- Declarar dentro de una SALIDA PUNTUAL ---------------------------------
+ *
+ * Se trata como un viaje de una sola parada: la carpeta en la P4 se abre AL
+ * TOCAR el boton (Repostaje/Bombona/ITV/Averia), no al rellenar los datos --
+ * igual que un viaje exige la P4 antes de nada porque la carpeta lleva la
+ * fecha en el nombre. El "destino" que se manda es el nombre del tipo
+ * (EV_NOMBRE); la P4 le antepone la fecha ella sola (op_inicio), asi que sale
+ * "AAAA-MM-DD_Repostaje" igual que un viaje de verdad -- descargable igual.
+ *
+ * p4_api_done_cb no lleva user_data, asi que el tipo/sub/sub2 elegido se
+ * guarda aqui para cuando llegue la respuesta. */
+static evento_tipo_t s_puntual_tipo;
+static uint8_t       s_puntual_sub, s_puntual_sub2;
+
+static void inicio_puntual_resultado_cb(bool ok, int estado)
+{
+    /* Mismo callejon sin salida que un viaje real: si la P4 ya tiene algo
+     * abierto que esta pantalla no conocia, el unico sitio para resolverlo
+     * es PAN_VIAJE_P4. */
+    if (!ok && estado == 409) { mostrar_menu(PAN_VIAJE_P4); return; }
+    if (!ok) { aviso_envio_fallo(estado, EV_NOMBRE[s_puntual_tipo]); return; }
+    if (!salida_abrir_puntual(EV_NOMBRE[s_puntual_tipo])) {
+        /* Sin hora no puede ser -- se acaba de usar para el inicio -- pero si
+         * pasara, el "viaje" quedaria abierto en la P4 y no en la pantalla;
+         * se veria al momento igual que en inicio_resultado_cb. */
+        confirm_screen_aviso("No he podido empezarla",
+                             "La salida no se ha guardado.\nAvisa de esto, es un fallo\ndel programa.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    ESP_LOGI(TAG, "salida puntual iniciada en la P4: '%s'", EV_NOMBRE[s_puntual_tipo]);
+    /* AQUI NO se declara todavia: esto es solo la salida del garaje, y la
+     * ruta ya se esta grabando desde este instante. Declarar (guardar la
+     * hora/sitio de la accion) se hace luego, al llegar -- ver
+     * view_registro_puntual_declarar_llegada(), disparado por el aviso de
+     * la pantalla principal o por el boton "Ya he llegado" de esta misma
+     * pantalla. Separarlo en dos pasos es lo que permite grabar el trayecto
+     * de ida completo en vez de solo la vuelta. */
+    confirm_screen_aviso("Salida abierta",
+                         "Toca el aviso de la pantalla\nprincipal en cuanto llegues\nal sitio.",
+                         COL_ACCION_OK, "Vale");
+    mostrar_menu(PAN_PRINCIPAL);
+}
+
+static void puntual_declarar_cb(lv_event_t *e)
+{
+    uint32_t v = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
+    s_puntual_tipo = (evento_tipo_t)(v & 0xFF);
+    s_puntual_sub  = (uint8_t)((v >> 8) & 0xFF);
+    s_puntual_sub2 = (uint8_t)((v >> 16) & 0xFF);
+
+    uint32_t ahora = reloj_p4();
+    if (ahora == 0) {   /* comprobado tambien en puntual_cb; puede caerse en medio */
+        confirm_screen_aviso("Enciende la P4 primero",
+                             "Sin ella no se que dia es,\ny la carpeta lleva la fecha\nen el nombre.",
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    if (!p4_api_viaje_inicio(next_trip_seq(), EV_NOMBRE[s_puntual_tipo],
+                             ahora / 86400u, inicio_puntual_resultado_cb)) {
+        aviso_envio_fallo(0, EV_NOMBRE[s_puntual_tipo]);
+    }
+}
+
+/* --- Declarar la LLEGADA de una SALIDA PUNTUAL ya abierta -------------------
+ *
+ * s_puntual_tipo es una variable de RAM que no sobrevive un apagon, y esta
+ * funcion se puede llamar mucho despues del toque que abrio la salida
+ * (incluso tras reiniciar el contacto por el camino). Por eso el tipo se
+ * recupera del NOMBRE que ya quedo guardado en la propia salida (NVS),
+ * buscandolo en EV_NOMBRE -- no hace falta guardar nada mas nuevo. */
+static bool puntual_tipo_por_nombre(const char *nombre, evento_tipo_t *out)
+{
+    for (int i = 0; i < EV_COUNT; i++) {
+        if (EV_NOMBRE[i] && strcmp(EV_NOMBRE[i], nombre) == 0) {
+            *out = (evento_tipo_t)i;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* La llama el aviso "Toca al llegar a <categoria>" de la pantalla principal
+ * (ver view_info_set_puntual_pendiente) y tambien el boton equivalente de
+ * esta pantalla, por si se toca desde aqui en vez de desde alli. Guarda la
+ * hora de llegada (declarar) y marca la salida como declarada para que no
+ * se pueda volver a tocar -- una puntual es SIEMPRE una sola parada, a
+ * diferencia de un viaje real que admite cualquier numero de ellas. */
+void view_registro_puntual_declarar_llegada(void)
+{
+    if (salida_get()->tipo != SALIDA_PUNTUAL || salida_get()->declarado) return;
+
+    evento_tipo_t tipo;
+    if (!puntual_tipo_por_nombre(salida_get()->nombre, &tipo)) {
+        ESP_LOGE(TAG, "llegada de puntual: nombre '%s' no reconocido",
+                 salida_get()->nombre);
+        return;
+    }
+    salida_puntual_marcar_declarada();
+    declarar(tipo, 0, 0);
+}
+
+static void puntual_llegada_cb(lv_event_t *e)
+{
+    (void)e;
+    view_registro_puntual_declarar_llegada();
+}
+
+/* --- Terminar una SALIDA PUNTUAL --------------------------------------------
+ *
+ * Rellenar el dato de la parada (arriba, do_save) NO termina la salida: eso
+ * es solo la gestion en si (el surtidor, el taller...), y de ahi a volver al
+ * garaje puede haber horas o dias. El cierre de verdad es este boton, que
+ * solo se ensena cuando ya hay una puntual en curso -- ver puntual_refresh(),
+ * enganchado a mostrar_menu(). Mismo patron que terminar_salida_cb/
+ * viaje_do_finalizar para un viaje real. */
+static void puntual_do_terminar(void *ud)
+{
+    (void)ud;
+    char cuerpo[80];
+    /* Recuento fijo: inicio + el registro de la parada + este fin = 3. Una
+     * puntual lleva SIEMPRE exactamente una parada. */
+    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), 3);
+
+    viaje_cola_error_t motivo;
+    if (!viaje_cola_push(cuerpo, &motivo)) {
+        confirm_screen_aviso("No he podido apuntarlo", cola_fallo_texto(motivo),
+                             COL_ACCION_STOP, "Entendido");
+        return;
+    }
+    salida_cerrar();
+    mostrar_menu(PAN_PRINCIPAL);
+}
+
+static void puntual_terminar_cb(lv_event_t *e)
+{
+    (void)e;
+    if (avisa_de_lo_abierto("Terminar la salida?", puntual_do_terminar)) return;
+    confirm_screen_open("Terminar la salida?", NULL, COL_ACCION_STOP,
+                        "Si, terminar", "Cancelar", puntual_do_terminar, NULL);
+    confirm_screen_ok_destructivo();
+}
+
+/* Filas de las 4 casillas (ocultas mientras la puntual esta en curso: solo
+ * hay una parada por salida, no tiene sentido ofrecer elegir otra) y el
+ * bloque de "Terminar salida" (oculto hasta que SI hay una en curso).
+ * Handles guardados en crear_menus(). */
+static lv_obj_t *s_puntual_filas[2];
+static lv_obj_t *s_puntual_fin_cont;
+static lv_obj_t *s_puntual_fin_lbl;
+static lv_obj_t *s_puntual_llegada_btn;   /* "Ya he llegado", solo antes de declarar */
+static lv_obj_t *s_puntual_fin_btn;       /* "Terminar salida", solo tras declarar */
+
+static void puntual_refresh(void)
+{
+    const salida_vista_t *s = salida_get();
+    bool en_curso  = (s->tipo == SALIDA_PUNTUAL);
+    bool declarado = en_curso && s->declarado;
+
+    for (int i = 0; i < 2; i++) {
+        if (!s_puntual_filas[i]) continue;
+        if (en_curso) lv_obj_add_flag(s_puntual_filas[i], LV_OBJ_FLAG_HIDDEN);
+        else          lv_obj_clear_flag(s_puntual_filas[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    if (!s_puntual_fin_cont) return;
+    if (!en_curso) { lv_obj_add_flag(s_puntual_fin_cont, LV_OBJ_FLAG_HIDDEN); return; }
+
+    /* Antes de declarar: en camino, la ruta ya se esta grabando. Despues de
+     * declarar: falta solo volver -- una puntual es siempre una parada,
+     * asi que no se vuelve a ofrecer "Ya he llegado" una vez usado. */
+    lv_label_set_text_fmt(s_puntual_fin_lbl, declarado
+        ? "%s en marcha.\nTermina al volver al garaje."
+        : "%s en marcha.\nToca 'Ya he llegado' al llegar\nal sitio (o el aviso de la\npantalla principal).",
+        s->nombre);
+    if (declarado) {
+        lv_obj_add_flag(s_puntual_llegada_btn, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(s_puntual_fin_btn, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_clear_flag(s_puntual_llegada_btn, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_puntual_fin_btn, LV_OBJ_FLAG_HIDDEN);
+    }
+    lv_obj_clear_flag(s_puntual_fin_cont, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void ir_a_cb(lv_event_t *e)
@@ -3814,17 +4017,15 @@ static void deshacer_ultimo(void *ud)
 static void puntual_cb(lv_event_t *e)
 {
     (void)e;
-    /* Igual que el viaje: se exige la P4 ANTES de nada, porque el apunte va
-     * con su hora y este aparato no tiene reloj propio. */
+    /* La salida puntual ya NO se abre aqui: se trata como un viaje de una
+     * sola parada (carpeta propia y descargable en la P4), y un viaje no se
+     * abre hasta saber CUAL es -- aqui solo se elige el tipo, el nombre (el
+     * asunto: Repostaje/Bombona/ITV/Averia) sale del boton que se toque en
+     * PAN_PUNTUAL. Ver puntual_declarar_cb. Igual se exige la P4 ya aqui,
+     * para no dejar entrar a elegir un asunto sin ella. */
     if (reloj_p4() == 0) {
         confirm_screen_aviso("Enciende la P4 primero",
                              "Sin ella no se que hora es,\ny el apunte va con su hora.",
-                             COL_ACCION_STOP, "Entendido");
-        return;
-    }
-    if (!salida_abrir_puntual()) {
-        confirm_screen_aviso("No he podido empezarla",
-                             "La salida no se ha guardado.\nAvisa de esto, es un fallo\ndel programa.",
                              COL_ACCION_STOP, "Entendido");
         return;
     }
@@ -3855,6 +4056,22 @@ static bool avisa_de_lo_abierto(const char *titulo, confirm_cb_t si)
 static void puntual_do_cancelar(void *ud)
 {
     (void)ud;
+    /* Si ya se llego a tocar un tipo (Repostaje/Bombona/ITV/Averia), la P4
+     * tiene una carpeta abierta de verdad (ver puntual_declarar_cb) y hay
+     * que decirselo -- si no, se quedaria "viaje" fantasma abierto para
+     * siempre. Si se cancela ANTES de elegir tipo, salida_get()->tipo sigue
+     * en SALIDA_NINGUNA y no hay nada que avisar. Mismo criterio que usa
+     * op_descartar en la P4: la carpeta pasa a DESCARTADO_<nombre>, no se
+     * borra nada. */
+    if (salida_get()->tipo == SALIDA_PUNTUAL) {
+        char cuerpo[64];
+        p4_api_cuerpo_descartar(cuerpo, sizeof(cuerpo), next_trip_seq());
+        viaje_cola_error_t motivo;
+        if (!viaje_cola_push(cuerpo, &motivo)) {
+            ESP_LOGW(TAG, "descartar la salida puntual no se pudo encolar: %s",
+                     cola_fallo_texto(motivo));
+        }
+    }
     salida_cerrar();
     mostrar_menu(PAN_PRINCIPAL);
 }
@@ -4041,15 +4258,48 @@ static void crear_menus(lv_obj_t *parent)
     body = pantalla_crear(parent, PAN_PUNTUAL, "SALIDA PUNTUAL", PAN_CANCELA_PUNTUAL);
     tira_crear(body, TIRA_PUNTUAL);
     f = fila(body);
+    s_puntual_filas[0] = f;
     casilla(f, ICO_REPOSTAJE, "Repostaje", NULL, COL_BOMBONA,
-            CEL2_W, lv_pct(100), declarar_cb, DECL(EV_REPOSTAJE, 0, 0));
+            CEL2_W, lv_pct(100), puntual_declarar_cb, DECL(EV_REPOSTAJE, 0, 0));
     casilla(f, ICO_BOMBONA,   "Bombona",   NULL, COL_AJUSTES,
-            CEL2_W, lv_pct(100), declarar_cb, DECL(EV_BOMBONA, 0, 0));
+            CEL2_W, lv_pct(100), puntual_declarar_cb, DECL(EV_BOMBONA, 0, 0));
     f = fila(body);
+    s_puntual_filas[1] = f;
     casilla(f, ICO_ITV,       "ITV",       NULL, COL_VIAJE,
-            CEL2_W, lv_pct(100), declarar_cb, DECL(EV_ITV, 0, 0));
+            CEL2_W, lv_pct(100), puntual_declarar_cb, DECL(EV_ITV, 0, 0));
     casilla(f, ICO_AVERIA,    "Averia/Mant.", NULL, COL_AJUSTES,
-            CEL2_W, lv_pct(100), declarar_cb, DECL(EV_AVERIA, 0, 0));
+            CEL2_W, lv_pct(100), puntual_declarar_cb, DECL(EV_AVERIA, 0, 0));
+
+    /* Se ensena en vez de las 4 casillas de arriba mientras hay una puntual
+     * en curso (puntual_refresh(), enganchado a mostrar_menu): solo hay una
+     * parada por salida, elegir ya no pinta nada, lo que toca es terminar al
+     * volver. Empieza oculto -- todavia no hay ninguna en marcha. */
+    s_puntual_fin_cont = lv_obj_create(body);
+    lv_obj_remove_style_all(s_puntual_fin_cont);
+    lv_obj_set_size(s_puntual_fin_cont, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(s_puntual_fin_cont, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(s_puntual_fin_cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(s_puntual_fin_cont, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(s_puntual_fin_cont, 16, 0);
+    lv_obj_clear_flag(s_puntual_fin_cont, LV_OBJ_FLAG_SCROLLABLE);
+
+    s_puntual_fin_lbl = lv_label_create(s_puntual_fin_cont);
+    lv_obj_set_style_text_font(s_puntual_fin_lbl, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(s_puntual_fin_lbl, lv_color_hex(COL_LABEL), 0);
+    lv_obj_set_style_text_align(s_puntual_fin_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(s_puntual_fin_lbl, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(s_puntual_fin_lbl, lv_pct(90));
+
+    /* Los dos son excluyentes -- ver puntual_refresh(): mientras no se ha
+     * declarado se ofrece "Ya he llegado" (lo mismo que hace el aviso de la
+     * pantalla principal); en cuanto se usa, se cambia por "Terminar salida"
+     * y no vuelve a ensenarse. */
+    s_puntual_llegada_btn = boton_chico(s_puntual_fin_cont, "Ya he llegado",
+                                        COL_ACCION_OK, 220, puntual_llegada_cb, NULL);
+    s_puntual_fin_btn = boton_chico(s_puntual_fin_cont, "Terminar salida",
+                                    COL_ACCION_STOP, 220, puntual_terminar_cb, NULL);
+    lv_obj_add_flag(s_puntual_fin_cont, LV_OBJ_FLAG_HIDDEN);
 
     /* --- 6. Por que paras --- */
     body = pantalla_crear(parent, PAN_MOTIVO, "POR QUE PARAS?", PAN_TIPOS);
@@ -4223,4 +4473,43 @@ void view_registro_create(lv_obj_t *parent)
      * pantalla principal. */
     volver_al_menu();
     s_ui_lista = true;
+}
+
+/* ── Modo captura de pantallas ────────────────────────────────────────────
+ * Solo para capture_carousel.c (ver capture_carousel.h): recorrer TODOS los
+ * menus y formularios de este carrusel para documentar el proyecto, sin
+ * pasar por la navegacion normal (que exige tener una salida de verdad
+ * abierta para llegar a la mayoria). mostrar_menu()/show_form() ya eran
+ * puros interruptores de visibilidad sobre contenedores creados de
+ * antemano -- no dependen de que haya una salida abierta, asi que se
+ * pueden llamar directamente pase lo que pase en salida_get(). */
+
+static const char *PAN_NOMBRE[PAN_COUNT] = {
+    "principal", "tipo", "salida", "tipos", "puntual",
+    "motivo", "sitio", "abiertos", "viaje_p4",
+};
+
+int view_registro_num_pantallas(void) { return PAN_COUNT; }
+int view_registro_num_formularios(void) { return CAT_COUNT; }
+
+void view_registro_mostrar_pantalla(int p)
+{
+    if (p < 0 || p >= PAN_COUNT) return;
+    mostrar_menu((pantalla_t)p);
+}
+
+void view_registro_mostrar_formulario(int idx)
+{
+    if (idx < 0 || idx >= CAT_COUNT) return;
+    show_form(idx);
+}
+
+const char *view_registro_nombre_pantalla(int p)
+{
+    return (p >= 0 && p < PAN_COUNT) ? PAN_NOMBRE[p] : "?";
+}
+
+const char *view_registro_nombre_formulario(int idx)
+{
+    return (idx >= 0 && idx < CAT_COUNT) ? CAT_NOMBRE[idx] : "?";
 }
