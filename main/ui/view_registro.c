@@ -3386,10 +3386,26 @@ static void inicio_puntual_resultado_cb(bool ok, int estado)
      * la pantalla principal o por el boton "Ya he llegado" de esta misma
      * pantalla. Separarlo en dos pasos es lo que permite grabar el trayecto
      * de ida completo en vez de solo la vuelta. */
+
+    /* Deja el menu de Registro en PAN_PUNTUAL (no PAN_PRINCIPAL, que es solo
+     * "Nueva salida"/"Configuracion" y no dice nada de la salida en curso):
+     * si el usuario vuelve a esta pagina deslizando, vera el panel "en
+     * marcha" en vez de un menu que no cuenta nada. */
+    volver_al_menu();
+
+    /* Y ADEMAS cambia de PAGINA del carrusel a la de info: es la que trae
+     * datos (bateria, aguas, temperaturas...) y la pastilla de "toca al
+     * llegar" -- quedarse en Registro tras abrir la salida no aporta nada
+     * mientras conduces hacia el sitio. El aviso se muestra DESPUES de
+     * cambiar de pagina (y no antes) porque se reengancha el a la pantalla
+     * que este activa en ESE momento (ver el comentario de
+     * confirm_screen_open sobre "reparentar"); si se mostrase antes, se
+     * quedaria colgado de Registro y desaparecia de la vista al cambiar de
+     * pagina sin que el usuario llegase a leerlo. */
+    nav_ir_a_info();
     confirm_screen_aviso("Salida abierta",
-                         "Toca el aviso de la pantalla\nprincipal en cuanto llegues\nal sitio.",
+                         "Toca el aviso de abajo en\ncuanto llegues al sitio.",
                          COL_ACCION_OK, "Vale");
-    mostrar_menu(PAN_PRINCIPAL);
 }
 
 static void puntual_iniciar_real(void *ud)
@@ -4124,7 +4140,12 @@ static void puntual_cancelar_cb(lv_event_t *e)
 {
     (void)e;
     if (salida_get()->tipo == SALIDA_PUNTUAL && salida_get()->declarado) {
-        mostrar_menu(PAN_PRINCIPAL);
+        /* A la de info (bateria/aguas/temperaturas), no a PAN_PRINCIPAL --
+         * esa es solo "Nueva salida"/"Configuracion" y no trae nada util
+         * para el trayecto de vuelta. El menu de Registro se queda tal cual
+         * (en PAN_PUNTUAL, mostrando "Terminar salida") para cuando se
+         * vuelva a esta pagina deslizando. */
+        nav_ir_a_info();
         return;
     }
     if (avisa_de_lo_abierto("Cancelar la salida?", puntual_do_cancelar)) return;
