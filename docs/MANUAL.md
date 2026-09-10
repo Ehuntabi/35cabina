@@ -119,6 +119,12 @@ Colores:
 El límite de 3° de lado a lado **no es un capricho: es el del frigorífico**. Por
 encima de eso el frigo de absorción trabaja mal.
 
+**La forma ovalada amarilla del centro es esa zona aceptable**, y es oval a
+propósito: no es lo mismo de lado a lado que de morro a cola. Mientras la bola se
+quede **dentro de ese óvalo**, sigues dentro de lo que aguanta el frigo; en cuanto
+se sale, el dial se pone **rojo**. Dibujarlo redondo sería mentir por los dos lados
+a la vez: asustaría de más cabeceando y de menos balanceando.
+
 > **La bola tarda un instante en asentarse, y es a propósito.** El sensor tiene
 > un ruido propio que, ampliado por el dial, se veía como un temblor que no
 > paraba con la autocaravana quieta. Ahora la lectura va suavizada: al subir a
