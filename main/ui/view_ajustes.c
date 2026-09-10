@@ -14,6 +14,7 @@
 #include "../net/udp_rx.h"
 #include "confirm_screen.h"
 #include "config_storage.h"
+#include "diag_reset.h"
 #include "entry_screen.h"
 #include "nav.h"
 #include "esp_app_desc.h"
@@ -282,6 +283,21 @@ void view_ajustes_create(lv_obj_t *parent)
     else     lv_label_set_text(vfecha, "");
     lv_obj_set_style_text_color(vfecha, lv_color_hex(0xAAAAAA), 0);
     lv_obj_set_style_text_font(vfecha, &lv_font_montserrat_20, 0);
+
+    /* Chivato de reinicio (ver diag_reset.c): aparece SOLO si el arranque
+     * anterior no lo provoco el contacto (watchdog, panic, cuelgue). Con el
+     * ajetreo normal -- esta pantalla arranca con cada contacto, varias veces
+     * al dia -- una tarjeta fija seria puro ruido; y este es el unico momento
+     * en que se puede saber, porque al siguiente corte de contacto el motivo se
+     * pierde. Una sola etiqueta y en 16 para no crecer la tarjeta: vcard es
+     * flex_grow y NO tiene scroll, asi que lo que no quepa se recorta. */
+    if (diag_reset_fue_fallo()) {
+        lv_obj_t *vrein = lv_label_create(vcard);
+        lv_label_set_text(vrein, diag_reset_resumen());
+        lv_obj_set_style_text_align(vrein, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(vrein, lv_color_hex(0xE57373), 0);
+        lv_obj_set_style_text_font(vrein, &lv_font_montserrat_16, 0);
+    }
 
     /* ── El formulario del WI-FI ─────────────────────────────────────────── */
     s_wifi = lv_obj_create(parent);

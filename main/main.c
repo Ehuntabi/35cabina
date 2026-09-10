@@ -15,6 +15,7 @@
 #include "data_model.h"
 #include "tilt.h"
 #include "salida.h"
+#include "diag_reset.h"
 #include "ui/nav.h"
 #include "net/udp_rx.h"
 #include "net/viaje_cola.h"
@@ -33,7 +34,6 @@
 static const char *TAG = "35CABINA";
 #define logSection(section) ESP_LOGI(TAG, "\n\n***** %s *****\n", section)
 #define LVGL_PORT_ROTATION_DEGREE 90
-#define REBOOT_INTERVAL_US (12ULL * 60 * 60 * 1000000) // 12 horas
 
 /* Splash: contenedor negro opaco en el top layer (por encima de
  * cualquier pantalla del carrusel) + logo centrado, se autodestruye a
@@ -67,11 +67,6 @@ static void splash_create(void) {
 
     lv_timer_t *t = lv_timer_create(splash_done_cb, SPLASH_MS, splash_bg);
     lv_timer_set_repeat_count(t, 1);
-}
-
-static void reboot_timer_cb(void *arg) {
-    ESP_LOGI(TAG, "Rebooting after 12h uptime (timer)...");
-    esp_restart();
 }
 
 /* Heartbeat: diagnostico cada 30s (uptime, heap, PSRAM, contador de vida
@@ -114,6 +109,16 @@ static void lvgl_wdog_task(void *arg) {
         if (stalled_ms < LVGL_WDOG_GRACE_MS) {
             esp_task_wdt_reset();
         } else {
+            /* Dejamos el motivo apuntado ANTES de que salte el Task WDT: si no,
+             * el arranque siguiente solo sabria decir "watchdog de tarea" y no
+             * que fue la UI la que se quedo parada. Una sola vez (la marca se
+             * consume al leerla en el arranque) para no escribir la flash en
+             * cada vuelta del bucle mientras esta colgada. */
+            static bool motivo_marcado = false;
+            if (!motivo_marcado) {
+                diag_reset_marcar_sw("UI colgada");
+                motivo_marcado = true;
+            }
             ESP_LOGE("WDOG", "UI sin avanzar %ums; dejando saltar el Task WDT",
                      (unsigned)stalled_ms);
         }
@@ -153,6 +158,12 @@ void setup(void) {
         nvs_err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(nvs_err);
+
+    /* Que se sepa si la pantalla se reinicio SOLA (watchdog, panic, cuelgue):
+     * motivo en el log y tarjeta roja en Ajustes cuando no lo provoco el
+     * contacto. Va justo despues de NVS y antes de que la UI lea la tarjeta.
+     * Ver diag_reset.c. */
+    diag_reset_anotar_arranque();
 
     logSection("Display init");
     bsp_display_cfg_t cfg = {
@@ -198,22 +209,14 @@ void setup(void) {
      * contacto, y los apuntes se hacen justo antes). */
     viaje_cola_init(view_info_set_pendientes);
 
-    static esp_timer_handle_t reboot_timer;
-    const esp_timer_create_args_t reboot_timer_args = {
-        .callback = &reboot_timer_cb,
-        .arg = NULL,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "12h_reboot"
-    };
-    esp_err_t reboot_err = esp_timer_create(&reboot_timer_args, &reboot_timer);
-    if (reboot_err == ESP_OK) {
-        esp_timer_start_periodic(reboot_timer, REBOOT_INTERVAL_US);
-    } else {
-        /* Sin el reinicio periodico de seguridad -- no es fatal para arrancar,
-         * pero se pierde sin ningun aviso si no se comprueba. */
-        ESP_LOGE(TAG, "esp_timer_create(12h_reboot) fallo (%s): sin reinicio periodico",
-                 esp_err_to_name(reboot_err));
-    }
+    /* NO hay reinicio programado, y es a proposito: se quito el de 12 h el
+     * 10-sep-2026. Esta pantalla ya se reinicia con cada corte de contacto (es
+     * su forma normal de apagarse), asi que el temporizador solo servia para
+     * cortar una jornada larga en un momento cualquiera -- y para tapar
+     * cualquier fuga en vez de delatarla. Un cuelgue de verdad lo cubren el
+     * Task WDT (que lvgl_wdog_task deja saltar a proposito) y el watchdog de
+     * tareas; y si algo se reinicia, ahora se ve: diag_reset y la tarjeta
+     * "Ultimo reinicio" de Ajustes. */
 
     if (xTaskCreate(heartbeat_task, "hb", 3072, NULL, 1, NULL) != pdPASS) {
         ESP_LOGE(TAG, "xTaskCreate(heartbeat_task) fallo: sin diagnostico periodico");
