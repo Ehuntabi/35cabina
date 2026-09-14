@@ -71,10 +71,8 @@ Cuando la P4 tiene una alarma activa (agua en reserva, aguas grises llenas,
 batería baja o congelador), en la esquina de **la tarjeta que toca** sale un
 **altavoz**:
 
-<figure>
-<img src="../screenshot/alarma_silenciada.png" style="width:56%">
-<figcaption>Alarma de batería, silenciada desde la cabina</figcaption>
-</figure>
+En la esquina de esa tarjeta sale un **altavoz**: con **ondas y en blanco** si esa
+alarma está sonando en la P4, y **tachado y en gris** si ya se ha callado.
 
 | Lo que ves | Qué significa |
 |---|---|
