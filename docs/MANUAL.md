@@ -725,13 +725,30 @@ la vez:
 
 - **SSID** y **Password** — la red de la P4 a la que se conecta esta pantalla.
   Sirve para **cambiar a otra P4 sin reflashear**.
-- **Usuario del portal** y **Clave del portal** — hacen falta para mandarle los
-  apuntes del viaje. **No son los del Wi-Fi**: se ven en la P4, en Ajustes →
-  Wi-Fi. Sin ellos, al iniciar un viaje sale "La P4 no acepta la clave".
+- **Usuario del portal** y **Clave del portal** — los del **portal** de la P4,
+  **no los del Wi-Fi**. Hacen falta para todo lo que esta pantalla le manda:
+  los apuntes del viaje y **callar las alarmas**. Se leen en la P4, en Ajustes →
+  Wi-Fi → tarjeta **"Acceso a Actualizar y Claves"** (o aquí mismo, que se quedan
+  escritos). Sin ellos, al iniciar un viaje sale "La P4 no acepta la clave".
 
-Si tocas Guardar **sin haber cambiado nada**, te lo dice: *"No has cambiado
-nada."* Y si sí lo has cambiado, **pide confirmación** antes de reconectar — es
-fácil dejarse la pantalla incomunicada por un dedazo en la contraseña.
+**Para escribir en un campo, tócalo**: se abre un editor a pantalla completa con
+el nombre del campo arriba, el texto en grande y el teclado debajo; se acepta con
+el **✓** del teclado y se descarta con la **✗**. Los campos **se ven en claro**
+(no van tapados), así que de aquí puedes leer la clave del portal si la has
+perdido.
+
+Al tocar **"Guardar y reconectar"**:
+
+- Si has **cambiado la red** (SSID o Password), **pide confirmación** antes de
+  reconectar — es fácil dejarse la pantalla incomunicada por un dedazo en la
+  contraseña. Al aceptar pone *"Guardado, reconectando..."* y tarda unos
+  segundos en volver a enganchar.
+- Si solo has tocado las **credenciales del portal**, guarda sin preguntar y
+  pone *"Guardado."* (equivocarse ahí no deja la pantalla sin datos).
+
+Se acuerda de todo **aunque se apague con el contacto**, que es como se apaga
+siempre. Y si algún día cambias la clave del Wi-Fi en la P4, hay que cambiarla
+también aquí.
 
 El **Volver** de esta pantalla regresa a Configuración, no al cuaderno.
 
