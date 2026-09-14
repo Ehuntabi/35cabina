@@ -22,7 +22,7 @@ Se reutiliza:
   de la P4 (SSID el que tenga guardado en su NVS; de fábrica `VictronConfig`
   — `ESP_DC078D` fue un valor transitorio causado por un bug de la pantalla
   de Ajustes de la P4, arreglado el 21-ago-2026), protocolo `mini_msg_t`
-  (38 bytes, versión 4, puerto 4242).
+  (40 bytes, versión 5, puerto 4242).
 
 > **El C6 queda descartado (20-ago-2026): esta pantalla lo sustituye.**
 > `mini_proto.h` ya sólo se sincroniza con `~/joint/victron`, y el protocolo
@@ -155,6 +155,18 @@ de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 
   **Versión 4** (24-ago-2026): 36→38 bytes, añade `gps_estado` (sin datos /
   buscando / fijado) — la P4 ya tiene GPS propio, ver más abajo.
+
+  **Versión 5** (14-sep-2026): 38→40 bytes, añade `alarmas`, el bitmask
+  `MINI_ALARM_*` con las alarmas ACTIVAS de la P4 (agua, grises, batería,
+  congelador). Va en el hueco de relleno que ya existía antes del CRC, así que
+  ningún campo de los que ya viajaban se ha movido. Con él, esta pantalla pone
+  el icono del altavoz en la tarjeta que toca y sabe **cuál** silencia al
+  tocarla; antes deducía la alarma de los niveles y el congelador no lo veía
+  nadie desde aquí. La orden de silencio **no** viaja por aquí: va por HTTP
+  contra el portal de la P4 (`POST /api/alarma`, ver `net/p4_api.c`), porque
+  una orden perdida en silencio dejaría la alarma pitando sin que nadie lo
+  sepa — la telemetría sí puede perderse, al segundo siguiente llega otra.
+  Ver `docs/MANUAL.md`, «Silenciar una alarma desde aquí».
 
   El SSID/password se guardan en **NVS**, editables sin reflashear desde la
   **tarjeta de Wi-Fi del menú de registros** → `view_ajustes.c`; pensado
@@ -705,6 +717,17 @@ de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   **Pendiente, a la espera del GPS de la P4**: posición de cada apunte y
   kilómetros del viaje (ver la nota del diseño: la posición NO se puede sellar
   al recibir, por el mismo motivo que la hora).
+
+- **Silenciar las alarmas desde la cabina** (14-sep-2026). El pitido lo hace la
+  P4 (lleva altavoz) y esta pantalla no, así que callarlo desde el asiento del
+  conductor es mandarle una orden: `POST /api/alarma` con el bitmask de
+  `mini_msg.alarmas` que acaba de llegar por telemetría, o sea que se calla la
+  que la pantalla está enseñando. Va por el mismo camino que los apuntes
+  (`net/p4_api.c`) y por el mismo motivo: por TCP se sabe que llegó. El icono
+  del altavoz va en la esquina de la tarjeta en alarma, con zona táctil mayor
+  que el dibujo, y alterna (un toque calla, otro vuelve a poner el sonido); la
+  tarjeta entera también silencia. Diseño cerrado en
+  `/home/jc/DS_joint/especificacion_silenciar_desde_cabina.md`.
 
 ## Trabajo multi-equipo (`./empiezo` / `./termino`)
 

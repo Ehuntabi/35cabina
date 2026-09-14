@@ -60,6 +60,44 @@ Lo que manda la P4, una vez por segundo. No se toca nada aquí, solo se mira.
   La flecha tarda un poco en cambiar, a propósito: mira la tendencia de fondo y
   no cada oscilación del sensor, para que no esté bailando todo el rato.
 
+### Silenciar una alarma desde aquí
+
+**El pitido de las alarmas lo hace la pantalla de 7"**, que es la que lleva
+altavoz; esta de cabina no tiene. Para callarlo desde el asiento del conductor
+—que es justo lo que antes obligaba a ir hasta atrás en marcha— esta pantalla le
+manda la orden a la P4.
+
+Cuando la P4 tiene una alarma activa (agua en reserva, aguas grises llenas,
+batería baja o congelador), en la esquina de **la tarjeta que toca** sale un
+**altavoz**:
+
+<figure>
+<img src="../screenshot/alarma_silenciada.png" style="width:56%">
+<figcaption>Alarma de batería, silenciada desde la cabina</figcaption>
+</figure>
+
+| Lo que ves | Qué significa |
+|---|---|
+| **Altavoz con ondas, en blanco** | Esa alarma está activa y **está sonando** en la P4 |
+| **Altavoz tachado, en gris** | Está activa pero **callada** |
+| **No hay altavoz** | Esa tarjeta no tiene ninguna alarma |
+
+- **Un toque en el altavoz**: se calla. **Otro toque**: vuelve a sonar.
+- **Tocar la tarjeta también lo silencia** (toda la tarjeta, no hace falta
+  acertarle al icono: la zona que responde es más grande que el dibujo). En la
+  de aguas calla el agua limpia, en la de batería la batería y en la de
+  temperaturas el congelador.
+- Abajo al centro sale un aviso pequeño: **«Silenciar agua: enviado»** o, si la
+  P4 no contesta en 10 segundos, **«Sin respuesta de la P4»** (y el altavoz
+  vuelve a su sitio: lo que se ve aquí es lo que pasa de verdad).
+- **Nada se calla para siempre.** Si la alarma se recupera (rellenas el
+  depósito, sube la batería), se rearma sola y la próxima vez vuelve a sonar en
+  las dos pantallas.
+
+Lo que **no** cambia al silenciar: la tarjeta sigue **parpadeando** y el aviso
+de la P4 sigue diciendo qué pasa (con "(silenciada)" detrás). Se calla el
+pitido, no la señal visual.
+
 ### Cambiar el brillo: dos toques
 
 **Dos toques seguidos en cualquier parte de la pantalla de Datos** cambian el

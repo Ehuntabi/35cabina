@@ -14,6 +14,7 @@ idf_component_register(
         esp_event         # <— eventos Wi-Fi/netif
         esp_wifi          # <— asociarse al AP de la P4
         esp_http_client   # <— mandar los apuntes al portal de la P4 (p4_api.c)
+        mbedtls           # <— base64 del volcado de pantalla (capture_carousel.c)
 )
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE

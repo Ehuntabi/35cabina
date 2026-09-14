@@ -47,6 +47,27 @@ void p4_api_cuerpo_fin_ajeno(char *out, size_t n, uint32_t id);
  * empezo por error. No borra nada. */
 void p4_api_cuerpo_descartar(char *out, size_t n, uint32_t id);
 
+/* ── Silenciar una alarma de la P4 (14-sep-2026) ────────────────────────────
+ *
+ * El pitido lo hace la P4 (lleva altavoz) y esta pantalla no, asi que callarlo
+ * desde el asiento del conductor es mandarle una orden. Va por el mismo camino
+ * que los apuntes y por el mismo motivo: por TCP se sabe que llego. Un silencio
+ * perdido seria una alarma pitando y un conductor convencido de haberla
+ * callado.
+ *
+ * 'mask' es el bitmask MINI_ALARM_* (main/net/mini_proto.h) de la alarma que se
+ * quiere callar: se manda el mismo byte que acaba de llegar en la telemetria, o
+ * sea que se calla la que la pantalla esta enseñando.
+ *
+ * 'cb' es opcional (NULL si no se quiere saber el resultado). Como las demas
+ * funciones de aqui, vuelve al instante: el envio lo hace una tarea aparte y el
+ * resultado llega ya en el hilo de LVGL. Devuelve false solo si no se pudo
+ * lanzar el envio (sin memoria). */
+bool p4_api_silenciar_alarma(uint8_t mask, p4_api_done_cb cb);
+
+/* Monta el cuerpo JSON, expuesto aparte para poder comprobarlo sin red. */
+void p4_api_cuerpo_alarma(char *out, size_t n, uint8_t mask);
+
 #ifdef __cplusplus
 }
 #endif

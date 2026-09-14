@@ -65,6 +65,22 @@ typedef struct {
     /* Estado del GPS de la P4: 0=sin datos, 1=buscando, 2=posicion fijada.
      * Esta pantalla NO recibe la posicion, solo si la hay (ver mini_proto.h). */
     uint8_t  gps_estado;
+
+    /* Alarmas ACTIVAS en la P4, bitmask MINI_ALARM_* (ver mini_proto.h).
+     *
+     * Se recibe en vez de deducirlo de los niveles a proposito: el umbral de la
+     * bateria y la subida del congelador los conoce la P4 (son suyos), y aqui
+     * no hay forma de saberlos. Antes esta pantalla se quedaba sin saber nada
+     * del congelador, que es una de las cuatro alarmas.
+     *
+     * Dice que la CONDICION se cumple, suene alli o este silenciada: el silencio
+     * corta el pitido de la P4, no esta pantalla (que no tiene altavoz). Quien
+     * decide si aqui se enseña como "silenciada" es el estado local de esta
+     * pantalla (ver view_info.c).
+     *
+     * CADUCA con el enlace: si la P4 deja de hablar, el ultimo valor se queda
+     * congelado, asi que hay que mirarlo solo con last_update_ms fresco. */
+    uint8_t  alarmas;
 } mini_data_t;
 
 void data_model_init(void);
@@ -76,5 +92,9 @@ void data_model_update_from_msg(const struct mini_msg *msg);
 /* Copia protegida por lock para que la UI (u otro consumidor) lea un
  * snapshot consistente sin carrera con rx_task. */
 void data_model_get(mini_data_t *out);
+
+/* Sustituye el modelo entero por datos de relleno (modo captura de
+ * pantallas, ver capture_carousel.h). No la usa nada mas. */
+void data_model_set_simulated(const mini_data_t *sim);
 
 #endif

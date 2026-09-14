@@ -26,11 +26,14 @@
 #include "view_info.h"
 #include "brillo.h"
 #include "net/viaje_cola.h"   /* VIAJE_COLA_CAPACIDAD, para el aviso de casi llena */
+#include "net/p4_api.h"       /* mandar la orden de silencio a la P4 */
+#include "net/mini_proto.h"   /* MINI_ALARM_*, el byte de alarmas de la telemetria */
 #include "nav.h"
 #include "view_registro.h"    /* view_registro_puntual_declarar_llegada() */
 #include "../data_model.h"
 #include "../lv_port.h"       /* lvgl_port_lock/unlock, ver view_info_set_pendientes() */
 #include "esp_timer.h"
+#include "esp_log.h"
 #include <stdio.h>
 
 #define COL_CARD_BG_TOP  lv_color_hex(0x0A0A0A)
@@ -88,6 +91,71 @@ static lv_color_t color_for_soc(int16_t soc_deci) {
     if (soc_deci >= 300) return COL_VAL_WARN;
     return COL_VAL_BAD;
 }
+
+/* === Silenciar las alarmas desde aqui (14-sep-2026) =======================
+ *
+ * El pitido lo hace la P4: lleva el codec ES8311 y su amplificador. Esta
+ * pantalla no tiene altavoz, asi que callarlo desde el asiento del conductor es
+ * mandarle una orden por el portal (net/p4_api.c). El diseño esta cerrado en
+ * /home/jc/DS_joint/especificacion_silenciar_desde_cabina.md:
+ *
+ *   - el icono del altavoz va en la ESQUINA de la tarjeta que esta en alarma, no
+ *     un cartel grande: no puede tapar los datos que se miran en marcha;
+ *   - la zona tactil es MAYOR que el dibujo (lv_obj_set_ext_click_area, el mismo
+ *     truco que las flechas del historico de la P4);
+ *   - alterna: el primer toque silencia (altavoz tachado, en gris), el segundo
+ *     vuelve a habilitar el sonido. Sin menus y sin confirmacion;
+ *   - tocar la propia tarjeta tambien silencia, y ademas deja abierto lo que
+ *     hace esa tarjeta (ver alarm_card_cb);
+ *   - se calla SOLO el sonido: la tarjeta sigue parpadeando y su aviso sigue
+ *     diciendo que pasa, con "(silenciada)" detras.
+ *
+ * CUAL esta en alarma lo dice la P4 en la telemetria (mini_msg.alarmas), no lo
+ * deduce esta pantalla de los niveles: los umbrales de la bateria y del
+ * congelador son suyos y aqui no se saben. Ese byte dice que la condicion se
+ * cumple, suene alli o este silenciada, y por eso el dibujo del icono (tachado
+ * o no) lo decide el estado local de ESTA pantalla, que es quien ha mandado la
+ * orden. */
+typedef enum {
+    AL_INFO_AGUA = 0,
+    AL_INFO_GRISES,
+    AL_INFO_BATERIA,
+    AL_INFO_CONGELADOR,
+    AL_INFO_CUANTAS
+} al_info_t;
+
+/* El mismo orden que el enum, con los bits de mini_proto.h. */
+static const uint8_t AL_INFO_BIT[AL_INFO_CUANTAS] = {
+    MINI_ALARM_AGUA, MINI_ALARM_GRISES, MINI_ALARM_BATERIA, MINI_ALARM_CONGELADOR
+};
+
+/* Nombres CORTOS, para la cabina y para el aviso de la orden ("agua", no
+ * "agua limpia en reserva"): en 480x320 y de reojo, cuanto menos texto mejor. */
+static const char *const AL_INFO_NOMBRE[AL_INFO_CUANTAS] = {
+    "agua", "grises", "bateria", "congelador"
+};
+
+/* Estado local de cada alarma. */
+static struct {
+    lv_obj_t *icono;        /* el altavoz, DENTRO de su tarjeta */
+    bool      silenciada;   /* lo que hemos mandado callar */
+    bool      orden_pend;   /* hay una orden en vuelo para esta alarma */
+    uint32_t  orden_ms;     /* cuando se mando (para el plazo de respuesta) */
+} s_al[AL_INFO_CUANTAS];
+
+static lv_obj_t   *s_orden_msg;      /* aviso de "enviado" / "sin respuesta" */
+static uint32_t    s_orden_msg_ms;   /* cuando se puso, 0 = nada que enseñar */
+
+#define ORDEN_TIMEOUT_MS   10000   /* sin respuesta en 10 s: se deshace y se dice */
+#define ORDEN_MSG_MS        4000   /* cuanto se queda el aviso en pantalla */
+#define AL_ICONO_EXTRA        14   /* zona tactil extra, como en la P4 */
+
+/* Las tarjetas se montan mas arriba en este fichero que el resto del bloque de
+ * alarmas (make_water_cell esta antes), asi que hace falta anunciarlas. */
+static lv_obj_t *al_icono_crear(lv_obj_t *card, al_info_t i,
+                                lv_align_t alineacion, lv_coord_t x, lv_coord_t y);
+static void al_card_cb_alarma(lv_event_t *e);
+static bool al_info_activa(al_info_t i);
 
 static lv_color_t color_for_frigo(int16_t centi) {
     if (centi <= -1500) return COL_VAL_GOOD;  /* <= -15C ok */
@@ -398,6 +466,26 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_obj_set_style_text_color(s_lbl_gray, COL_TEXT_DIM, 0);
     lv_obj_set_style_text_font(s_lbl_gray, &lv_font_montserrat_14, 0);
     lv_obj_center(s_lbl_gray);
+
+    /* Iconos del altavoz de las dos alarmas de aguas (limpia en reserva y
+     * grises llenas): arriba a la DERECHA, corridos un poco a la izquierda
+     * porque la tarjeta tiene 2 px de borde + 4 de relleno. Esta tarjeta no
+     * lleva punto de enlace (el unico esta en la de bateria), asi que no hay
+     * nada con lo que chocar. */
+    al_icono_crear(card, AL_INFO_AGUA,   LV_ALIGN_TOP_RIGHT, -6, 2);
+    al_icono_crear(card, AL_INFO_GRISES, LV_ALIGN_TOP_RIGHT, -6, 26);
+
+    /* Toda la tarjeta silencia: la alarma de limpia si esta activa, y si no la
+     * de grises (pueden estar las dos a la vez, pero el toque calla una; el
+     * icono de cada una es el que va a lo suyo). Las tarjetas de aqui no hacen
+     * nada mas al tocarlas, asi que no se le quita el sitio a ningun gesto: en
+     * la P4 si lo hacen -- alli tienen su pantalla de detalle -- y por eso alli
+     * la tarjeta no silencia y solo lo hace el icono. */
+    lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(card, al_card_cb_alarma, LV_EVENT_CLICKED,
+                        (void *)(intptr_t)AL_INFO_AGUA);
+    /* El icono del altavoz tiene su propio toque (alterna el sonido), y las
+     * tarjetas del mini no burbujean eventos, asi que no hay que parar nada. */
 }
 
 /* === Refresco =========================================================== */
@@ -607,6 +695,197 @@ static void refresh_aguas(const mini_data_t *d)
     }
 }
 
+/* --- Silenciar: aviso de la orden, plazo de respuesta y toques ------------- */
+
+/* La alarma esta activa segun la P4, con el enlace fresco. Caduca con el
+ * enlace: si la P4 deja de hablar, su ultimo byte se queda congelado y no se
+ * puede seguir enseñando un altavoz de algo que ya no se sabe. */
+static bool al_info_activa(al_info_t i)
+{
+    mini_data_t d;
+    data_model_get(&d);
+    uint32_t ms = (uint32_t)(esp_timer_get_time() / 1000);
+    bool fresco = d.last_update_ms != 0 && (ms - d.last_update_ms < CONN_TIMEOUT_MS);
+    /* Sin enlace NO se enseña altavoz aunque el ultimo byte diga que hay
+     * alarma: con la P4 muda no se sabe si sigue pasando, y un icono que no
+     * responde (porque no hay con quien hablar) es peor que no tenerlo. Mismo
+     * criterio que el resto de la pantalla, que apaga los datos al caducar el
+     * enlace. */
+    if (!fresco) return false;
+    return (d.alarmas & AL_INFO_BIT[i]) != 0;
+}
+
+/* La alarma sigue puesta a ojos de esta pantalla, aunque el enlace haya
+ * caducado. Se usa SOLO para no borrar el estado de silencio mientras la P4
+ * esta muda unos segundos: si se borrara, al volver el enlace el icono saldria
+ * diciendo "sonando" cuando en la P4 esta callada, y el siguiente toque
+ * mandaria "silencio" en vez de "vuelve a sonar". */
+static bool al_info_sigue(const mini_data_t *d, al_info_t i)
+{
+    return (d->alarmas & AL_INFO_BIT[i]) != 0;
+}
+
+/* Aviso pequeno abajo, al lado de la pastilla de pendientes. Existe porque la
+ * orden va por Wi-Fi a la P4 y puede no llegar: sin esto, tocar el altavoz y
+ * que no pase nada (ni se calle ni se sepa por que) es exactamente el fallo que
+ * mas desespera. Se autoborra a los pocos segundos: no es un estado, es un
+ * acuse de recibo. */
+static void orden_msg(const char *txt, uint32_t ahora_ms)
+{
+    if (!s_orden_msg) return;
+    lv_label_set_text(s_orden_msg, txt);
+    s_orden_msg_ms = ahora_ms ? ahora_ms : 1;
+    lv_obj_clear_flag(s_orden_msg, LV_OBJ_FLAG_HIDDEN);
+    /* Por delante: la pastilla de pendientes y este aviso comparten hueco
+     * (abajo al centro) y el que acaba de pasar es el que importa. */
+    lv_obj_move_foreground(s_orden_msg);
+}
+
+/* Vuelve del envio, ya en el hilo de LVGL (ver p4_api.h). */
+static void orden_done_cb(bool ok, int estado)
+{
+    /* El callback no dice de que alarma era (la API es generica), asi que se
+     * resuelve por la unica orden que puede estar en vuelo: solo se lanza una
+     * cada vez (ver alarm_card_cb). */
+    for (int i = 0; i < AL_INFO_CUANTAS; i++) {
+        if (!s_al[i].orden_pend) continue;
+        s_al[i].orden_pend = false;
+        if (!ok) {
+            /* Se deshace lo que se acaba de mandar: la pantalla no puede decir
+             * "silenciada" si la P4 no se ha enterado, porque seguiria pitando. */
+            bool era_silencio = s_al[i].silenciada;
+            s_al[i].silenciada = !s_al[i].silenciada;
+            ESP_LOGW("alarma", "la P4 no acepto la orden de %s (HTTP %d): %s",
+                     AL_INFO_NOMBRE[i], estado,
+                     era_silencio ? "se queda sonando" : "se queda callada");
+            char b[48];
+            snprintf(b, sizeof(b), "Sin respuesta de la P4 (%s)", AL_INFO_NOMBRE[i]);
+            orden_msg(b, (uint32_t)(esp_timer_get_time() / 1000));
+        } else {
+            ESP_LOGI("alarma", "orden de %s aceptada por la P4 (HTTP %d)",
+                     AL_INFO_NOMBRE[i], estado);
+        }
+        return;
+    }
+}
+
+/* Plazo de respuesta de la orden en vuelo. Sin esto, una P4 que se apaga justo
+ * despues de recibir la peticion dejaria la pantalla diciendo "silenciada" para
+ * siempre. */
+static void orden_timeout_check(uint32_t ahora_ms)
+{
+    for (int i = 0; i < AL_INFO_CUANTAS; i++) {
+        if (!s_al[i].orden_pend) continue;
+        if ((ahora_ms - s_al[i].orden_ms) < ORDEN_TIMEOUT_MS) continue;
+        s_al[i].orden_pend = false;
+        s_al[i].silenciada = !s_al[i].silenciada;
+        ESP_LOGW("alarma", "la P4 no contesto a la orden de %s en %d ms: se deshace",
+                 AL_INFO_NOMBRE[i], ORDEN_TIMEOUT_MS);
+        char b[48];
+        snprintf(b, sizeof(b), "Sin respuesta de la P4 (%s)", AL_INFO_NOMBRE[i]);
+        orden_msg(b, ahora_ms);
+    }
+}
+
+/* El toque en la tarjeta: silencia (o vuelve a habilitar) ESA alarma y manda la
+ * orden a la P4. Devuelve true si la alarma estaba activa, o sea si habia algo
+ * que hacer: quien llama puede seguir con lo suyo (abrir una pantalla) cuando no
+ * lo habia. */
+static bool al_info_alternar(al_info_t i, uint32_t ahora_ms)
+{
+    if (i < 0 || i >= AL_INFO_CUANTAS) return false;
+    if (!al_info_activa(i)) return false;
+
+    s_al[i].silenciada = !s_al[i].silenciada;
+    /* Una orden cada vez: si ya hay una en vuelo, esta la sustituye (el estado
+     * local es el que manda, y la P4 se queda con la ultima que reciba). */
+    s_al[i].orden_pend = true;
+    s_al[i].orden_ms   = ahora_ms ? ahora_ms : 1;
+
+    bool ok = p4_api_silenciar_alarma(AL_INFO_BIT[i], orden_done_cb);
+    if (!ok) {
+        /* Ni siquiera se pudo lanzar el envio (sin memoria): no dejamos la
+         * pantalla mintiendo. */
+        s_al[i].orden_pend = false;
+        s_al[i].silenciada = !s_al[i].silenciada;
+        orden_msg("Sin memoria para mandar la orden", ahora_ms);
+        return true;
+    }
+
+    ESP_LOGI("alarma", "%s: %s (mandado a la P4)", AL_INFO_NOMBRE[i],
+             s_al[i].silenciada ? "silenciar" : "volver a habilitar el sonido");
+    char b[48];
+    snprintf(b, sizeof(b), "Silenciar %s: %s", AL_INFO_NOMBRE[i],
+             s_al[i].silenciada ? "enviado" : "sonido otra vez");
+    orden_msg(b, ahora_ms);
+    return true;
+}
+
+static void al_card_cb_alarma(lv_event_t *e)
+{
+    al_info_t i = (al_info_t)(intptr_t)lv_event_get_user_data(e);
+    al_info_alternar(i, (uint32_t)(esp_timer_get_time() / 1000));
+}
+
+/* El icono del altavoz de cada tarjeta. Se crea OCULTO (solo se ve con la
+ * alarma activa) y se alinea a la esquina que se le diga: en la tarjeta de
+ * bateria hay que dejarlo a la izquierda del punto de enlace, que ya esta en esa
+ * esquina. */
+static lv_obj_t *al_icono_crear(lv_obj_t *card, al_info_t i,
+                                lv_align_t alineacion, lv_coord_t x, lv_coord_t y)
+{
+    lv_obj_t *ic = lv_label_create(card);
+    lv_obj_add_flag(ic, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_add_flag(ic, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(ic, "");
+    /* Fuente montserrat a secas, SIN la variante _es: esta comprobado que
+     * LV_SYMBOL_MUTE (U+F026) y LV_SYMBOL_VOLUME_MAX (U+F028) estan en su tabla
+     * de caracteres. Con una fuente que no los tuviera saldria un rectangulo
+     * (paso con el punto medio en la P4). */
+    lv_obj_set_style_text_font(ic, &lv_font_montserrat_20, 0);
+    lv_obj_align(ic, alineacion, x, y);
+    /* Zona tactil mayor que el dibujo: el icono son ~20x22 px y eso no se
+     * acierta con el dedo, menos en marcha. Es el mismo truco (y el mismo
+     * margen) que las flechas del historico de la P4. */
+    lv_obj_add_flag(ic, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(ic, AL_ICONO_EXTRA);
+    lv_obj_add_event_cb(ic, al_card_cb_alarma, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    s_al[i].icono = ic;
+    return ic;
+}
+
+/* Pinta los iconos: solo el de la alarma activa, y con el altavoz tachado y en
+ * gris si esta silenciada. */
+static void al_refresh_iconos(void)
+{
+    mini_data_t d;
+    data_model_get(&d);
+    for (int i = 0; i < AL_INFO_CUANTAS; i++) {
+        lv_obj_t *ic = s_al[i].icono;
+        if (!ic) continue;
+        if (!al_info_sigue(&d, (al_info_t)i)) {
+            /* La alarma se recupero: la P4 rearma su silencio sola y aqui se
+             * rearma igual, para que la proxima vez vuelva a sonar. Se mira el
+             * byte CRUDO (sin exigir enlace) para no rearmar por un simple
+             * corte de Wi-Fi con la alarma todavia puesta. */
+            s_al[i].silenciada = false;
+            s_al[i].orden_pend = false;
+        }
+        if (!al_info_activa((al_info_t)i)) {
+            /* Sin alarma, o sin enlace para saberlo: no hay nada que enseñar
+             * (y el altavoz no se puede tocar con provecho). */
+            lv_obj_add_flag(ic, LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+        bool callada = s_al[i].silenciada;
+        lv_label_set_text(ic, callada ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
+        /* Con el sonido puesto, el altavoz CON ondas en blanco invita a
+         * tocarlo; callado, tachado y en gris se lee de un vistazo. */
+        lv_obj_set_style_text_color(ic, callada ? lv_color_hex(0x777777) : COL_TEXT, 0);
+        lv_obj_clear_flag(ic, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 static void update_conn_dots(const mini_data_t *d)
 {
     /* Un unico frame UDP 1Hz trae todo el paquete -> mismo estado de
@@ -680,6 +959,20 @@ static void refresh_cb(lv_timer_t *t)
     lv_obj_set_width(s_frigo_fan_fill, track_w * fan_pct / 100);
     refresh_aguas(&d);
     update_conn_dots(&d);
+
+    /* Alarmas: iconos del altavoz, plazo de la orden que este en vuelo y
+     * caducidad del aviso. El mismo tick que refresca el resto (500 ms) -- el
+     * pitido de la P4 se calla o no en cuanto llegue la orden, y 500 ms de
+     * retraso en pintar el icono no los ve nadie. */
+    uint32_t ahora_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    orden_timeout_check(ahora_ms);
+    al_refresh_iconos();
+    if (s_orden_msg) {
+        if (s_orden_msg_ms != 0 && (ahora_ms - s_orden_msg_ms) >= ORDEN_MSG_MS) {
+            s_orden_msg_ms = 0;
+            lv_obj_add_flag(s_orden_msg, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 }
 
 /* DOBLE TOQUE = cambiar el brillo (peticion del 25-ago-2026).
@@ -835,8 +1128,7 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_align(u_v, LV_ALIGN_LEFT_MID, BAT_NUM_X + BAT_NUM_W + 8, -8);
 
     s_bat_amp = lv_label_create(s_bat_card);
-    lv_label_set_text(s_bat_amp, "");
-    lv_obj_set_style_text_color(s_bat_amp, COL_TEXT, 0);
+    lv_label_set_text(s_bat_amp, "");    lv_obj_set_style_text_color(s_bat_amp, COL_TEXT, 0);
     /* Mismo tamano que los voltios: los dos son el dato principal de su lado. */
     lv_obj_set_style_text_font(s_bat_amp, &lv_font_montserrat_32, 0);
     lv_obj_set_width(s_bat_amp, BAT_NUM_W);
@@ -879,6 +1171,18 @@ void view_info_create(lv_obj_t *parent)
      * de la tarjeta y no tiene por que leerse peor. */
     lv_obj_set_style_text_font(s_aux_val, &lv_font_montserrat_32, 0);
 
+    /* Icono del altavoz de la bateria: arriba a la DERECHA, pero corrido a la
+     * izquierda porque ahi ya esta el punto de enlace de la tarjeta (12 px de
+     * punto + su margen). A la izquierda no cabe: ese hueco lo ocupa el icono
+     * del GPS de la P4, que va en la pantalla, no en la tarjeta. */
+    al_icono_crear(s_bat_card, AL_INFO_BATERIA, LV_ALIGN_TOP_RIGHT, -26, 2);
+    /* La tarjeta entera silencia. Va con EVENT_BUBBLE para que el toque suba
+     * desde el dibujo y los numeros, que son objetos hijos (mismo patron que
+     * usan los botones de la card camper). */
+    lv_obj_add_flag(s_bat_card, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_bat_card, al_card_cb_alarma, LV_EVENT_CLICKED,
+                        (void *)(intptr_t)AL_INFO_BATERIA);
+
     /* --- Abajo izquierda: aguas ------------------------------------------- */
     make_water_cell(grid, 0, 1, 1);
 
@@ -907,6 +1211,16 @@ void view_info_create(lv_obj_t *parent)
     lv_label_set_text(s_ext_trend, "");
     lv_obj_set_style_text_font(s_ext_trend, &lv_font_montserrat_20, 0);
     lv_obj_align(s_ext_trend, LV_ALIGN_TOP_RIGHT, 0, 66);
+
+    /* Icono del altavoz de la alarma del congelador: arriba a la DERECHA, que
+     * es el unico hueco libre de la tarjeta (el titulo va centrado, "Frigo" a
+     * la izquierda y la flecha de tendencia ocupando el borde derecho mas
+     * abajo). Esta tarjeta no lleva punto de enlace. */
+    al_icono_crear(temp_card, AL_INFO_CONGELADOR, LV_ALIGN_TOP_RIGHT, -6, 2);
+    /* Tocar la tarjeta silencia el congelador (es la unica alarma que tiene). */
+    lv_obj_add_flag(temp_card, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(temp_card, al_card_cb_alarma, LV_EVENT_CLICKED,
+                        (void *)(intptr_t)AL_INFO_CONGELADOR);
 
     /* Ventilador del frigo: etiqueta + barra de nivel, a la izquierda de la
      * tarjeta (antes era texto "vent. NN%" a la derecha, tapado por el
@@ -1000,6 +1314,24 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_gps, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(s_gps, lv_color_hex(0x666666), 0);
     lv_obj_align(s_gps, LV_ALIGN_TOP_LEFT, 14, 11);
+
+    /* Aviso de la orden de silencio ("enviado" / "sin respuesta"). Abajo al
+     * centro y oculto casi siempre: la pastilla de pendientes vive en el mismo
+     * sitio, y cuando aparece esto es porque el usuario acaba de tocar algo, o
+     * sea que lo suyo es lo urgente (orden_msg hace move_foreground). */
+    s_orden_msg = lv_label_create(parent);
+    lv_obj_add_flag(s_orden_msg, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_add_flag(s_orden_msg, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(s_orden_msg, LV_OBJ_FLAG_CLICKABLE);
+    lv_label_set_text(s_orden_msg, "");
+    lv_obj_set_style_text_font(s_orden_msg, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(s_orden_msg, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(s_orden_msg, lv_color_hex(0xCCCCCC), 0);
+    lv_obj_set_style_bg_opa(s_orden_msg, LV_OPA_90, 0);
+    lv_obj_set_style_pad_hor(s_orden_msg, 10, 0);
+    lv_obj_set_style_pad_ver(s_orden_msg, 4, 0);
+    lv_obj_set_style_radius(s_orden_msg, 8, 0);
+    lv_obj_align(s_orden_msg, LV_ALIGN_BOTTOM_MID, 0, -6);
 
     s_refresh_timer = lv_timer_create(refresh_cb, 500, NULL);
 }
@@ -1148,4 +1480,16 @@ void view_info_set_puntual_pendiente(const char *nombre)
         lv_async_call(pendientes_aplicar, NULL);
         lvgl_port_unlock();
     }
+}
+
+void view_info_captura_alarma_silenciada(void)
+{
+    /* El estado local, que es lo unico que pinta el icono tachado. NO se manda
+     * nada a la P4: en una captura no hay P4 al otro lado, y la orden que
+     * manda el toque de verdad se prueba en la placa. Se marca tambien como
+     * "orden enviada" para que al_refresh_iconos() no lo rearme al ver que la
+     * alarma no cambia. */
+    s_al[AL_INFO_BATERIA].silenciada = true;
+    s_al[AL_INFO_BATERIA].orden_pend = true;
+    s_al[AL_INFO_BATERIA].orden_ms   = (uint32_t)(esp_timer_get_time() / 1000);
 }

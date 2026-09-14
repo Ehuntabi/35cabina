@@ -108,6 +108,12 @@ void data_model_update_from_msg(const struct mini_msg *msg)
     tmp.epoch_local = msg->epoch_local;
     tmp.gps_estado  = msg->gps_estado;
 
+    /* Alarmas activas de la P4 (bitmask). Se copia tal cual, incluido el 0 =
+     * "ninguna": aqui no hay sentinel de "sin dato" porque el byte siempre
+     * viene con un valor valido, y quien lo pinte tiene que mirar ademas que el
+     * enlace este fresco (last_update_ms), no este campo. */
+    tmp.alarmas = msg->alarmas;
+
     tmp.last_update_ms = now;
 
     portENTER_CRITICAL(&s_data_mux);
@@ -120,5 +126,13 @@ void data_model_get(mini_data_t *out)
     if (!out) return;
     portENTER_CRITICAL(&s_data_mux);
     *out = s_data;
+    portEXIT_CRITICAL(&s_data_mux);
+}
+
+void data_model_set_simulated(const mini_data_t *sim)
+{
+    if (!sim) return;
+    portENTER_CRITICAL(&s_data_mux);
+    s_data = *sim;
     portEXIT_CRITICAL(&s_data_mux);
 }

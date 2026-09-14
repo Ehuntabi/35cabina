@@ -33,7 +33,9 @@
 
 static const char *TAG = "p4_api";
 
-#define P4_URL        "http://192.168.4.1/api/viaje"
+#define P4_HOST       "http://192.168.4.1"
+#define P4_URL        P4_HOST "/api/viaje"
+#define P4_URL_ALARMA P4_HOST "/api/alarma"
 /* 8 s: el AP esta a un metro, pero la P4 puede estar ocupada con la tarjeta
  * (el endpoint toma el cerrojo de la SD, hasta 3 s) y ademas puede tocarle
  * reasociarse. Corto se traduciria en fallos falsos. */
@@ -43,6 +45,10 @@ static const char *TAG = "p4_api";
  * quien llama no espera y no puede ser el dueño de esta memoria. */
 typedef struct {
     char           cuerpo[192];
+    /* Copia de la URL y no un puntero: el trabajo sobrevive a quien llama (la
+     * tarea se lleva el struct al heap), asi que no puede depender de que el
+     * texto siga vivo. */
+    char           url[64];
     p4_api_done_cb cb;
     bool           ok;
     int            estado;      /* codigo HTTP, o 0 si ni siquiera conecto */
@@ -56,11 +62,25 @@ static void avisar_cb(void *arg)
     free(t);
 }
 
+/* ── Envio ─────────────────────────────────────────────────────────────────
+ * Un solo camino de salida para todo lo que se manda a la P4: el POST contra su
+ * portal, con Basic Auth y contando como entregado solo el 2xx. La orden de
+ * silencio (p4_api_silenciar_alarma) usa el mismo, cambiando solo la URL: dos
+ * copias de esto serian dos sitios donde arreglar el mismo fallo. */
+static bool p4_api_post_url(const char *url, const char *cuerpo, int *estado_out);
+static bool lanzar_a(const char *url, const char *cuerpo, p4_api_done_cb cb);
+
 /* El POST de verdad. BLOQUEA hasta tener respuesta o agotar el plazo, asi que
  * NO se llama desde la tarea de LVGL: la usa el repartidor de la cola, que
  * tiene la suya. */
 bool p4_api_post(const char *cuerpo, int *estado_out)
 {
+    return p4_api_post_url(P4_URL, cuerpo, estado_out);
+}
+
+static bool p4_api_post_url(const char *url, const char *cuerpo, int *estado_out)
+{
+    if (!url || !cuerpo) return false;
     if (estado_out) *estado_out = 0;
 
     /* Las credenciales se leen en cada envio y no se cachean: el usuario puede
@@ -71,7 +91,7 @@ bool p4_api_post(const char *cuerpo, int *estado_out)
     bool hay_creds = (load_portal_creds(user, &ul, pass, &pl) == ESP_OK) && user[0];
 
     esp_http_client_config_t cfg = {
-        .url            = P4_URL,
+        .url            = url,
         .method         = HTTP_METHOD_POST,
         .timeout_ms     = P4_TIMEOUT_MS,
         .auth_type      = hay_creds ? HTTP_AUTH_TYPE_BASIC : HTTP_AUTH_TYPE_NONE,
@@ -108,7 +128,7 @@ bool p4_api_post(const char *cuerpo, int *estado_out)
 static void envio_task(void *arg)
 {
     trabajo_t *t = (trabajo_t *)arg;
-    t->ok = p4_api_post(t->cuerpo, &t->estado);
+    t->ok = p4_api_post_url(t->url, t->cuerpo, &t->estado);
     /* Ver el comentario de cabecera: lv_async_call() en si mismo no basta.
      *
      * Espera SIN LIMITE (lvgl_port_lock(0)): con un timeout de 1s, si la
@@ -130,9 +150,15 @@ static void envio_task(void *arg)
 
 static bool lanzar(const char *cuerpo, p4_api_done_cb cb)
 {
+    return lanzar_a(P4_URL, cuerpo, cb);
+}
+
+static bool lanzar_a(const char *url, const char *cuerpo, p4_api_done_cb cb)
+{
     trabajo_t *t = calloc(1, sizeof(trabajo_t));
     if (!t) return false;
     snprintf(t->cuerpo, sizeof(t->cuerpo), "%s", cuerpo);
+    snprintf(t->url, sizeof(t->url), "%s", url);
     t->cb = cb;
     /* 6 KB: el cliente HTTP con su buffer de cabeceras no baja de unos 4. Con
      * menos se cuelga por desbordamiento de pila justo al conectar. */
@@ -166,6 +192,18 @@ void p4_api_cuerpo_fin_ajeno(char *out, size_t n, uint32_t id)
 void p4_api_cuerpo_descartar(char *out, size_t n, uint32_t id)
 {
     snprintf(out, n, "{\"op\":\"descartar\",\"id\":%lu}", (unsigned long)id);
+}
+
+void p4_api_cuerpo_alarma(char *out, size_t n, uint8_t mask)
+{
+    snprintf(out, n, "{\"alarmas\":%u}", (unsigned)mask);
+}
+
+bool p4_api_silenciar_alarma(uint8_t mask, p4_api_done_cb cb)
+{
+    char cuerpo[48];
+    p4_api_cuerpo_alarma(cuerpo, sizeof(cuerpo), mask);
+    return lanzar_a(P4_URL_ALARMA, cuerpo, cb);
 }
 
 bool p4_api_viaje_inicio(uint32_t id, const char *destino, uint32_t fecha_dias,

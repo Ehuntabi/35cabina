@@ -46,6 +46,15 @@ void view_info_set_sin_cerrar(size_t sin_cerrar);
  * view_registro_puntual_declarar_llegada en view_registro.h). */
 void view_info_set_puntual_pendiente(const char *nombre);
 
+/* Deja la alarma de la bateria CON el altavoz tachado (silenciada) para la
+ * captura de pantallas, sin mandar nada a la P4.
+ *
+ * Solo lo llama capture_carousel.c, y solo existe para poder enseñar en el
+ * manual y en la conversacion como se ve una alarma silenciada: el estado de
+ * silencio se pone tocando el icono, y eso manda una orden de verdad a la P4,
+ * que en una captura no esta. Nada de produccion llama a esto. */
+void view_info_captura_alarma_silenciada(void);
+
 #ifdef __cplusplus
 }
 #endif
