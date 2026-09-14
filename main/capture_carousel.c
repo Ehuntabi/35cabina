@@ -209,7 +209,14 @@ static void carousel_task(void *arg)
 
 void capture_carousel_start(void)
 {
-    xTaskCreate(carousel_task, "capture_carousel", 8192, NULL, 3, NULL);
+    /* 6 KB y no 8: con 8192 el xTaskCreate DEVOLVIA FALLO (visto el 14-sep-2026
+     * con una traza) y el carrusel no llegaba a existir nunca -- no salia
+     * ninguna captura y NO habia ni un error en el log, que es la peor forma de
+     * fallar. La tarea hace un memcpy del framebuffer a base64 y unos fprintfs;
+     * no necesita 8 KB. Se comprueba el resultado por si acaso. */
+    if (xTaskCreate(carousel_task, "capture_carousel", 6144, NULL, 3, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "no puedo crear la tarea del carrusel: la captura NO va a salir");
+    }
 }
 
 #else

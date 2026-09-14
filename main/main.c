@@ -20,6 +20,7 @@
 #include "net/udp_rx.h"
 #include "net/viaje_cola.h"
 #include "ui/view_info.h"
+#include "capture_carousel.h"   /* modo captura de pantallas por USB */
 #include "esp_log.h"
 #include "esp_flash.h"
 #include "esp_chip_info.h"
@@ -226,6 +227,15 @@ void setup(void) {
     if (xTaskCreate(lvgl_wdog_task, "lvgl_wdog", 3072, NULL, 6, NULL) != pdPASS) {
         ESP_LOGE(TAG, "xTaskCreate(lvgl_wdog_task) fallo: SIN recuperacion anti-cuelgue de LVGL");
     }
+
+    /* Modo captura de pantallas (capture_carousel.c). Con el interruptor de
+     * capture_carousel.h a 0 la funcion es un no-op, asi que esto se puede
+     * dejar enchufado siempre: el dia de la captura solo hay que cambiar el
+     * flag. Va lo ULTIMO del setup porque necesita la pantalla montada y el
+     * modelo de datos vivo. Auditado el 14-sep-2026: antes esto NO estaba
+     * llamado, y el carrusel (que si estaba escrito y commiteado) no arrancaba
+     * nunca -- por eso la captura no salia. */
+    capture_carousel_start();
 
     logSection("Setup complete");
 }

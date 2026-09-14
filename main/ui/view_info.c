@@ -155,6 +155,7 @@ static uint32_t    s_orden_msg_ms;   /* cuando se puso, 0 = nada que enseñar */
 static lv_obj_t *al_icono_crear(lv_obj_t *card, al_info_t i,
                                 lv_align_t alineacion, lv_coord_t x, lv_coord_t y);
 static void al_card_cb_alarma(lv_event_t *e);
+static void al_icono_cb_alarma(lv_event_t *e);
 static bool al_info_activa(al_info_t i);
 
 static lv_color_t color_for_frigo(int16_t centi) {
@@ -827,6 +828,19 @@ static void al_card_cb_alarma(lv_event_t *e)
     al_info_alternar(i, (uint32_t)(esp_timer_get_time() / 1000));
 }
 
+/* El mismo gesto, pero desde el ICONO. Se corta la propagacion a proposito: el
+ * icono cuelga de la tarjeta y las tarjetas de esta pantalla burbujean el evento
+ * hasta la pantalla, que es donde vive el doble toque del brillo. Sin cortarlo,
+ * dos toques seguidos en el altavoz (silenciar y volver a poner el sonido)
+ * contarian ademas como doble toque y cambiarian el brillo sin querer.
+ * En las TARJETAS no se corta, porque ahi el doble toque del brillo es lo que se
+ * quiere (y esta documentado). Auditado el 14-sep-2026. */
+static void al_icono_cb_alarma(lv_event_t *e)
+{
+    lv_event_stop_bubbling(e);
+    al_card_cb_alarma(e);
+}
+
 /* El icono del altavoz de cada tarjeta. Se crea OCULTO (solo se ve con la
  * alarma activa) y se alinea a la esquina que se le diga: en la tarjeta de
  * bateria hay que dejarlo a la izquierda del punto de enlace, que ya esta en esa
@@ -849,7 +863,7 @@ static lv_obj_t *al_icono_crear(lv_obj_t *card, al_info_t i,
      * margen) que las flechas del historico de la P4. */
     lv_obj_add_flag(ic, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_ext_click_area(ic, AL_ICONO_EXTRA);
-    lv_obj_add_event_cb(ic, al_card_cb_alarma, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    lv_obj_add_event_cb(ic, al_icono_cb_alarma, LV_EVENT_CLICKED, (void *)(intptr_t)i);
     s_al[i].icono = ic;
     return ic;
 }
