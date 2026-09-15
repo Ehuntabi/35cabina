@@ -69,10 +69,8 @@ manda la orden a la P4.
 
 Cuando la P4 tiene una alarma activa (agua en reserva, aguas grises llenas,
 batería baja o congelador), en la esquina de **la tarjeta que toca** sale un
-**altavoz**:
-
-En la esquina de esa tarjeta sale un **altavoz**: con **ondas y en blanco** si esa
-alarma está sonando en la P4, y **tachado y en gris** si ya se ha callado.
+**altavoz**: con **ondas y en blanco** si esa alarma está sonando en la P4, y
+**tachado y en gris** si ya se ha callado.
 
 | Lo que ves | Qué significa |
 |---|---|
@@ -193,7 +191,7 @@ ellos.
 
 **Un botón grande por pantalla.** Lo que se hace siempre tiene que verse desde
 lejos y acertarse con el dedo con el vehículo en marcha. **Configuración** queda
-pequeño y gris en todas partes.
+pequeño y gris en las pantallas donde sale (la principal y la del viaje).
 
 Arriba, una franja fina con **la hora** y dos puntos: **GPS** y **P4**. Verde =
 va; ámbar = el GPS todavía busca; gris = no hay. Los dos puntos **caducan con el
@@ -533,9 +531,11 @@ El viaje **no se da por empezado hasta que la P4 lo confirma**. Si algo falla te
 lo dice y todo se queda como estaba, en vez de poner «viaje en curso» mientras en
 la tarjeta no hay nada.
 
-**Terminar salida** pide confirmación y **no deja terminar con algo sin cerrar**:
-avisa y te manda a cerrarlo, porque al cerrar la salida se olvidan los apuntes
-abiertos y se perderían.
+**Terminar salida** pide confirmación, pero **sí deja terminar con algo sin
+cerrar**: antes te dice cuántos apuntes se van a perder y pide un segundo toque
+(«Sí, descartar» / «No, dejarlo»), porque al cerrar la salida se olvidan los
+apuntes abiertos y se pierden. Como se cuenta en el apartado 4, no se impide a
+propósito: prohibirlo dejaría la pantalla sin salida.
 
 A diferencia del inicio, el fin **no exige la P4 delante**: entra en la cola de
 pendientes, detrás de los apuntes que falten por entregar, y se manda cuando
@@ -623,40 +623,55 @@ de volver.
 
 Aquí está la parte que más conviene entender.
 
-Una parada en un **área, un camping o una pernocta** no termina cuando le das a
-Guardar: termina **cuando te vas**, que puede ser días después y con la pantalla
-apagada por medio (se va con el contacto).
+Una parada en un **área, un camping o una pernocta** no termina al llegar:
+termina **cuando te vas**, que puede ser días después y con la pantalla apagada
+por medio (se va con el contacto).
 
 Por eso la parada queda **abierta**, y **al volver a encender** sale solo:
 
 ```
-        ¿Fin de la parada?
+        Parada en curso
+        Area de pago
+        desde las 19:40  -  3 noches
 
-              Área
-            3 noches
-        Total:  45.00 EUR
+        Al terminarla te pido el precio
+        y que habia.
 
-  [ No, continuar ]  [ Sí, terminar ]
+        [ Prolongar ]        [ Terminarla ]
 ```
 
-- **"Sí, terminar"** — cierra la parada con esa cuenta.
-- **"No, continuar"** — **sigues otro día más ahí**. La parada se queda abierta.
+- **"Prolongar"** — **sigues ahí**. No pregunta nada y no toca la hora de
+  inicio: la parada sigue contando desde el principio.
+- **"Terminarla"** — cierra la parada con sus horas de entrada y salida reales.
+  Si es una **pernocta**, antes abre la pantalla del precio, los servicios y la
+  nota (apartado 4).
 
-Si dices que no, **no vuelve a preguntar sola**. Para cerrarla cuando quieras
-está el botón **"Finalizar parada"** en la pantalla de Viaje.
+**Esta pregunta sale en cada contacto.** Cada vez que enciendes —cada mañana,
+cada alto del viaje—, si la parada sigue abierta te vuelve a preguntar, con las
+noches (o las horas) ya puestas al día. **No hay ningún botón «Finalizar
+parada»** en la pantalla del viaje: se cierra con **«Terminarla»** de esta
+pregunta, o desde la lista de **«SIN CERRAR»** —toca la tira de «N sin cerrar»
+y dale a **Terminar** en su fila. Si hay más de una cosa abierta, pregunta por
+cada una, en el orden en que las anotaste.
 
-Las paradas de **solo vaciado, llenado o agua** no dejan nada abierto: se acaban
-en el sitio.
+Las aguas (**vaciado, llenado, agua**) **también dejan algo abierto**: al tocar
+Aguas se abre un apunte y se pregunta al volver a dar el contacto —«Aguas
+terminadas», con **Rellenarlo** o **Luego**—, igual que a la parada. Lo único
+que se cierra en el sitio es el **peaje**, que se rellena en el momento.
 
 ### ⚠️ Necesita que la P4 esté encendida
 
-Esta pantalla **no tiene reloj propio** (ni pila). La fecha se la da la P4.
+Esta pantalla **no tiene reloj propio** (ni pila). La fecha y la hora se las da
+la P4.
 
-- Si guardas una parada y **la P4 no ha dado la hora todavía**, sale un aviso:
-  *"Parada sin contar"*. La parada **no se abre**, porque no habría forma de
-  contar las noches. Es mejor decírtelo que dejarte creer que se está contando.
-- Al encender, si la P4 no aparece, **no pregunta nada** y sigue esperando. Más
-  vale callar que inventarse las noches.
+- Si anotas una parada y **la P4 no ha dado la hora todavía**, sale el aviso
+  **«Enciende la P4 primero»** y no se anota: el apunte va con su hora de
+  inicio.
+- Si intentas **cerrarla** sin la P4, sale **«Sin la P4»**: sin fecha no se
+  puede calcular la estancia ni las noches.
+- Al encender, si la P4 no aparece, **no pregunta nada**: espera su hora, y si
+  no llega lo deja para el siguiente encendido, con todo lo abierto todavía
+  abierto.
 
 Como norma: **enciende la P4 antes que esta pantalla**, o al menos deja que se
 enlacen antes de anotar la parada.
@@ -700,8 +715,9 @@ cambian por eje, no sueltas); si no, ese selector ni se ve. Abajo, **Km** y
 
 ### Configuración
 
-Se llega con el botón **Configuración**, que sale en todos los menús del
-cuaderno. Tiene dos cosas:
+Se llega con el botón **Configuración**, que solo sale en **dos pantallas del
+cuaderno**: la principal (sin salida en marcha) y la del viaje en marcha, donde
+comparte fila con «Terminar salida». Tiene dos cosas:
 
 ```
         [ < Volver ]        CONFIGURACION
@@ -854,7 +870,7 @@ llama por lo que es: **`historico.tar`**.
 | Qué ves | Qué pasa |
 |---|---|
 | **"--"** en todos los datos | No llega nada de la P4. Comprueba que esté encendida y que el Wi-Fi de Ajustes apunte a su red |
-| **"Parada sin contar"** | Guardaste la parada antes de que la P4 diera la hora. Enciende la P4 y vuelve a anotarla |
+| **"Enciende la P4 primero"** | Anotaste algo sin que la P4 diera la hora. Enciéndela: el apunte va con su hora de inicio |
 | **"Sin la P4"** al finalizar parada | Lo mismo: sin fecha no se puede calcular la estancia |
 | **"La P4 no acepta la clave"** | Falta el usuario o la clave del PORTAL en Ajustes (no son los del Wi-Fi) |
 | **"Ya hay un viaje abierto"** | La P4 tiene uno sin cerrar. Termínalo antes de empezar otro |
@@ -862,7 +878,7 @@ llama por lo que es: **`historico.tar`**.
 | El nivel marca torcido estando recta | Pulsa **Calibrar nivel** con la autocaravana bien nivelada |
 | Volviste a Registros y estaba en blanco | Normal: al salir se limpia. Lo no guardado se pierde |
 | **"N sin enviar"** en naranja | No es avería: hay apuntes esperando a la P4. Se van solos cuando aparezca |
-| **"N sin enviar - CASI LLENA"** en rojo | Sí es aviso: quedan menos de 3 huecos de 16. La P4 lleva rato sin recibir; mira si tiene corriente y si esta pantalla ve su wifi |
+| **"N sin enviar - CASI LLENA"** en rojo | Sí es aviso: sale cuando quedan 3 huecos de 16 (y sigue con menos). La P4 lleva rato sin recibir; mira si tiene corriente y si esta pantalla ve su wifi |
 | **"Guardado solo aquí"** | Lo anotaste sin viaje en marcha, así que no va a la tarjeta. Inicia un viaje antes |
 
 ---
