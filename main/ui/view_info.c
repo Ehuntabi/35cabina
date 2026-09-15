@@ -1551,10 +1551,11 @@ void view_info_captura_alarma_silenciada(void)
 {
     /* El estado local, que es lo unico que pinta el icono tachado. NO se manda
      * nada a la P4: en una captura no hay P4 al otro lado, y la orden que
-     * manda el toque de verdad se prueba en la placa. Se marca tambien como
-     * "orden enviada" para que al_refresh_iconos() no lo rearme al ver que la
-     * alarma no cambia. */
+     * manda el toque de verdad se prueba en la placa.
+     *
+     * NO se marca orden_pend (3.B2): sin una orden en vuelo no hay plazo de
+     * 10 s (orden_timeout_check) ni respuesta tardia que puedan deshacer el
+     * silencio, y en las vueltas siguientes del carrusel el icono sigue
+     * saliendo tachado. */
     s_al[AL_INFO_BATERIA].silenciada = true;
-    s_al[AL_INFO_BATERIA].orden_pend = true;
-    s_al[AL_INFO_BATERIA].orden_ms   = (uint32_t)(esp_timer_get_time() / 1000);
 }

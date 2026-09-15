@@ -172,6 +172,24 @@ void lvgl_port_unlock(void);
  */
 uint32_t lvgl_port_get_loop_count(void);
 
+/**
+ * @brief Snapshot del ultimo frame enviado al panel (3.M5).
+ *
+ * Devuelve, EN ORIENTACION LOGICA (la que ve el usuario), la copia del
+ * ultimo frame que el flush envio al panel, guardada en un buffer estatico
+ * interno del port. El puntero es valido mientras el llamador mantenga el
+ * lock de LVGL (lvgl_port_lock): el siguiente flush escribe ese mismo
+ * buffer.
+ *
+ * @param[out] buf  puntero al buffer RGB565 del frame (lv_color_t)
+ * @param[out] w    ancho logico del frame (p.ej. 480)
+ * @param[out] h    alto logico del frame (p.ej. 320)
+ *
+ * @return true si hay un frame guardado; false si el port aun no ha
+ *         flasheado ninguno (la captura debe omitirse con un aviso)
+ */
+bool lv_port_snapshot(uint16_t **buf, uint16_t *w, uint16_t *h);
+
 #ifdef __cplusplus
 }
 #endif

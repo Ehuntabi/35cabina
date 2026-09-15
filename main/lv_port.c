@@ -5,6 +5,7 @@
  */
 
 #include "esp_system.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_check.h"
@@ -37,6 +38,18 @@ static const char *TAG = "LVGL";
  * tarea queda colgada (p.ej. en un flush con portMAX_DELAY), deja de avanzar y
  * el supervisor (heartbeat en main.c) reinicia. */
 static volatile uint32_t s_lvgl_loop_count = 0;
+
+/* Snapshot del ultimo frame enviado al panel (3.M5): el carrusel de capturas
+ * (capture_carousel.c) lo vuelca por UART y tiene que enseñar lo que SE VE.
+ * El buffer interno de dibujo de LVGL (draw_buf->buf_act) no sirve para eso:
+ * esta sin rotar y, segun el momento, puede no contener el frame que el panel
+ * esta enseñando. Aqui se reconstruye el frame que el flush manda al panel
+ * (que viaja rotado, en trozos) y se guarda EN ORIENTACION LOGICA, que es
+ * como lo ve el usuario. */
+static lv_color_t *s_snap_buf;    /* frame completo (hor_res * ver_res) */
+static uint16_t    s_snap_w;      /* ancho logico del frame guardado */
+static uint16_t    s_snap_h;      /* alto logico del frame guardado */
+static bool        s_snap_valid;  /* ya se guardo al menos un frame completo */
 
 /*******************************************************************************
 * Types definitions
@@ -378,6 +391,33 @@ uint32_t lvgl_port_get_loop_count(void)
     return s_lvgl_loop_count;
 }
 
+/* 3.M5: devuelve el ultimo frame que el port envio al panel, EN ORIENTACION
+ * LOGICA (la que ve el usuario), para que la captura del carrusel enseñe lo
+ * que se ve y no el buffer interno de dibujo de LVGL. El puntero devuelto es
+ * el buffer estatico del port: el llamador debe mantener el lock de LVGL
+ * mientras lo lee (el carrusel ya lo hace) o el siguiente flush podria
+ * pisarlo a mitad de lectura. Devuelve false si todavia no se ha flasheado
+ * ningun frame completo. */
+bool lv_port_snapshot(uint16_t **buf, uint16_t *w, uint16_t *h)
+{
+    bool ok = false;
+
+    /* El mismo mutex que serializa el flush (tarea LVGL), que es quien
+     * escribe el snapshot. Es recursivo, asi que llamar con el lock ya
+     * tomado (como hace el carrusel de capturas) no bloquea. */
+    if (!lvgl_port_lock(1000)) {
+        return false;
+    }
+    if (s_snap_buf && s_snap_valid) {
+        *buf = (uint16_t *)s_snap_buf;
+        *w = s_snap_w;
+        *h = s_snap_h;
+        ok = true;
+    }
+    lvgl_port_unlock();
+    return ok;
+}
+
 /*******************************************************************************
 * Private functions
 *******************************************************************************/
@@ -449,6 +489,82 @@ static bool IRAM_ATTR lvgl_port_flush_ready_callback(esp_lcd_panel_io_handle_t p
 }
 #endif
 
+/* Guarda el trozo recien rotado (to) en su sitio del snapshot, devolviendo
+ * la imagen a la orientacion logica (la que ve el usuario) con el MISMO
+ * mapeo con el que el flush la envio al panel: lo que se captura es
+ * exactamente lo que el panel esta enseñando, no lo que quedo en el buffer
+ * de dibujo de LVGL (3.M5). Devuelve false si no supo hacerlo (rotacion
+ * desconocida o sin memoria): en ese caso el snapshot no se marca valido y
+ * la captura se omite con su aviso. */
+static bool lvgl_port_snapshot_store(const lvgl_port_display_ctx_t *disp_ctx,
+                                     const lv_disp_drv_t *drv,
+                                     const lv_color_t *to,
+                                     int x_start_tmp, int y_start_tmp,
+                                     int width, int height,
+                                     int trans_width, int trans_height)
+{
+    if (!s_snap_buf) {
+        /* Se asigna UNA vez, del tamano del frame logico (el panel entero).
+         * PSRAM primero, que es donde cabe; si no, el heap normal. */
+        s_snap_buf = heap_caps_malloc(drv->hor_res * drv->ver_res * sizeof(lv_color_t),
+                                      MALLOC_CAP_SPIRAM);
+        if (!s_snap_buf) {
+            s_snap_buf = heap_caps_malloc(drv->hor_res * drv->ver_res * sizeof(lv_color_t),
+                                          MALLOC_CAP_DEFAULT);
+        }
+        if (!s_snap_buf) {
+            ESP_LOGE(TAG, "sin memoria para el snapshot del panel (%u bytes)",
+                     (unsigned)(drv->hor_res * drv->ver_res * sizeof(lv_color_t)));
+            return false;
+        }
+        s_snap_w = (uint16_t)drv->hor_res;
+        s_snap_h = (uint16_t)drv->ver_res;
+    }
+
+    /* Indices inversos a los del flush, caso a caso (ver lvgl_port_flush_callback):
+     * cada trozo vuelve a su sitio en el frame logico. */
+    switch (disp_ctx->sw_rotate) {
+    case LV_DISP_ROT_90:
+        /* flush: to[x*height + height-y-1] = logica(fila y, col x_start_tmp+x) */
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < trans_width; x++) {
+                s_snap_buf[y * drv->hor_res + x_start_tmp + x] =
+                    *(to + x * height + (height - y - 1));
+            }
+        }
+        return true;
+    case LV_DISP_ROT_270:
+        /* flush: to[(trans_width-x-1)*height + y] = logica(fila y, col x_start_tmp+x) */
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < trans_width; x++) {
+                s_snap_buf[y * drv->hor_res + x_start_tmp + x] =
+                    *(to + (trans_width - x - 1) * height + y);
+            }
+        }
+        return true;
+    case LV_DISP_ROT_180:
+        /* flush: to[(trans_height-y-1)*width + width-x-1] = logica(fila y_start_tmp+y, col x) */
+        for (int y = 0; y < trans_height; y++) {
+            for (int x = 0; x < width; x++) {
+                s_snap_buf[(y_start_tmp + y) * drv->hor_res + x] =
+                    *(to + (trans_height - y - 1) * width + (width - x - 1));
+            }
+        }
+        return true;
+    case LV_DISP_ROT_NONE:
+        /* flush: to[y*width + x] = logica(fila y_start_tmp+y, col x) */
+        for (int y = 0; y < trans_height; y++) {
+            for (int x = 0; x < width; x++) {
+                s_snap_buf[(y_start_tmp + y) * drv->hor_res + x] =
+                    *(to + y * width + x);
+            }
+        }
+        return true;
+    default:
+        return false;
+    }
+}
+
 static void lvgl_port_flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map)
 {
     assert(drv != NULL);
@@ -473,6 +589,7 @@ static void lvgl_port_flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, 
         int y_draw_start = 0;
         int y_draw_end = 0;
         int trans_count = 0;
+        bool snap_ok = false;   /* si al menos un trozo entro en el snapshot */
 
         disp_ctx->trans_act = disp_ctx->trans_buf_1;
         int rotate = disp_ctx->sw_rotate;
@@ -569,6 +686,12 @@ static void lvgl_port_flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, 
                 break;
             }
 
+            /* Snapshot (3.M5): el trozo, ya rotado, va a su sitio en la copia
+             * de lo que el panel esta enseñando. */
+            snap_ok = lvgl_port_snapshot_store(disp_ctx, drv, to, x_start_tmp,
+                                               y_start_tmp, width, height,
+                                               trans_width, trans_height) || snap_ok;
+
             if (0 == i) {
                 if (disp_ctx->draw_wait_cb) {
                     disp_ctx->draw_wait_cb(disp_ctx->panel_handle->user_data);
@@ -595,6 +718,10 @@ static void lvgl_port_flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, 
                 y_end_tmp -= max_height;
             }
         }
+
+        /* Con full_refresh el flush de arriba siempre trae el frame entero:
+         * a partir de aqui el snapshot queda valido para la captura. */
+        s_snap_valid = s_snap_valid || snap_ok;
     } else {
         esp_lcd_panel_draw_bitmap(disp_ctx->panel_handle, x_start, y_start, x_end + 1, y_end + 1, color_map);
     }

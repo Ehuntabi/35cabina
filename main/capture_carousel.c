@@ -75,23 +75,29 @@ static void inject_sim_data(void)
 /* Vuelca la pantalla activa por UART en base64, con delimitadores para que
  * un script en el PC lo pueda extraer del log de idf.py monitor. Se llama
  * con el lock de LVGL ya tomado: nadie mas toca el framebuffer mientras
- * se lee. */
+ * se lee.
+ *
+ * El frame sale de lv_port_snapshot() y no del draw_buf de LVGL (3.M5):
+ * lo que hay que enseñar es lo que el panel esta viendo, o sea la copia
+ * rotada que el flush manda al panel; draw_buf->buf_act esta sin rotar y
+ * no es de fiar en el momento de la captura. El tamano sigue siendo el del
+ * panel logico (480x320), asi que el formato del volcado y el decodificador
+ * no cambian. */
 static void dump_screen_uart(const char *name)
 {
-    lv_disp_t *disp = lv_disp_get_default();
-    if (!disp || !disp->driver || !disp->driver->draw_buf) {
-        ESP_LOGE(TAG, "sin display activo, no se puede capturar");
+    uint16_t w = 0, h = 0;
+    uint16_t *pix = NULL;
+    if (!lv_port_snapshot(&pix, &w, &h)) {
+        /* El port aun no ha flasheado ningun frame completo: sin imagen que
+         * enseñar, esta captura se omite con aviso. */
+        ESP_LOGW(TAG, "sin frame flasheado todavia: captura '%s' omitida", name);
         return;
     }
 
-    uint32_t hres = lv_disp_get_hor_res(disp);
-    uint32_t vres = lv_disp_get_ver_res(disp);
+    uint32_t hres = w;
+    uint32_t vres = h;
     size_t raw_len = (size_t)hres * vres * sizeof(lv_color_t);
-    const uint8_t *fb = (const uint8_t *)disp->driver->draw_buf->buf_act;
-    if (!fb) {
-        ESP_LOGE(TAG, "framebuffer nulo");
-        return;
-    }
+    const uint8_t *fb = (const uint8_t *)pix;
 
     size_t b64_cap = raw_len * 4 / 3 + 16;
     char *b64 = malloc(b64_cap);
