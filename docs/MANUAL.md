@@ -103,7 +103,7 @@ brillo entre **30 %** y **100 %**. Otros dos toques y vuelve al anterior.
 
 - **Se acuerda al apagar.** Enciendes y sigue como lo dejaste.
 - **De fábrica arranca al 100 %.**
-- Los toques tienen que ir seguidos: si tardas más de medio segundo entre uno y
+- Los toques tienen que ir seguidos: si tardas más de **0,4 segundos** entre uno y
   otro, no cuenta y no pasa nada.
 - **Deslizar para cambiar de pantalla no cuenta como toque**, así que no vas a
   cambiar el brillo sin querer al moverte.
