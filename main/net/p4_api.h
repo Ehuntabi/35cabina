@@ -15,8 +15,9 @@ extern "C" {
 
 /* 'ok' es true solo con respuesta 2xx. 'estado' es el codigo HTTP, o 0 si no se
  * llego a conectar (P4 apagada o fuera de alcance). 401 = credenciales del
- * portal mal puestas en Ajustes. */
-typedef void (*p4_api_done_cb)(bool ok, int estado);
+ * portal mal puestas en Ajustes. 'user_data' es lo que se paso al lanzar el
+ * envio, reenviado tal cual: sirve para distinguir de que era la respuesta. */
+typedef void (*p4_api_done_cb)(bool ok, int estado, void *user_data);
 
 /* Devuelven false si ni siquiera se pudo lanzar el envio (sin memoria); en ese
  * caso 'cb' NO se llama. */
@@ -61,9 +62,10 @@ void p4_api_cuerpo_descartar(char *out, size_t n, uint32_t id);
  *
  * 'cb' es opcional (NULL si no se quiere saber el resultado). Como las demas
  * funciones de aqui, vuelve al instante: el envio lo hace una tarea aparte y el
- * resultado llega ya en el hilo de LVGL. Devuelve false solo si no se pudo
- * lanzar el envio (sin memoria). */
-bool p4_api_silenciar_alarma(uint8_t mask, p4_api_done_cb cb);
+ * resultado llega ya en el hilo de LVGL. 'user_data' se reenvia tal cual al
+ * callback (ver p4_api_done_cb). Devuelve false solo si no se pudo lanzar el
+ * envio (sin memoria). */
+bool p4_api_silenciar_alarma(uint8_t mask, p4_api_done_cb cb, void *user_data);
 
 /* Monta el cuerpo JSON, expuesto aparte para poder comprobarlo sin red. */
 void p4_api_cuerpo_alarma(char *out, size_t n, uint8_t mask);

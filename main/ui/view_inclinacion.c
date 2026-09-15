@@ -137,8 +137,8 @@ static void calib_btn_cb(lv_event_t *e)
      * lo pendiente (aqui, esta etiqueta) sin esperar al siguiente ciclo.
      * Detectado por el usuario el 09-sep-2026. */
     lv_refr_now(NULL);
-    tilt_calibrate();   /* bloquea ~0.5s (ver tilt.h) */
-    lv_label_set_text(s_label_status, "Calibrado");
+    bool ok = tilt_calibrate();   /* bloquea ~0.5s (ver tilt.h) */
+    lv_label_set_text(s_label_status, ok ? "Calibrado" : "No he podido guardarlo");
 }
 
 /* Lo ultimo PINTADO, para no repintar por un resto de ruido. Ver la zona muerta
@@ -268,7 +268,8 @@ void view_inclinacion_create(lv_obj_t *parent)
     lv_obj_set_style_bg_color(s_circle, lv_color_hex(0x111111), 0);
     lv_obj_set_style_bg_opa(s_circle, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(s_circle, 3, 0);
-    /* Rojo FIJO: es el ultimo escalon del semaforo (mas de 5 grados). Antes
+    /* Rojo FIJO: es el ultimo escalon del semaforo (mas de MAX_DEG_SHOWN, o
+     * sea mas de 6 grados, el tope del dial). Antes
      * cambiaba de color con la inclinacion, pero ahora eso lo dice la bola, y
      * dos cosas cambiando a la vez confunden mas que informan. */
     lv_obj_set_style_border_color(s_circle, lv_color_hex(COL_MAL), 0);
@@ -277,8 +278,8 @@ void view_inclinacion_create(lv_obj_t *parent)
 
     /* Anillos de referencia, de fuera adentro. El del centro es la zona de
      * NIVELADO y va en verde: cuando la bola entra ahi, ya puedes parar. Es
-     * pequeno (0,5 grados a esta escala son 5 px) y la propia bola lo tapa --
-     * a proposito: taparlo ES la senal. */
+     * pequeno (NIVELADO_DEG es 1 grado, que a esta escala son 20 px) y la
+     * propia bola lo tapa -- a proposito: taparlo ES la senal. */
     make_ovalo(s_circle);
     make_anillo(s_circle, RADIO_DE(NIVELADO_DEG), COL_NIVEL, 2);
 

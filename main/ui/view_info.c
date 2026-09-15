@@ -141,6 +141,8 @@ static struct {
     bool      silenciada;   /* lo que hemos mandado callar */
     bool      orden_pend;   /* hay una orden en vuelo para esta alarma */
     uint32_t  orden_ms;     /* cuando se mando (para el plazo de respuesta) */
+    uint32_t  orden_seq;    /* numero de la orden en vuelo: con el viaja el
+                             * user_data y sirve para ignorar respuestas viejas */
 } s_al[AL_INFO_CUANTAS];
 
 static lv_obj_t   *s_orden_msg;      /* aviso de "enviado" / "sin respuesta" */
@@ -155,6 +157,7 @@ static uint32_t    s_orden_msg_ms;   /* cuando se puso, 0 = nada que enseñar */
 static lv_obj_t *al_icono_crear(lv_obj_t *card, al_info_t i,
                                 lv_align_t alineacion, lv_coord_t x, lv_coord_t y);
 static void al_card_cb_alarma(lv_event_t *e);
+static void al_card_cb_agua(lv_event_t *e);
 static void al_icono_cb_alarma(lv_event_t *e);
 static bool al_info_activa(al_info_t i);
 
@@ -247,6 +250,7 @@ static lv_obj_t *make_bateria_dibujo(lv_obj_t *padre)
     lv_label_set_text(s_bat_soc, "--");
     lv_obj_set_style_text_font(s_bat_soc, &lv_font_montserrat_32, 0);
     lv_obj_set_style_text_color(s_bat_soc, COL_TEXT, 0);
+    lv_obj_clear_flag(s_bat_soc, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_center(s_bat_soc);
 
     return cont;
@@ -360,6 +364,9 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_obj_set_style_radius(card, 10, 0);
     lv_obj_set_style_pad_all(card, 4, 0);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    /* Mismo burbujeo que make_card(): asi el toque en la tarjeta sube hasta la
+     * pantalla, donde escucha el doble toque del brillo. */
+    lv_obj_add_flag(card, LV_OBJ_FLAG_EVENT_BUBBLE);
     s_water_card = card;
 
     /* Esta tarjeta ya NO lleva punto de conexion. Habia dos, aqui y en la de
@@ -371,6 +378,7 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_label_set_text(t, "AGUAS");
     lv_obj_set_style_text_color(t, COL_BORDER_WATER, 0);
     lv_obj_set_style_text_font(t, &lv_font_montserrat_20, 0);
+    lv_obj_clear_flag(t, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 0);
 
     /* Los cuatro de agua limpia van en COLUMNA y se encienden de ABAJO ARRIBA,
@@ -388,7 +396,7 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_obj_set_style_pad_column(fila, 18, 0);
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(fila, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     /* Desplazada 10 px a la izquierda del centro: centrada del todo, la columna
      * de agua limpia con sus fracciones quedaba metida hacia dentro de la
      * tarjeta. Peticion del usuario, 23-ago-2026. */
@@ -404,7 +412,7 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_obj_set_flex_flow(col_limpia, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(col_limpia, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(col_limpia, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(col_limpia, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     lv_obj_t *leds = lv_obj_create(col_limpia);
     lv_obj_set_size(leds, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -415,7 +423,7 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_obj_set_flex_flow(leds, LV_FLEX_FLOW_COLUMN_REVERSE);
     lv_obj_set_flex_align(leds, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(leds, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(leds, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     /* Cada segmento va en su propia fila junto a su fraccion, para que numero y
      * barra queden a la misma altura. El indice 0 es 1/4 y queda ABAJO
      * (COLUMN_REVERSE): el deposito se llena de abajo arriba. */
@@ -430,7 +438,7 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
         lv_obj_set_flex_flow(fila_seg, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(fila_seg, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER);
-        lv_obj_clear_flag(fila_seg, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(fila_seg, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
         lv_obj_t *frac = lv_label_create(fila_seg);
         lv_label_set_text(frac, FRACCION[i]);
@@ -438,6 +446,7 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
         lv_obj_set_style_text_font(frac, &lv_font_montserrat_14, 0);
         lv_obj_set_width(frac, LED_FRAC_W);
         lv_obj_set_style_text_align(frac, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_clear_flag(frac, LV_OBJ_FLAG_CLICKABLE);
 
         s_led_clean[i] = make_led(fila_seg, false);
     }
@@ -453,7 +462,7 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_obj_set_flex_flow(col_gris, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(col_gris, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(col_gris, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(col_gris, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     /* Mas grande que los de nivel: esto no es un nivel, es una ALARMA. Con el
      * deposito de grises lleno hay que vaciar antes de seguir usando el
@@ -466,25 +475,27 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_label_set_text(s_lbl_gray, "grises");
     lv_obj_set_style_text_color(s_lbl_gray, COL_TEXT_DIM, 0);
     lv_obj_set_style_text_font(s_lbl_gray, &lv_font_montserrat_14, 0);
+    lv_obj_clear_flag(s_lbl_gray, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_center(s_lbl_gray);
 
     /* Iconos del altavoz de las dos alarmas de aguas (limpia en reserva y
      * grises llenas): arriba a la DERECHA, corridos un poco a la izquierda
      * porque la tarjeta tiene 2 px de borde + 4 de relleno. Esta tarjeta no
      * lleva punto de enlace (el unico esta en la de bateria), asi que no hay
-     * nada con lo que chocar. */
+     * nada con lo que chocar. Separados 32 px: juntos (y=2 e y=26) sus zonas
+     * tactiles extendidas (AL_ICONO_EXTRA) se solapaban, y con las dos alarmas
+     * a la vez un toque entre medias callaba la que no era. */
     al_icono_crear(card, AL_INFO_AGUA,   LV_ALIGN_TOP_RIGHT, -6, 2);
-    al_icono_crear(card, AL_INFO_GRISES, LV_ALIGN_TOP_RIGHT, -6, 26);
+    al_icono_crear(card, AL_INFO_GRISES, LV_ALIGN_TOP_RIGHT, -6, 34);
 
     /* Toda la tarjeta silencia: la alarma de limpia si esta activa, y si no la
      * de grises (pueden estar las dos a la vez, pero el toque calla una; el
-     * icono de cada una es el que va a lo suyo). Las tarjetas de aqui no hacen
-     * nada mas al tocarlas, asi que no se le quita el sitio a ningun gesto: en
-     * la P4 si lo hacen -- alli tienen su pantalla de detalle -- y por eso alli
-     * la tarjeta no silencia y solo lo hace el icono. */
+     * icono de cada una es el que va a lo suyo -- ver al_card_cb_agua). Las
+     * tarjetas de aqui no hacen nada mas al tocarlas, asi que no se le quita el
+     * sitio a ningun gesto: en la P4 si lo hacen -- alli tienen su pantalla de
+     * detalle -- y por eso alli la tarjeta no silencia y solo lo hace el icono. */
     lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(card, al_card_cb_alarma, LV_EVENT_CLICKED,
-                        (void *)(intptr_t)AL_INFO_AGUA);
+    lv_obj_add_event_cb(card, al_card_cb_agua, LV_EVENT_CLICKED, NULL);
     /* El icono del altavoz tiene su propio toque (alterna el sonido), y las
      * tarjetas del mini no burbujean eventos, asi que no hay que parar nada. */
 }
@@ -743,30 +754,35 @@ static void orden_msg(const char *txt, uint32_t ahora_ms)
 }
 
 /* Vuelve del envio, ya en el hilo de LVGL (ver p4_api.h). */
-static void orden_done_cb(bool ok, int estado)
+static void orden_done_cb(bool ok, int estado, void *user_data)
 {
-    /* El callback no dice de que alarma era (la API es generica), asi que se
-     * resuelve por la unica orden que puede estar en vuelo: solo se lanza una
-     * cada vez (ver alarm_card_cb). */
-    for (int i = 0; i < AL_INFO_CUANTAS; i++) {
-        if (!s_al[i].orden_pend) continue;
-        s_al[i].orden_pend = false;
-        if (!ok) {
-            /* Se deshace lo que se acaba de mandar: la pantalla no puede decir
-             * "silenciada" si la P4 no se ha enterado, porque seguiria pitando. */
-            bool era_silencio = s_al[i].silenciada;
-            s_al[i].silenciada = !s_al[i].silenciada;
-            ESP_LOGW("alarma", "la P4 no acepto la orden de %s (HTTP %d): %s",
-                     AL_INFO_NOMBRE[i], estado,
-                     era_silencio ? "se queda sonando" : "se queda callada");
-            char b[48];
-            snprintf(b, sizeof(b), "Sin respuesta de la P4 (%s)", AL_INFO_NOMBRE[i]);
-            orden_msg(b, (uint32_t)(esp_timer_get_time() / 1000));
-        } else {
-            ESP_LOGI("alarma", "orden de %s aceptada por la P4 (HTTP %d)",
-                     AL_INFO_NOMBRE[i], estado);
-        }
+    /* El user_data dice de que alarma era y con que numero de orden salio:
+     * si mientras tanto se lanzo otra orden para esa misma alarma (o el plazo
+     * de 10 s ya la dio por perdida), esta respuesta es VIEJA y se ignora --
+     * resolverla invertiria el estado equivocado. */
+    uintptr_t v = (uintptr_t)user_data;
+    al_info_t i = (al_info_t)((v >> 16) & 0xFF);
+    uint32_t seq = (uint32_t)(v & 0xFFFF);
+    if (!s_al[i].orden_pend || seq != (s_al[i].orden_seq & 0xFFFF)) {
+        ESP_LOGW("alarma", "respuesta vieja de la orden de %s (seq %lu): se ignora",
+                 AL_INFO_NOMBRE[i], (unsigned long)seq);
         return;
+    }
+    s_al[i].orden_pend = false;
+    if (!ok) {
+        /* Se deshace lo que se acaba de mandar: la pantalla no puede decir
+         * "silenciada" si la P4 no se ha enterado, porque seguiria pitando. */
+        bool era_silencio = s_al[i].silenciada;
+        s_al[i].silenciada = !s_al[i].silenciada;
+        ESP_LOGW("alarma", "la P4 no acepto la orden de %s (HTTP %d): %s",
+                 AL_INFO_NOMBRE[i], estado,
+                 era_silencio ? "se queda sonando" : "se queda callada");
+        char b[48];
+        snprintf(b, sizeof(b), "Sin respuesta de la P4 (%s)", AL_INFO_NOMBRE[i]);
+        orden_msg(b, (uint32_t)(esp_timer_get_time() / 1000));
+    } else {
+        ESP_LOGI("alarma", "orden de %s aceptada por la P4 (HTTP %d)",
+                 AL_INFO_NOMBRE[i], estado);
     }
 }
 
@@ -802,8 +818,14 @@ static bool al_info_alternar(al_info_t i, uint32_t ahora_ms)
      * local es el que manda, y la P4 se queda con la ultima que reciba). */
     s_al[i].orden_pend = true;
     s_al[i].orden_ms   = ahora_ms ? ahora_ms : 1;
+    /* Numero de la orden: la respuesta vuelve con el (ver orden_done_cb) y, si
+     * para entonces ya se lanzo otra, la vieja se ignora en vez de resolver el
+     * estado actual. */
+    s_al[i].orden_seq++;
 
-    bool ok = p4_api_silenciar_alarma(AL_INFO_BIT[i], orden_done_cb);
+    bool ok = p4_api_silenciar_alarma(AL_INFO_BIT[i], orden_done_cb,
+                                      (void *)(intptr_t)(((uintptr_t)i << 16) |
+                                                         (s_al[i].orden_seq & 0xFFFF)));
     if (!ok) {
         /* Ni siquiera se pudo lanzar el envio (sin memoria): no dejamos la
          * pantalla mintiendo. */
@@ -826,6 +848,20 @@ static void al_card_cb_alarma(lv_event_t *e)
 {
     al_info_t i = (al_info_t)(intptr_t)lv_event_get_user_data(e);
     al_info_alternar(i, (uint32_t)(esp_timer_get_time() / 1000));
+}
+
+/* El toque en la tarjeta de AGUAS, que tiene dos alarmas: calla la de limpia
+ * si esta activa, y si no la de grises. Cada icono sigue yendo a lo suyo
+ * (al_icono_cb_alarma), esto es solo el gesto de "tocar la tarjeta". */
+static void al_card_cb_agua(lv_event_t *e)
+{
+    (void)e;
+    uint32_t ahora_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    if (al_info_activa(AL_INFO_AGUA)) {
+        al_info_alternar(AL_INFO_AGUA, ahora_ms);
+        return;
+    }
+    if (al_info_activa(AL_INFO_GRISES)) al_info_alternar(AL_INFO_GRISES, ahora_ms);
 }
 
 /* El mismo gesto, pero desde el ICONO. Se corta la propagacion a proposito: el
@@ -1055,6 +1091,9 @@ static lv_obj_t *make_card(lv_obj_t *grid, lv_color_t border, const char *titulo
     lv_label_set_text(t, titulo);
     lv_obj_set_style_text_color(t, border, 0);
     lv_obj_set_style_text_font(t, fuente_titulo, 0);
+    /* No clickable: si no, el titulo se tragaria el toque y ni la tarjeta ni
+     * el doble toque del brillo lo verian (ver el bloque de abajo). */
+    lv_obj_clear_flag(t, LV_OBJ_FLAG_CLICKABLE);
     /* Los titulos van centrados: pegados a la esquina se perdian, y con el de
      * bateria coronando su dibujo los de abajo desalineados cantaban. */
     lv_obj_align(t, titulo_centrado ? LV_ALIGN_TOP_MID : LV_ALIGN_TOP_LEFT, 0, 0);
@@ -1070,6 +1109,7 @@ static lv_obj_t *make_fila_dato(lv_obj_t *padre, const char *etiqueta,
     lv_label_set_text(l, etiqueta);
     lv_obj_set_style_text_color(l, COL_TEXT_ESCALA, 0);
     lv_obj_set_style_text_font(l, &lv_font_montserrat_20, 0);
+    lv_obj_clear_flag(l, LV_OBJ_FLAG_CLICKABLE);
     /* Centrado vertical respecto al valor: la etiqueta es mas baja (font 20)
      * que el valor, cuyo tamano varia segun la tarjeta. */
     lv_coord_t label_y = y + (lv_font_get_line_height(fuente_val) -
@@ -1080,6 +1120,7 @@ static lv_obj_t *make_fila_dato(lv_obj_t *padre, const char *etiqueta,
     lv_label_set_text(v, "--");
     lv_obj_set_style_text_color(v, COL_TEXT, 0);
     lv_obj_set_style_text_font(v, fuente_val, 0);
+    lv_obj_clear_flag(v, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(v, LV_ALIGN_TOP_RIGHT, 0, y);
     return v;
 }
@@ -1133,12 +1174,14 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_bat_volt, &lv_font_montserrat_32, 0);
     lv_obj_set_width(s_bat_volt, BAT_NUM_W);
     lv_obj_set_style_text_align(s_bat_volt, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_clear_flag(s_bat_volt, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(s_bat_volt, LV_ALIGN_LEFT_MID, BAT_NUM_X, -12);
 
     lv_obj_t *u_v = lv_label_create(s_bat_card);
     lv_label_set_text(u_v, "V");
     lv_obj_set_style_text_color(u_v, COL_TEXT_ESCALA, 0);
     lv_obj_set_style_text_font(u_v, &lv_font_montserrat_24, 0);
+    lv_obj_clear_flag(u_v, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(u_v, LV_ALIGN_LEFT_MID, BAT_NUM_X + BAT_NUM_W + 8, -8);
 
     s_bat_amp = lv_label_create(s_bat_card);
@@ -1147,12 +1190,14 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_bat_amp, &lv_font_montserrat_32, 0);
     lv_obj_set_width(s_bat_amp, BAT_NUM_W);
     lv_obj_set_style_text_align(s_bat_amp, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_clear_flag(s_bat_amp, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(s_bat_amp, LV_ALIGN_LEFT_MID, BAT_NUM_X, 30);
 
     s_bat_amp_u = lv_label_create(s_bat_card);
     lv_label_set_text(s_bat_amp_u, "A");
     lv_obj_set_style_text_color(s_bat_amp_u, COL_TEXT_ESCALA, 0);
     lv_obj_set_style_text_font(s_bat_amp_u, &lv_font_montserrat_24, 0);
+    lv_obj_clear_flag(s_bat_amp_u, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(s_bat_amp_u, LV_ALIGN_LEFT_MID, BAT_NUM_X + BAT_NUM_W + 8, 34);
 
     /* La del motor, a la derecha del todo y mas discreta: es bateria tambien,
@@ -1170,13 +1215,14 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_flex_flow(col_motor, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(col_motor, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(col_motor, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(col_motor, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(col_motor, LV_ALIGN_RIGHT_MID, -18, 6);
 
     lv_obj_t *aux_tit = lv_label_create(col_motor);
     lv_label_set_text(aux_tit, "MOTOR");
     lv_obj_set_style_text_color(aux_tit, COL_BORDER_AUX, 0);
     lv_obj_set_style_text_font(aux_tit, &lv_font_montserrat_20, 0);
+    lv_obj_clear_flag(aux_tit, LV_OBJ_FLAG_CLICKABLE);
 
     s_aux_val = lv_label_create(col_motor);
     lv_label_set_text(s_aux_val, "--");
@@ -1184,6 +1230,7 @@ void view_info_create(lv_obj_t *parent)
     /* Mismo tamano que los voltios de la principal: es el otro dato de tension
      * de la tarjeta y no tiene por que leerse peor. */
     lv_obj_set_style_text_font(s_aux_val, &lv_font_montserrat_32, 0);
+    lv_obj_clear_flag(s_aux_val, LV_OBJ_FLAG_CLICKABLE);
 
     /* Icono del altavoz de la bateria: arriba a la DERECHA, pero corrido a la
      * izquierda porque ahi ya esta el punto de enlace de la tarjeta (12 px de
@@ -1214,6 +1261,7 @@ void view_info_create(lv_obj_t *parent)
     s_frigo_trend = lv_label_create(temp_card);
     lv_label_set_text(s_frigo_trend, "");
     lv_obj_set_style_text_font(s_frigo_trend, &lv_font_montserrat_20, 0);
+    lv_obj_clear_flag(s_frigo_trend, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(s_frigo_trend, LV_ALIGN_TOP_RIGHT, 0, 30);
 
     s_ext_val   = make_fila_dato(temp_card, "Exterior", &lv_font_montserrat_32, 62);
@@ -1224,6 +1272,7 @@ void view_info_create(lv_obj_t *parent)
     s_ext_trend = lv_label_create(temp_card);
     lv_label_set_text(s_ext_trend, "");
     lv_obj_set_style_text_font(s_ext_trend, &lv_font_montserrat_20, 0);
+    lv_obj_clear_flag(s_ext_trend, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(s_ext_trend, LV_ALIGN_TOP_RIGHT, 0, 66);
 
     /* Icono del altavoz de la alarma del congelador: arriba a la DERECHA, que
@@ -1243,6 +1292,7 @@ void view_info_create(lv_obj_t *parent)
     lv_label_set_text(fan_lbl, "Vent.");
     lv_obj_set_style_text_color(fan_lbl, COL_TEXT, 0);
     lv_obj_set_style_text_font(fan_lbl, &lv_font_montserrat_14, 0);
+    lv_obj_clear_flag(fan_lbl, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(fan_lbl, LV_ALIGN_BOTTOM_LEFT, 0, -3);
 
     /* La barra va justo a la derecha de la etiqueta, centrada verticalmente
@@ -1322,9 +1372,10 @@ void view_info_create(lv_obj_t *parent)
     /* Rejilla 4 de margen + tarjeta 2 de borde y 8 de relleno: el contenido de
      * la tarjeta de bateria empieza en la pantalla a (14, 14). El icono va casi
      * pegado a esa esquina porque AHI NO HAY NADA -- el punto de conexion de
-     * esta tarjeta esta arriba a la DERECHA (make_card lo alinea TOP_RIGHT; el
-     * de la izquierda es el de la tarjeta de aguas) y el titulo va centrado.
-     * Antes estaba en y=1 con letra 14, por encima del borde de la tarjeta. */
+     * esta tarjeta esta arriba a la DERECHA (make_card lo alinea TOP_RIGHT) y
+     * el titulo va centrado; la tarjeta de aguas ya no lleva punto (es el unico
+     * que queda). Antes estaba en y=1 con letra 14, por encima del borde de la
+     * tarjeta. */
     lv_obj_set_style_text_font(s_gps, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(s_gps, lv_color_hex(0x666666), 0);
     lv_obj_align(s_gps, LV_ALIGN_TOP_LEFT, 14, 11);

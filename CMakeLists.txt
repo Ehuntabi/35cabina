@@ -2,30 +2,37 @@ cmake_minimum_required(VERSION 3.16)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Version del firmware (Ajustes -> Acerca de). Se fija a mano por dos motivos,
-# los dos vistos en la practica:
+# Version del firmware (Ajustes -> Acerca de), con la MISMA regla que la P4
+# (13-sep-2026, decision del usuario; auditado el 15-sep-2026 porque la cabina
+# la incumplia): la version NUNCA lleva sufijos (ni "-dirty" ni "-N-g<hash>").
+# Lo que hay por encima del ultimo tag ES la version siguiente, +0.1: el arbol
+# justo en el tag muestra esa version, y con trabajo encima muestra la
+# siguiente, sin que aparezca "-dirty" por ningun lado. El +0.1 es solo el
+# valor del trabajo en curso: la version de verdad la fija el tag que crea
+# release.sh, y en cuanto existe el tag manda el tag.
 #
-#  1. ESP-IDF hace `git describe --tags` SIN filtro, asi que cualquier etiqueta
-#     que no sea de version (las `sdkconfig-known-good-*` de los proyectos
-#     hermanos) se colaria en el About. El patron es "v*.*" y NO "v*.*.*":
-#     desde el 24-ago-2026 las versiones llevan DOS numeros (v1.10). El comodin
-#     de git abarca tambien el punto, asi que encuentra igual las nuevas que
-#     las viejas de tres, y las sdkconfig siguen fuera por no empezar por v.
-#  2. Lo calcula al CONFIGURAR, no al compilar, asi que se congela: compilas y
-#     grabas, y el About sigue enseñando la version de hace veinte commits.
-#     Miente con autoridad -- creerias tener instalada la publicada (24-ago-2026:
-#     la P4 decia v1.10.0 llevando once commits por encima de esa etiqueta). Por
-#     eso el CMAKE_CONFIGURE_DEPENDS de abajo: al cambiar el git, se recalcula.
-#     Ojo: un fichero tocado y SIN anadir no lo dispara, asi que el sufijo
-#     `-dirty` puede tardar en aparecer.
+# El patron es "v*.*" y NO "v*.*.*": desde el 24-ago-2026 las versiones llevan
+# DOS numeros; el comodin de git abarca tambien el punto, asi que encuentra
+# igual las nuevas que las viejas de tres, y las sdkconfig-known-good-* quedan
+# fuera por no empezar por v.
+#
+# Se calcula al CONFIGURAR, asi que se congelaria: por eso el
+# CMAKE_CONFIGURE_DEPENDS de abajo (al cambiar el git, se recalcula). Ojo: un
+# fichero tocado y SIN anadir no lo dispara; da igual porque ya no se usa el
+# sufijo -dirty.
 execute_process(
     COMMAND git describe --always --tags --dirty --match "v*.*"
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-    OUTPUT_VARIABLE PROJECT_VER
+    OUTPUT_VARIABLE VER_DESCRITA
     OUTPUT_STRIP_TRAILING_WHITESPACE
     ERROR_QUIET
 )
-if(NOT PROJECT_VER)
+if(VER_DESCRITA MATCHES "^v([0-9]+)\.([0-9]+)(\.[0-9]+)?$")
+    set(PROJECT_VER "${VER_DESCRITA}")
+elseif(VER_DESCRITA MATCHES "^v([0-9]+)\.([0-9]+)-")
+    math(EXPR VER_MINOR_SIGUIENTE "1 + ${CMAKE_MATCH_2}")
+    set(PROJECT_VER "v${CMAKE_MATCH_1}.${VER_MINOR_SIGUIENTE}")
+else()
     set(PROJECT_VER "v?")
 endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS

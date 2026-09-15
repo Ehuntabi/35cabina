@@ -2,8 +2,8 @@
  *
  * Sustituye el tabview inicial de solo repostaje/bombona. Categorias:
  * inicio/fin de viaje, repostaje, peaje, cambio de bombona,
- * mantenimiento. Los botones "Guardar" (y los de viaje) solo loguean por
- * ahora -- el envio real a la P4 es la Fase 4, fuera de este repo.
+ * mantenimiento. Los "Guardar" envian a la P4: el inicio del viaje va
+ * directo (net/p4_api.c) y el resto se encola (net/viaje_cola.c).
  */
 #pragma once
 

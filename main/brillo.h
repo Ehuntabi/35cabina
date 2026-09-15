@@ -27,9 +27,6 @@ void brillo_init(void);
 /* Cambia al otro nivel, lo aplica y lo guarda. */
 void brillo_alternar(void);
 
-/* Nivel actual en %, para quien quiera mostrarlo. */
-uint8_t brillo_actual(void);
-
 #ifdef __cplusplus
 }
 #endif

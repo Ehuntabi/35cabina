@@ -9,11 +9,13 @@ serie en bloques:
     ...
     ===END===
 
-El base64 es el framebuffer tal cual (rgb565, con el byte-swap de
-CONFIG_LV_COLOR_16_SWAP), asi que aqui se deshace el swap y se escribe el PNG.
+El base64 es el framebuffer tal cual (rgb565). Con CONFIG_LV_COLOR_16_SWAP=y
+el volcado de memoria ya sale con los bytes en el orden correcto, asi que por
+defecto NO se aplica swap; la opcion --swap queda para volcados viejos de
+builds sin ese ajuste, que si lo llevaban.
 
 Uso:
-    decodifica_capturas.py log.txt [-o carpeta] [--solo nombre ...]
+    decodifica_capturas.py log.txt [-o carpeta] [--solo nombre ...] [--swap]
 
 Escribe <carpeta>/<nombre>.png. La carpeta por defecto es la del log.
 """
@@ -33,8 +35,8 @@ def rgb565_a_rgb(datos, ancho, alto, swap):
     px = []
     for i in range(0, ancho * alto * 2, 2):
         b0, b1 = datos[i], datos[i + 1]
-        # CONFIG_LV_COLOR_16_SWAP: los dos bytes van al reves de lo que espera
-        # el formato little-endian normal, asi que se intercambian.
+        # swap: para volcados viejos (sin CONFIG_LV_COLOR_16_SWAP), que traen
+        # los dos bytes en el orden contrario al que espera este decodificador.
         if swap:
             b0, b1 = b1, b0
         v = (b0 << 8) | b1
@@ -75,8 +77,9 @@ def main():
     ap.add_argument("-o", "--salida")
     ap.add_argument("--solo", nargs="*", default=None,
                     help="nombres a extraer (por defecto, todos)")
-    ap.add_argument("--sin-swap", action="store_true",
-                    help="si la imagen sale con los colores cambiados de sitio")
+    ap.add_argument("--swap", action="store_true",
+                    help="aplica el swap de bytes (solo volcados viejos; "
+                         "por defecto no se aplica)")
     args = ap.parse_args()
 
     carpeta = args.salida or os.path.dirname(os.path.abspath(args.log))
@@ -96,7 +99,7 @@ def main():
             print(f"[!] {nombre}: {len(datos)} bytes, se esperaban {esperado} "
                   f"({ancho}x{alto}) -- bloque descartado")
             continue
-        im = rgb565_a_rgb(datos, ancho, alto, not args.sin_swap)
+        im = rgb565_a_rgb(datos, ancho, alto, args.swap)
         destino = os.path.join(carpeta, f"{nombre}.png")
         im.save(destino)
         print(f"[ok] {destino}  ({ancho}x{alto})")

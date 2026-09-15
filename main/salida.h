@@ -170,10 +170,6 @@ int salida_eventos_abiertos(void);
  * en que se preguntan al arrancar. */
 const salida_evento_t *salida_evento_primero(void);
 
-/* Lo saca de la cola. Llamar cuando ya se ha encolado su apunte, o cuando el
- * usuario decide descartarlo. */
-void salida_evento_cerrar_primero(void);
-
 /* Uno cualquiera, por su sitio en la cola. Existe para DESHACER: el evento se
  * abre de un toque y sin esto un dedo equivocado no tendria vuelta atras.
  * false si el indice no existe. */

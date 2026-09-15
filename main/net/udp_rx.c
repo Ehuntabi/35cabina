@@ -163,19 +163,28 @@ void udp_rx_get_credentials(char *ssid_out, size_t ssid_len, char *pass_out, siz
     }
 }
 
-void udp_rx_set_credentials(const char *ssid, const char *pass)
+bool udp_rx_set_credentials(const char *ssid, const char *pass)
 {
-    if (!ssid || !pass) return;
+    if (!ssid || !pass) return false;
     strncpy(s_ssid, ssid, sizeof(s_ssid) - 1);
     s_ssid[sizeof(s_ssid) - 1] = '\0';
     strncpy(s_pass, pass, sizeof(s_pass) - 1);
     s_pass[sizeof(s_pass) - 1] = '\0';
 
-    save_wifi_config(s_ssid, s_pass);
+    esp_err_t err = save_wifi_config(s_ssid, s_pass);
+    if (err != ESP_OK) {
+        /* Se reconecta igual (con lo tecleado, que vale para esta sesion),
+         * pero se avisa: sin NVS, al apagar el contacto vuelven las de antes
+         * y el usuario debe saberlo. */
+        ESP_LOGW(TAG, "No se pudo guardar la configuracion Wi-Fi en NVS (%s): "
+                      "el cambio solo durara hasta el proximo apagado",
+                 esp_err_to_name(err));
+    }
     wifi_configure_sta();
     ESP_LOGI(TAG, "Credenciales actualizadas, reconectando a '%s'", s_ssid);
     esp_wifi_disconnect();
     esp_wifi_connect();
+    return err == ESP_OK;
 }
 
 /* Corre en la tarea del esp_timer, no en sys_evt: aqui si es seguro que el

@@ -17,10 +17,6 @@ void reloj_set_desde_p4(uint32_t epoch_local);
  * visto a la P4 desde que arranco: entonces no hay hora de ningun tipo. */
 bool reloj_ahora(uint32_t *out);
 
-/* Igual que reloj_ahora(NULL) pero se lee mejor en los sitios donde solo
- * interesa saber si hay hora. */
-bool reloj_hay_hora(void);
-
 #ifdef __cplusplus
 }
 #endif

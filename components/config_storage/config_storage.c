@@ -34,7 +34,11 @@ esp_err_t load_brightness(uint8_t *brightness_out) {
     if (err != ESP_OK) return err;
     err = nvs_get_u8(h, BRIGHTNESS_KEY, brightness_out);
     if (err != ESP_OK) {
-        *brightness_out = 5; // default value
+        /* 100 = BRILLO_ALTO (main/brillo.h): este componente no ve los headers
+         * de main, asi que el valor va aqui a pelo -- si cambia BRILLO_ALTO,
+         * cambia esto tambien. Antes se grababa 5 (el arranque del fork viejo),
+         * que brillo.c rechaza y reescribe: dejaba la pantalla casi apagada. */
+        *brightness_out = 100; // default: BRILLO_ALTO
         nvs_set_u8(h, BRIGHTNESS_KEY, *brightness_out);
         nvs_commit(h);
     }

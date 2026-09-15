@@ -135,18 +135,24 @@ static void do_guardar(void *ud)
     (void)ud;
     const char *ssid = lv_textarea_get_text(s_ssid_ta);
     const char *pass = lv_textarea_get_text(s_pass_ta);
-    udp_rx_set_credentials(ssid, pass);
+    bool ok_wifi = udp_rx_set_credentials(ssid, pass);
 
     /* La referencia pasa a ser lo recien guardado: un segundo toque seguido ya
      * no es un cambio y no volvera a preguntar. */
     snprintf(s_ssid_orig, sizeof(s_ssid_orig), "%s", ssid);
     snprintf(s_pass_orig, sizeof(s_pass_orig), "%s", pass);
 
-    save_portal_creds(lv_textarea_get_text(s_http_user_ta),
-                      lv_textarea_get_text(s_http_pass_ta));
+    bool ok_portal = (save_portal_creds(lv_textarea_get_text(s_http_user_ta),
+                                         lv_textarea_get_text(s_http_pass_ta))
+                      == ESP_OK);
 
-    lv_label_set_text(s_status_lbl, "Guardado, reconectando...");
-    ESP_LOGI(TAG, "Nuevas credenciales guardadas desde Ajustes");
+    if (ok_wifi && ok_portal) {
+        lv_label_set_text(s_status_lbl, "Guardado, reconectando...");
+        ESP_LOGI(TAG, "Nuevas credenciales guardadas desde Ajustes");
+    } else {
+        lv_label_set_text(s_status_lbl, "No he podido guardarlo");
+        ESP_LOGW(TAG, "Guardado fallido: wifi=%d portal=%d", ok_wifi, ok_portal);
+    }
 }
 
 /* Cambiar la red no es un ajuste cualquiera: si te equivocas de SSID o de
@@ -167,9 +173,12 @@ static void guardar_cb(lv_event_t *e)
      * mensaje claro. La confirmacion se reserva para lo que si puede dejarte
      * sin datos, que es cambiar de red. */
     if (!cambio_red) {
-        save_portal_creds(lv_textarea_get_text(s_http_user_ta),
-                          lv_textarea_get_text(s_http_pass_ta));
-        lv_label_set_text(s_status_lbl, "Guardado.");
+        if (save_portal_creds(lv_textarea_get_text(s_http_user_ta),
+                              lv_textarea_get_text(s_http_pass_ta)) == ESP_OK) {
+            lv_label_set_text(s_status_lbl, "Guardado.");
+        } else {
+            lv_label_set_text(s_status_lbl, "No he podido guardarlo");
+        }
         return;
     }
 

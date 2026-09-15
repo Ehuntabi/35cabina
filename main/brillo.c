@@ -33,11 +33,6 @@ void brillo_init(void)
     bsp_display_brightness_set(s_nivel);
 }
 
-uint8_t brillo_actual(void)
-{
-    return s_nivel;
-}
-
 void brillo_alternar(void)
 {
     s_nivel = (s_nivel == BRILLO_ALTO) ? BRILLO_BAJO : BRILLO_ALTO;

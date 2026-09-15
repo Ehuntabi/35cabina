@@ -36,8 +36,10 @@ bool tilt_get(float *pitch_deg, float *roll_deg);
  * en NVS (config_storage.c, namespace "tilt"). Llamar con la autocaravana
  * parada sobre una referencia de nivel real (nivel de burbuja fisico o
  * superficie conocida). Bloquea ~0.5s (uso desde un boton, no desde LVGL
- * directamente sin feedback). */
-void tilt_calibrate(void);
+ * directamente sin feedback). Devuelve false si no hay sensor, si no hubo
+ * lecturas validas o si NVS no dejo guardarlas (en ese caso la calibracion
+ * vale solo para esta sesion). */
+bool tilt_calibrate(void);
 
 #ifdef __cplusplus
 }

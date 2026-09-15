@@ -21,9 +21,7 @@ void diag_reset_anotar_arranque(void);
 void diag_reset_marcar_sw(const char *por_que);
 
 /* Para la pantalla de Ajustes. */
-bool        diag_reset_fue_fallo(void);  /* el arranque anterior no lo provoco el contacto */
-const char *diag_reset_motivo(void);     /* que paso, en castellano */
-uint32_t    diag_reset_veces(void);      /* cuantas veces ha pasado (persistente) */
+bool diag_reset_fue_fallo(void);   /* el arranque anterior no lo provoco el contacto */
 
 /* Dos lineas ya montadas para la tarjeta de Ajustes (buffer interno, no
  * liberar). Devuelve "" si el ultimo arranque fue normal: quien la use debe

@@ -115,14 +115,18 @@ void diag_reset_marcar_sw(const char *por_que)
 {
     nvs_handle_t h;
     if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_str(h, K_SW_POR, por_que ? por_que : "sin motivo");
-    nvs_commit(h);
+    esp_err_t err = nvs_set_str(h, K_SW_POR, por_que ? por_que : "sin motivo");
+    if (err == ESP_OK) err = nvs_commit(h);
+    if (err != ESP_OK) {
+        /* Sin la marca, el arranque siguiente no sabra por que se pidio este
+         * reinicio y se quedara en el motivo generico del chip. */
+        ESP_LOGW(TAG, "no se pudo anotar la marca del reinicio: %s",
+                 esp_err_to_name(err));
+    }
     nvs_close(h);
 }
 
 bool        diag_reset_fue_fallo(void) { return s_fallo; }
-const char *diag_reset_motivo(void)    { return s_motivo; }
-uint32_t    diag_reset_veces(void)     { return s_veces; }
 
 static char s_resumen[96];
 const char *diag_reset_resumen(void)

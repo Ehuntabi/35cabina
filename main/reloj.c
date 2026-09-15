@@ -68,11 +68,3 @@ bool reloj_ahora(uint32_t *out)
     if (out) *out = e + (uint32_t)((ahora_us - eu) / 1000000);
     return true;
 }
-
-bool reloj_hay_hora(void)
-{
-    portENTER_CRITICAL(&s_mux);
-    bool hay = (s_epoch != 0);
-    portEXIT_CRITICAL(&s_mux);
-    return hay;
-}

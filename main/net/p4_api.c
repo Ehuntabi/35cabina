@@ -50,6 +50,7 @@ typedef struct {
      * texto siga vivo. */
     char           url[64];
     p4_api_done_cb cb;
+    void          *user_data;   /* lo que paso quien lanzo, para el callback */
     bool           ok;
     int            estado;      /* codigo HTTP, o 0 si ni siquiera conecto */
 } trabajo_t;
@@ -58,7 +59,7 @@ typedef struct {
 static void avisar_cb(void *arg)
 {
     trabajo_t *t = (trabajo_t *)arg;
-    if (t->cb) t->cb(t->ok, t->estado);
+    if (t->cb) t->cb(t->ok, t->estado, t->user_data);
     free(t);
 }
 
@@ -68,7 +69,8 @@ static void avisar_cb(void *arg)
  * silencio (p4_api_silenciar_alarma) usa el mismo, cambiando solo la URL: dos
  * copias de esto serian dos sitios donde arreglar el mismo fallo. */
 static bool p4_api_post_url(const char *url, const char *cuerpo, int *estado_out);
-static bool lanzar_a(const char *url, const char *cuerpo, p4_api_done_cb cb);
+static bool lanzar_a(const char *url, const char *cuerpo, p4_api_done_cb cb,
+                     void *user_data);
 
 /* El POST de verdad. BLOQUEA hasta tener respuesta o agotar el plazo, asi que
  * NO se llama desde la tarea de LVGL: la usa el repartidor de la cola, que
@@ -150,16 +152,18 @@ static void envio_task(void *arg)
 
 static bool lanzar(const char *cuerpo, p4_api_done_cb cb)
 {
-    return lanzar_a(P4_URL, cuerpo, cb);
+    return lanzar_a(P4_URL, cuerpo, cb, NULL);
 }
 
-static bool lanzar_a(const char *url, const char *cuerpo, p4_api_done_cb cb)
+static bool lanzar_a(const char *url, const char *cuerpo, p4_api_done_cb cb,
+                     void *user_data)
 {
     trabajo_t *t = calloc(1, sizeof(trabajo_t));
     if (!t) return false;
     snprintf(t->cuerpo, sizeof(t->cuerpo), "%s", cuerpo);
     snprintf(t->url, sizeof(t->url), "%s", url);
     t->cb = cb;
+    t->user_data = user_data;
     /* 6 KB: el cliente HTTP con su buffer de cabeceras no baja de unos 4. Con
      * menos se cuelga por desbordamiento de pila justo al conectar. */
     if (xTaskCreate(envio_task, "p4_api", 6144, t, 4, NULL) != pdPASS) {
@@ -199,11 +203,11 @@ void p4_api_cuerpo_alarma(char *out, size_t n, uint8_t mask)
     snprintf(out, n, "{\"alarmas\":%u}", (unsigned)mask);
 }
 
-bool p4_api_silenciar_alarma(uint8_t mask, p4_api_done_cb cb)
+bool p4_api_silenciar_alarma(uint8_t mask, p4_api_done_cb cb, void *user_data)
 {
     char cuerpo[48];
     p4_api_cuerpo_alarma(cuerpo, sizeof(cuerpo), mask);
-    return lanzar_a(P4_URL_ALARMA, cuerpo, cb);
+    return lanzar_a(P4_URL_ALARMA, cuerpo, cb, user_data);
 }
 
 bool p4_api_viaje_inicio(uint32_t id, const char *destino, uint32_t fecha_dias,

@@ -15,12 +15,10 @@
  * pantallas mas que no tienen casilla propia en el menu: PARADA (donde has
  * parado y que has hecho) y, dentro de ella, SERVICIOS del area.
  *
- * Nada de esto envia datos todavia -- todos los "Guardar" (y los botones
- * de Iniciar/Finalizar viaje) solo loguean. El envio real a la P4
- * (mini_cmd_t nuevo + receptor en ~/joint/victron) es la Fase 4,
- * deliberadamente fuera de este repo. Inicio/fin de viaje es el primer
- * candidato cuando se abra esa fase (pedido explicito del usuario: "que
- * mande el de 3.5 porque es mas comodo").
+ * El envio a la P4 (Fase 4) ya esta hecho: el inicio del viaje va DIRECTO
+ * (net/p4_api.c, porque la carpeta no existe hasta que la P4 lo confirma) y
+ * el resto de apuntes se encola y se entrega cuando la P4 responde
+ * (net/viaje_cola.c) -- ver viaje_do_iniciar() y viaje_do_finalizar().
  */
 #include "view_registro.h"
 #include "nav.h"
@@ -2133,8 +2131,9 @@ static void aviso_envio_fallo(int estado, const char *que)
     confirm_screen_aviso(titulo, cuerpo, COL_ACCION_STOP, "Entendido");
 }
 
-static void inicio_resultado_cb(bool ok, int estado)
+static void inicio_resultado_cb(bool ok, int estado, void *user_data)
 {
+    (void)user_data;
     /* 409 = la P4 ya tiene un viaje abierto que esta pantalla no conocia (se
      * empezo antes de perder el estado, o desde otro sitio). Decir "terminalo
      * antes" y quedarse ahi era un callejon sin salida: el unico aparato que
@@ -3407,8 +3406,9 @@ static void declarar_cb(lv_event_t *e)
  * (EV_NOMBRE); la P4 le antepone la fecha ella sola (op_inicio), asi que sale
  * "AAAA-MM-DD_Repostaje" igual que un viaje de verdad -- descargable igual.
  *
- * p4_api_done_cb no lleva user_data, asi que el tipo/sub/sub2 elegido se
- * guarda aqui para cuando llegue la respuesta. */
+ * p4_api_done_cb lleva user_data, pero p4_api_viaje_inicio no lo usa (se
+ * envia a NULL), asi que el tipo/sub/sub2 elegido se guarda aqui para cuando
+ * llegue la respuesta. */
 static evento_tipo_t s_puntual_tipo;
 static uint8_t       s_puntual_sub, s_puntual_sub2;
 
@@ -3422,8 +3422,9 @@ static uint8_t       s_puntual_sub, s_puntual_sub2;
  * 09-sep-2026, antes de la primera salida real. */
 static bool s_puntual_iniciando;
 
-static void inicio_puntual_resultado_cb(bool ok, int estado)
+static void inicio_puntual_resultado_cb(bool ok, int estado, void *user_data)
 {
+    (void)user_data;
     s_puntual_iniciando = false;
 
     /* Mismo callejon sin salida que un viaje real: si la P4 ya tiene algo

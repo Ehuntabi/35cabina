@@ -267,9 +267,9 @@ bool tilt_get(float *pitch_deg, float *roll_deg)
     return true;
 }
 
-void tilt_calibrate(void)
+bool tilt_calibrate(void)
 {
-    if (!s_present) return;
+    if (!s_present) return false;
 
     const int N = 20;
     float sum_pitch = 0.0f, sum_roll = 0.0f;
@@ -285,13 +285,22 @@ void tilt_calibrate(void)
     }
     if (ok == 0) {
         ESP_LOGW(TAG, "Calibracion: 0 lecturas validas, se mantiene la anterior");
-        return;
+        return false;
     }
 
     s_pitch_offset_deg = sum_pitch / ok;
     s_roll_offset_deg  = sum_roll / ok;
-    save_tilt_calibration((int16_t)(s_pitch_offset_deg * 100.0f),
-                          (int16_t)(s_roll_offset_deg * 100.0f));
+    esp_err_t err = save_tilt_calibration((int16_t)(s_pitch_offset_deg * 100.0f),
+                                          (int16_t)(s_roll_offset_deg * 100.0f));
+    if (err != ESP_OK) {
+        /* El cero nuevo queda puesto en RAM, asi que vale para esta sesion,
+         * pero al apagar se pierde: quien lo llame debe avisarlo. */
+        ESP_LOGW(TAG, "No se pudo guardar la calibracion en NVS (%s): "
+                      "valdra solo hasta el proximo apagado",
+                 esp_err_to_name(err));
+        return false;
+    }
     ESP_LOGI(TAG, "Calibrado (N=%d): pitch_off=%.2f roll_off=%.2f",
              ok, s_pitch_offset_deg, s_roll_offset_deg);
+    return true;
 }

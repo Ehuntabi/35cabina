@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -21,8 +22,10 @@ void udp_rx_start(void);
 /* Copia las credenciales actuales (para prefijar la pantalla de Ajustes). */
 void udp_rx_get_credentials(char *ssid_out, size_t ssid_len, char *pass_out, size_t pass_len);
 
-/* Guarda nuevas credenciales en NVS y fuerza una reconexion inmediata. */
-void udp_rx_set_credentials(const char *ssid, const char *pass);
+/* Guarda nuevas credenciales en NVS y fuerza una reconexion inmediata.
+ * Devuelve false si no se pudieron guardar en NVS: entonces el cambio solo
+ * dura hasta el proximo apagado (quien lo llame debe avisar de ello). */
+bool udp_rx_set_credentials(const char *ssid, const char *pass);
 
 #ifdef __cplusplus
 }

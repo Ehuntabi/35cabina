@@ -402,18 +402,6 @@ const salida_evento_t *salida_evento_primero(void)
     return s_st.n_eventos > 0 ? &s_st.eventos[0] : NULL;
 }
 
-void salida_evento_cerrar_primero(void)
-{
-    if (s_st.n_eventos == 0) return;
-    ESP_LOGI(TAG, "evento cerrado: tipo=%d id=%lu",
-             (int)s_st.eventos[0].tipo, (unsigned long)s_st.eventos[0].id);
-    for (int i = 1; i < s_st.n_eventos; i++) s_st.eventos[i - 1] = s_st.eventos[i];
-    s_st.n_eventos--;
-    memset(&s_st.eventos[s_st.n_eventos], 0, sizeof(s_st.eventos[0]));
-    guardar();
-    refrescar_vista();
-}
-
 bool salida_evento_set_inicio(int idx, uint32_t epoch_local)
 {
     if (idx < 0 || idx >= s_st.n_eventos) return false;
