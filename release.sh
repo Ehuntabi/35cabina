@@ -22,7 +22,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 REPO="Ehuntabi/35cabina"
-IDF_EXPORT="$HOME/.espressif/esp-idf-5.4/export.sh"
+IDF_EXPORT="${IDF_EXPORT:-$HOME/.espressif/esp-idf-5.4/export.sh}"
 RELDIR="$HOME/joint-releases"
 APP_BIN="build/35cabina.bin"
 
@@ -128,5 +128,5 @@ fi
 echo
 echo "────────────────────────────────────────────────────────────"
 echo "PUBLICADO $TAG. Solo queda grabar:"
-echo "  idf.py -p /dev/ttyACM0 flash"
+echo "  idf.py -p /dev/ttyACM1 flash"   # la cabina es la S3; la P4 es ttyACM0
 echo "────────────────────────────────────────────────────────────"
