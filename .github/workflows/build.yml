@@ -5,6 +5,15 @@ name: build
 # error de COMPILACION no lo pillaba nadie hasta compilar a mano (auditoria del
 # 15-sep-2026, 4.I3). No sustituye probar en la placa: solo pilla lo que no
 # compila.
+#
+# OJO con wifi_credentials.h: no esta versionado (lleva la password real del AP
+# de la P4), asi que el primer intento de CI fallo con "wifi_credentials.h: No
+# such file or directory". Se crea desde la plantilla versionada ANTES de
+# compilar, solo para que el compilador tenga algo que ver. No hay riesgo de
+# publicar un binario con la password de broma: esta accion NO sube artefactos
+# (comprobado en su action.yml: solo hace docker run + idf.py build), el
+# binario que se graba se compila en local con la cabecera de verdad, y el
+# .example lo sigue diciendo.
 
 on:
   push:
@@ -18,6 +27,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0   # sin los tags, la version embebida sale "v?"
+
+      # Se copia la plantilla tal cual: compila igual porque son dos #define de
+      # cadena. El build local SIN este fichero sigue fallando a proposito.
+      - name: Crear wifi_credentials.h desde la plantilla (solo para compilar)
+        run: |
+          if [ -f main/wifi_credentials.h ]; then
+            echo "Ya existe main/wifi_credentials.h (no deberia: no esta versionado)"
+          else
+            cp main/wifi_credentials.h.example main/wifi_credentials.h
+            echo "[ok] creado desde la plantilla"
+          fi
 
       - name: esp-idf build
         uses: espressif/esp-idf-ci-action@v1
