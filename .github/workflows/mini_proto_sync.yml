@@ -6,8 +6,8 @@ name: mini_proto_sync
 # paquetes en produccion, semanas despues. Detectado auditando el
 # 07-sep-2026.
 #
-# OJO: este es el UNICO workflow de este repo por ahora -- no hay build de
-# ESP-IDF en CI (a diferencia de victron, que si lo tiene).
+# (El build de ESP-IDF vive en build.yml desde el 16-sep-2026; este workflow
+# solo comprueba los protocolos compartidos.)
 
 on:
   push:

@@ -33,4 +33,6 @@ descartado como producto).
     victron) — antes el guard solo vivía en el CI de victron, así que este
     repo, el único que puede romper el límite subiendo `CUERPO_MAX`, no
     tenía forma de detectarlo él mismo.
-  - No hay build de ESP-IDF en CI (a diferencia de victron, que sí lo tiene).
+- `.github/workflows/build.yml` (16-sep-2026): compila con `idf.py build` en cada
+  push/PR (docker `espressif/idf:v5.4.4`, target `esp32s3`). Pilla errores de
+  COMPILACION, no sustituye probar en la placa.

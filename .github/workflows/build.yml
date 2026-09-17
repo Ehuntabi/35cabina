@@ -1,0 +1,27 @@
+name: build
+
+# Compila el firmware en cada push/PR. Hasta el 16-sep-2026 este repo solo
+# comprobaba los protocolos compartidos (mini_proto_sync y viaje_body_sync) y un
+# error de COMPILACION no lo pillaba nadie hasta compilar a mano (auditoria del
+# 15-sep-2026, 4.I3). No sustituye probar en la placa: solo pilla lo que no
+# compila.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # sin los tags, la version embebida sale "v?"
+
+      - name: esp-idf build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4.4
+          target: esp32s3
+          path: '.'
