@@ -1,7 +1,7 @@
 /* udp_rx.c - Receiver UDP de 35cabina, asociado al SoftAP de la P4 como STA.
  *
- * Portado de ~/joint/victron_mini/main/net/udp_rx.c (mismo protocolo,
- * mismo patron de reconexion).
+ * Portado del satelite viejo C6 (victron_mini/main/net/udp_rx.c, retirado el
+ * 17-sep-2026): mismo protocolo, mismo patron de reconexion.
  *
  * SSID/password NO estan hardcodeados en firmware: se guardan en NVS
  * (config_storage.c, load/save_wifi_config) para poder cambiar de P4 (ej.

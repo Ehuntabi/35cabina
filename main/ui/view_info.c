@@ -1,9 +1,9 @@
 /* view_info.c - Pantalla de info agrupada (Fase 1).
  *
- * Patron de colores/umbrales y LEDs de agua portado de
- * ~/joint/victron_mini/main/ui/view_quad.c, reescrito como grid (todas las
- * cards visibles a la vez, sin rotacion) porque aqui hay mucho mas sitio
- * que en la pantalla de 320x172 del mini.
+ * Patron de colores/umbrales y LEDs de agua portado del satelite viejo C6
+ * (victron_mini/main/ui/view_quad.c, retirado el 17-sep-2026), reescrito como
+ * grid (todas las cards visibles a la vez, sin rotacion) porque aqui hay
+ * mucho mas sitio que en la pantalla de 320x172 del mini.
  *
  * REPARTO (rehecho el 22-ago-2026: la version anterior eran CINCO tarjetas del
  * mismo peso y el usuario la describio como "horrible" -- todo pesaba igual,
