@@ -8,9 +8,9 @@
  * (ui/view_info.c). Cada bloque tiene flag has_data para saber si pintar
  * valores o "--".
  *
- * Portado de ~/joint/victron_mini/main/data_model.h, con dos añadidos que
- * el mini no usa pero mini_msg_t ya trae: DC/DC y ventilador del frigo.
- * A diferencia del mini, el acceso a g_data está protegido por un spinlock
+ * Portado del satelite viejo C6 (victron_mini, retirado el 17-sep-2026), con
+ * dos añadidos que aquel no usaba pero mini_msg_t ya trae: DC/DC y ventilador
+ * del frigo. A diferencia de aquel, el acceso a g_data va con spinlock
  * (data_model_get(): la escritura ocurre en rx_task, la lectura en el
  * timer de LVGL — dos tareas distintas, sin eso es una carrera de datos). */
 
