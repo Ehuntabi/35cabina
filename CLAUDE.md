@@ -21,6 +21,17 @@ descartado como producto).
 - Ver `README.md` para la hoja de ruta completa (Fases 0-4) y
   `docs/superpowers/specs/` para los diseños detallados de cada fase.
 
+## `dependencies.lock` (versionado desde el 18-sep-2026)
+- Se versiona con el mismo criterio que la P4: fija las versiones resueltas para
+  que el build sea reproducible. Antes estaba en el `.gitignore`, así que este
+  repo era el único de los dos sin cerrojo: si Espressif movía una versión de un
+  componente gestionado, aquí se resolvía otra cosa sin que nadie se enterase.
+- Cerrojo versionado en `.githooks/pre-commit`: aborta el commit si el
+  `dependencies.lock` que va a entrar lleva una ruta absoluta (rompe el CI). En
+  un clon nuevo hay que activarlo UNA vez: `git config core.hooksPath .githooks`.
+- Chequeo rápido a mano: `grep -n "path: /" dependencies.lock` (sin resultados =
+  limpio).
+
 ## CI
 - `.github/workflows/mini_proto_sync.yml` (único workflow de este repo por
   ahora, dos jobs):

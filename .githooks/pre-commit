@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Impide commitear dependencies.lock con una ruta ABSOLUTA dentro.
+#
+# Este fichero se versiona desde el 18-sep-2026 con el MISMO criterio que la P4
+# (~/joint/victron): fija las versiones resueltas de los componentes para que el
+# build sea reproducible, y evita que un `idf.py reconfigure` meta una ruta
+# local que en el runner de GitHub no existe (el build moriria al configurar con
+# "The path field in the manifest does not point to a directory").
+#
+# Aqui hoy solo hay componentes del registro (sin `path:`), asi que el caso es
+# improbable, pero el cerrojo se pone igual: barato y evita el susto.
+#
+# Activarlo en un clon nuevo:  git config core.hooksPath .githooks
+malo=$(git diff --cached --name-only | grep -x "dependencies.lock" || true)
+[ -z "$malo" ] && exit 0
+if git show ":dependencies.lock" | grep -qE "path: /"; then
+    echo "ABORTADO: dependencies.lock lleva una ruta ABSOLUTA y eso rompe el CI." >&2
+    echo "  Arreglalo con:  sed -i 's|path: /.*/components/|path: components/|' dependencies.lock" >&2
+    exit 1
+fi
+exit 0

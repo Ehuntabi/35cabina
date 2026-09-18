@@ -8,7 +8,6 @@
 /cmake_install.cmake
 /compile_commands.json
 /project_description.json
-/dependencies.lock
 /.python_env/
 /managed_components
 /gdbinit
