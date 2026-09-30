@@ -48,6 +48,13 @@ static const char *TAG = "udp_rx";
 static EventGroupHandle_t s_wifi_events;
 static uint32_t s_msgs_ok = 0;
 static uint32_t s_msgs_bad = 0;
+
+/* Estado del enlace, para la pantalla de informacion (view_info.c): con esto se
+ * distingue "no veo la red" de "estoy asociada pero la P4 no manda nada" de
+ * "todo bien". Sin esto, en la furgo solo se veia el punto gris y habia que
+ * adivinar por que. 30-sep-2026. */
+static _Atomic bool s_asociado = false;
+static volatile int64_t s_ultimo_rx_us = 0;
 static esp_timer_handle_t s_reconnect_timer;
 #define RECONNECT_DELAY_US (500 * 1000)
 
@@ -205,11 +212,13 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
                 esp_wifi_connect();
                 break;
             case WIFI_EVENT_STA_CONNECTED:
+                s_asociado = true;
                 ESP_LOGI(TAG, "Asociado a %s", s_ssid);
                 xEventGroupSetBits(s_wifi_events, WIFI_BIT_CONNECTED);
                 s_redes_fallos_seguidos = 0;   /* la proxima caida vuelve a diagnosticar rapido */
                 break;
             case WIFI_EVENT_STA_DISCONNECTED: {
+                s_asociado = false;
                 wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;
                 ESP_LOGW(TAG, "Desconectado reason=%d, siguiente intento en 0.5s",
                          d ? d->reason : -1);
@@ -319,6 +328,7 @@ static void rx_task(void *arg)
         }
         data_model_update_from_msg(msg);
         reloj_set_desde_p4(msg->epoch_local);
+        s_ultimo_rx_us = esp_timer_get_time();   /* enlace vivo: ver udp_rx_enlace() */
         s_msgs_ok++;
 
         /* El reloj de la P4 es lo unico que permite contar lo que dura una
@@ -401,5 +411,27 @@ void udp_rx_start(void)
         /* Sin esto la pantalla se queda sin telemetria de la P4 para
          * siempre, en silencio -- STA conectada y todo, pero muda. */
         ESP_LOGE(TAG, "xTaskCreate(rx_task) fallo: SIN telemetria de la P4");
+    }
+}
+
+/* Estado del enlace para la pantalla de informacion. Devuelve el SSID que se
+ * esta buscando, si estamos asociados, la senal (solo si lo estamos) y cuantos
+ * segundos llevamos sin recibir un mensaje valido de la P4 (-1 = nunca). */
+void udp_rx_enlace(char *ssid, size_t ssid_len, bool *asociado,
+                   int *rssi_dbm, int *seg_sin_datos)
+{
+    if (ssid && ssid_len) {
+        strncpy(ssid, s_ssid, ssid_len - 1);
+        ssid[ssid_len - 1] = '\0';
+    }
+    if (asociado) *asociado = s_asociado;
+    if (rssi_dbm) {
+        wifi_ap_record_t ap;
+        *rssi_dbm = (s_asociado && esp_wifi_sta_get_ap_info(&ap) == ESP_OK)
+                        ? ap.rssi : 0;
+    }
+    if (seg_sin_datos) {
+        int64_t t = s_ultimo_rx_us;
+        *seg_sin_datos = (t == 0) ? -1 : (int)((esp_timer_get_time() - t) / 1000000);
     }
 }

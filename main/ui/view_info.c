@@ -31,6 +31,7 @@
 #include "nav.h"
 #include "view_registro.h"    /* view_registro_puntual_declarar_llegada() */
 #include "../data_model.h"
+#include "../net/udp_rx.h"
 #include "../lv_port.h"       /* lvgl_port_lock/unlock, ver view_info_set_pendientes() */
 #include "esp_timer.h"
 #include "esp_log.h"
@@ -39,24 +40,116 @@
 #define COL_CARD_BG_TOP  lv_color_hex(0x0A0A0A)
 #define COL_CARD_BG_BOT  lv_color_hex(0x161616)
 #define COL_TEXT         lv_color_hex(0xFFFFFF)
-#define COL_TEXT_DIM     lv_color_hex(0x888888)
+/* ── Paleta con dos modos ──────────────────────────────────────────────────
+ * El 30% de brillo se queda con los colores de siempre. Con el 100% (que es lo
+ * que se usa cuando hay sol) se sube el contraste: los azules y los grises se
+ * cambian por blanco, porque en un TFT al sol el azul es lo primero que
+ * desaparece, y los bordes de las tarjetas pasan a blanco. Se cambia con el
+ * mismo doble toque que el brillo: un gesto, las dos cosas. 30-sep-2026. */
+static bool s_contraste = false;
+
+static inline lv_color_t col2(uint32_t normal, uint32_t contraste)
+{
+    return lv_color_hex(s_contraste ? contraste : normal);
+}
+
+/* Objetos pintados una sola vez (bordes y rotulos): se apuntan aqui para
+ * repintarlos cuando cambia el modo. Las cifras no hacen falta: se repintan
+ * solas cada 500 ms. */
+#define PALETA_MAX 48
+static lv_obj_t   *s_pal_obj[PALETA_MAX];
+static uint32_t    s_pal_normal[PALETA_MAX];
+static uint32_t    s_pal_contraste[PALETA_MAX];
+static bool        s_pal_borde[PALETA_MAX];
+static int         s_pal_n;
+
+/* Registra (y pinta) un rotulo: color normal y color en modo contraste. */
+static void paleta_texto(lv_obj_t *o, uint32_t normal, uint32_t contraste)
+{
+    if (!o) return;
+    lv_obj_set_style_text_color(o, lv_color_hex(s_contraste ? contraste : normal), 0);
+    if (s_pal_n < PALETA_MAX && !s_pal_borde[s_pal_n]) {
+        s_pal_obj[s_pal_n] = o;
+        s_pal_normal[s_pal_n] = normal;
+        s_pal_contraste[s_pal_n] = contraste;
+        s_pal_borde[s_pal_n] = false;
+        s_pal_n++;
+    }
+}
+
+/* Lo mismo para el borde de una tarjeta. */
+static void paleta_borde(lv_obj_t *o, uint32_t normal, uint32_t contraste)
+{
+    if (!o) return;
+    lv_obj_set_style_border_color(o, lv_color_hex(s_contraste ? contraste : normal), 0);
+    if (s_pal_n < PALETA_MAX) {
+        s_pal_obj[s_pal_n] = o;
+        s_pal_normal[s_pal_n] = normal;
+        s_pal_contraste[s_pal_n] = contraste;
+        s_pal_borde[s_pal_n] = true;
+        s_pal_n++;
+    }
+}
+
+/* Registra un borde del que solo tenemos el color normal: en modo contraste,
+ * los azules y los grises pasan a blanco; el naranja y el amarillo se quedan,
+ * que ya se leen bien. */
+static void paleta_borde_auto(lv_obj_t *o, lv_color_t color)
+{
+    uint32_t normal = lv_color_to32(color);
+    uint32_t contraste = normal;
+    switch (normal) {
+        case 0x4FC3F7: case 0x66CCFF: case 0x29B6F6: case 0x888888:
+            contraste = 0xFFFFFF; break;
+        case 0xFFD54F:
+            contraste = 0xFFEB3B; break;
+        default:
+            break;
+    }
+    paleta_borde(o, normal, contraste);
+}
+
+/* Repinta todo lo registrado con el modo actual. */
+static void paleta_aplicar(void)
+{
+    for (int i = 0; i < s_pal_n; ++i) {
+        lv_color_t c = lv_color_hex(s_contraste ? s_pal_contraste[i] : s_pal_normal[i]);
+        if (s_pal_borde[i]) lv_obj_set_style_border_color(s_pal_obj[i], c, 0);
+        else                lv_obj_set_style_text_color(s_pal_obj[i], c, 0);
+    }
+}
+
+/* Modo contraste: se llama desde el doble toque (con el brillo) y al arrancar. */
+void view_info_set_contraste(bool activo)
+{
+    if (s_contraste == activo) return;
+    s_contraste = activo;
+    if (lvgl_port_lock(200)) {
+        paleta_aplicar();
+        lvgl_port_unlock();
+    }
+    ESP_LOGI("view_info", "Contraste %s (brillo %s)",
+             activo ? "ALTO" : "normal", activo ? "100%" : "30%");
+}
+
+#define COL_TEXT_DIM     col2(0x888888, 0xE0E0E0)
 /* Mas claro que COL_TEXT_DIM: para rotulos que hay que poder leer de un
  * vistazo (la escala de aguas, los nombres de las temperaturas) y no solo
  * intuir. El 0x888888 vale para lo accesorio, no para esto. */
-#define COL_TEXT_ESCALA  lv_color_hex(0xCCCCCC)
-#define COL_VAL_GOOD     lv_color_hex(0x4CD964)
-#define COL_VAL_WARN     lv_color_hex(0xFFD54F)
-#define COL_VAL_BAD      lv_color_hex(0xFF4444)
+#define COL_TEXT_ESCALA  col2(0xCCCCCC, 0xFFFFFF)
+#define COL_VAL_GOOD     col2(0x4CD964, 0xFFFFFF)
+#define COL_VAL_WARN     col2(0xFFD54F, 0xFFEB3B)
+#define COL_VAL_BAD      col2(0xFF4444, 0xFF6E6E)
 #define COL_CONN_NONE    lv_color_hex(0x555555)
 #define COL_CONN_OK      lv_color_hex(0x00C851)
 #define COL_CONN_LOST    lv_color_hex(0xFF4444)
 #define CONN_TIMEOUT_MS  5000
 
-#define COL_BORDER_BAT   lv_color_hex(0xFF9800)  /* SmartShunt naranja */
-#define COL_BORDER_AUX   lv_color_hex(0x4FC3F7)  /* Bateria motor cyan */
-#define COL_BORDER_COLD  lv_color_hex(0x66CCFF)  /* Frigo azul claro */
-#define COL_BORDER_WATER lv_color_hex(0x29B6F6)  /* Aguas azul saturado */
-#define COL_BORDER_HEAT  lv_color_hex(0xFFD54F)  /* Exterior amarillo calido */
+#define COL_BORDER_BAT   col2(0xFF9800, 0xFFFFFF)  /* SmartShunt naranja */
+#define COL_BORDER_AUX   col2(0x4FC3F7, 0xFFFFFF)  /* Bateria motor cyan */
+#define COL_BORDER_COLD  col2(0x66CCFF, 0xFFFFFF)  /* Frigo azul claro */
+#define COL_BORDER_WATER col2(0x29B6F6, 0xFFFFFF)  /* Aguas azul saturado */
+#define COL_BORDER_HEAT  col2(0xFFD54F, 0xFFEB3B)  /* Exterior amarillo calido */
 
 /* Bateria: la tarjeta grande de arriba, con sus piezas sueltas. */
 static lv_obj_t   *s_bat_card;
@@ -75,7 +168,8 @@ static lv_obj_t   *s_lbl_gray;     /* el rotulo, que tambien avisa */
 static lv_obj_t   *s_frigo_val;
 static lv_obj_t   *s_frigo_trend;  /* flecha de tendencia */
 static lv_obj_t   *s_ext_trend;
-static lv_obj_t   *s_pendientes;      /* pastilla "N sin enviar", oculta si 0 */
+static lv_obj_t   *s_pendientes;
+static lv_obj_t   *s_enlace;      /* estado del enlace con la P4 (abajo izq.) */
 
 /* Definidas abajo, con el resto de la pastilla. */
 static void pendientes_aplicar(void *arg);
@@ -359,7 +453,7 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
     lv_obj_set_style_bg_grad_color(card, COL_CARD_BG_BOT, 0);
     lv_obj_set_style_bg_grad_dir(card, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card, COL_BORDER_WATER, 0);
+    paleta_borde(card, 0x29B6F6, 0xFFFFFF);
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_radius(card, 10, 0);
     lv_obj_set_style_pad_all(card, 4, 0);
@@ -376,7 +470,7 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
      * el de la tarjeta de bateria, que es la principal. */
     lv_obj_t *t = lv_label_create(card);
     lv_label_set_text(t, "AGUAS");
-    lv_obj_set_style_text_color(t, COL_BORDER_WATER, 0);
+    paleta_texto(t, 0x29B6F6, 0xFFFFFF);
     lv_obj_set_style_text_font(t, &lv_font_montserrat_20, 0);
     lv_obj_clear_flag(t, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 0);
@@ -442,7 +536,7 @@ static void make_water_cell(lv_obj_t *grid, uint8_t col, uint8_t span, uint8_t r
 
         lv_obj_t *frac = lv_label_create(fila_seg);
         lv_label_set_text(frac, FRACCION[i]);
-        lv_obj_set_style_text_color(frac, COL_TEXT_ESCALA, 0);
+        paleta_texto(frac, 0xCCCCCC, 0xFFFFFF);
         lv_obj_set_style_text_font(frac, &lv_font_montserrat_14, 0);
         lv_obj_set_width(frac, LED_FRAC_W);
         lv_obj_set_style_text_align(frac, LV_TEXT_ALIGN_RIGHT, 0);
@@ -671,7 +765,7 @@ static void refresh_temp(lv_obj_t *val, bool has, int16_t centi, bool is_frigo)
         lv_obj_set_style_text_color(val, is_frigo ? color_for_frigo(centi) : COL_TEXT, 0);
     } else {
         lv_label_set_text(val, "--");
-        lv_obj_set_style_text_color(val, COL_TEXT_DIM, 0);
+        paleta_texto(val, 0x888888, 0xE0E0E0);
     }
 }
 
@@ -963,6 +1057,30 @@ static void refresh_cb(lv_timer_t *t)
     mini_data_t d;
     data_model_get(&d);
 
+    /* Estado del enlace: se pinta aqui (500 ms) para que la pantalla lo diga
+     * sola cuando algo va mal, sin cables ni portatil delante. */
+    if (s_enlace) {
+        char ssid[33] = {0};
+        bool asociado = false;
+        int rssi = 0, sin_datos = -1;
+        udp_rx_enlace(ssid, sizeof(ssid), &asociado, &rssi, &sin_datos);
+        if (!asociado) {
+            lv_label_set_text_fmt(s_enlace, "P4: sin red (busco %s)", ssid);
+        } else if (sin_datos < 0 || sin_datos > 5) {
+            lv_label_set_text_fmt(s_enlace, "P4: %d dBm, sin datos %ds",
+                                  rssi, sin_datos < 0 ? 0 : sin_datos);
+        } else {
+            lv_label_set_text_fmt(s_enlace, "P4: %d dBm", rssi);
+        }
+        /* Cada 30 s (60 refrescos de 500 ms) se deja el mismo texto en el log:
+         * asi queda rastro de como estaba el enlace sin tener que mirar la
+         * pantalla. */
+        static unsigned cada_30s = 0;
+        if (++cada_30s % 60 == 0) {
+            ESP_LOGI("enlace", "%s", lv_label_get_text(s_enlace));
+        }
+    }
+
     refresh_bat(&d);
     refresh_aux(&d);
     static tendencia_t t_frigo, t_ext;
@@ -1043,7 +1161,9 @@ static void doble_toque_cb(lv_event_t *e)
     (void)e;
     if (s_toque_previo && lv_tick_elaps(s_toque_previo) <= DOBLE_TOQUE_MS) {
         s_toque_previo = 0;   /* un tercer toque empieza cuenta nueva, no encadena */
-        brillo_alternar();
+        /* Un solo gesto: el 30% se queda como estaba y el 100% sube el
+         * contraste, que es lo que hace falta al sol. */
+        view_info_set_contraste(brillo_alternar() == BRILLO_ALTO);
     } else {
         uint32_t t = lv_tick_get();
         s_toque_previo = t ? t : 1;   /* el 0 esta reservado para "ninguno" */
@@ -1062,7 +1182,7 @@ static lv_obj_t *make_card(lv_obj_t *grid, lv_color_t border, const char *titulo
     lv_obj_set_style_bg_grad_color(card, COL_CARD_BG_BOT, 0);
     lv_obj_set_style_bg_grad_dir(card, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card, border, 0);
+    paleta_borde_auto(card, border);
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_radius(card, 10, 0);
     lv_obj_set_style_pad_all(card, 8, 0);
@@ -1127,6 +1247,8 @@ static lv_obj_t *make_fila_dato(lv_obj_t *padre, const char *etiqueta,
 
 void view_info_create(lv_obj_t *parent)
 {
+    /* La paleta pinta desde el primer objeto con el modo que toque. */
+    s_contraste = (brillo_nivel() == BRILLO_ALTO);
     /* Resolucion logica LANDSCAPE 480x320 (ver esp_bsp.c:390-396).
      *
      * DOS columnas y DOS filas, con la bateria ocupando la fila de arriba
@@ -1179,7 +1301,7 @@ void view_info_create(lv_obj_t *parent)
 
     lv_obj_t *u_v = lv_label_create(s_bat_card);
     lv_label_set_text(u_v, "V");
-    lv_obj_set_style_text_color(u_v, COL_TEXT_ESCALA, 0);
+    paleta_texto(u_v, 0xCCCCCC, 0xFFFFFF);
     lv_obj_set_style_text_font(u_v, &lv_font_montserrat_24, 0);
     lv_obj_clear_flag(u_v, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(u_v, LV_ALIGN_LEFT_MID, BAT_NUM_X + BAT_NUM_W + 8, -8);
@@ -1195,7 +1317,7 @@ void view_info_create(lv_obj_t *parent)
 
     s_bat_amp_u = lv_label_create(s_bat_card);
     lv_label_set_text(s_bat_amp_u, "A");
-    lv_obj_set_style_text_color(s_bat_amp_u, COL_TEXT_ESCALA, 0);
+    paleta_texto(s_bat_amp_u, 0xCCCCCC, 0xFFFFFF);
     lv_obj_set_style_text_font(s_bat_amp_u, &lv_font_montserrat_24, 0);
     lv_obj_clear_flag(s_bat_amp_u, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(s_bat_amp_u, LV_ALIGN_LEFT_MID, BAT_NUM_X + BAT_NUM_W + 8, 34);
@@ -1220,7 +1342,7 @@ void view_info_create(lv_obj_t *parent)
 
     lv_obj_t *aux_tit = lv_label_create(col_motor);
     lv_label_set_text(aux_tit, "MOTOR");
-    lv_obj_set_style_text_color(aux_tit, COL_BORDER_AUX, 0);
+    paleta_texto(aux_tit, 0x4FC3F7, 0xFFFFFF);
     lv_obj_set_style_text_font(aux_tit, &lv_font_montserrat_20, 0);
     lv_obj_clear_flag(aux_tit, LV_OBJ_FLAG_CLICKABLE);
 
@@ -1329,6 +1451,18 @@ void view_info_create(lv_obj_t *parent)
     /* Pastilla de pendientes: encima de todo y FUERA de la rejilla, para no
      * robarle sitio a ninguna tarjeta -- casi siempre no esta. Abajo al centro,
      * que es donde no tapa ningun numero. */
+    /* Estado del enlace con la P4. Va abajo a la izquierda, pegado al borde:
+     * la pastilla de pendientes ocupa el centro y la rejilla, el resto. Con
+     * esto, en la furgo se ve SI no hay red, SI estas asociada pero la P4 no
+     * manda nada, y con cuanta senal llega -- en vez de un punto gris y a
+     * adivinar. 30-sep-2026. */
+    s_enlace = lv_label_create(parent);
+    lv_obj_add_flag(s_enlace, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_style_text_font(s_enlace, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(s_enlace, lv_color_hex(0x90A4AE), 0);
+    lv_label_set_text(s_enlace, "");
+    lv_obj_align(s_enlace, LV_ALIGN_BOTTOM_LEFT, 6, -6);
+
     s_pendientes = lv_label_create(parent);
     lv_obj_add_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_pendientes, LV_OBJ_FLAG_IGNORE_LAYOUT);

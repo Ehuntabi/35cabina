@@ -24,8 +24,14 @@ extern "C" {
  * dentro de bsp_display_start_with_config(). */
 void brillo_init(void);
 
-/* Cambia al otro nivel, lo aplica y lo guarda. */
-void brillo_alternar(void);
+/* Cambia al otro nivel, lo aplica, lo guarda y devuelve el nivel nuevo.
+ * Devuelve el valor para que quien lo llama pueda ajustar el contraste de la
+ * pantalla al mismo tiempo (ver view_info.c): el 30% se queda como estaba y el
+ * 100% sube el contraste, que es lo que hace falta para verlo al sol. */
+uint8_t brillo_alternar(void);
+
+/* Nivel actual (BRILLO_BAJO o BRILLO_ALTO), para pintar acorde al arrancar. */
+uint8_t brillo_nivel(void);
 
 #ifdef __cplusplus
 }

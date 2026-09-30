@@ -19,6 +19,11 @@ extern "C" {
 
 void udp_rx_start(void);
 
+/* Estado del enlace con la P4, para pintarlo en la pantalla de informacion.
+ * Ver el comentario en udp_rx.c (30-sep-2026). */
+void udp_rx_enlace(char *ssid, size_t ssid_len, bool *asociado,
+                   int *rssi_dbm, int *seg_sin_datos);
+
 /* Copia las credenciales actuales (para prefijar la pantalla de Ajustes). */
 void udp_rx_get_credentials(char *ssid_out, size_t ssid_len, char *pass_out, size_t pass_len);
 
