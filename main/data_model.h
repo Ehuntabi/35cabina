@@ -65,7 +65,6 @@ typedef struct {
     /* Estado del GPS de la P4: 0=sin datos, 1=buscando, 2=posicion fijada.
      * Esta pantalla NO recibe la posicion, solo si la hay (ver mini_proto.h). */
     uint8_t  gps_estado;
-    int16_t  gps_vel_kmh_x10;   /* velocidad GPS x10; MINI_NO_DATA_I16 = sin dato */
 
     /* Alarmas ACTIVAS en la P4, bitmask MINI_ALARM_* (ver mini_proto.h).
      *

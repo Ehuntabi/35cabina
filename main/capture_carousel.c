@@ -9,7 +9,7 @@
 #include "data_model.h"
 #include "ui/view_info.h"
 
-static const char *TAG = "capture";
+static const char *TAG = "capture_carousel";
 
 /* Datos de ejemplo para mirar la pantalla en el banco: esta placa no tiene
  * nada conectado, asi que la P4 manda todo como "sin dato" y solo se ven --.
@@ -41,7 +41,6 @@ static void inject_sim_data(void)
     d.water_gray_has_data  = true;
     d.epoch_local          = 1788800000;
     d.gps_estado           = 2;      /* posicion fijada */
-    d.gps_vel_kmh_x10      = 1100;   /* 110 km/h: tres digitos, para ver si cabe */
     /* Alarma de bateria activa (la palabra "bateria baja" es la de la P4). El
      * bit tiene que ser el de mini_proto.h: es el mismo byte que viaja. */
     d.alarmas              = MINI_ALARM_BATERIA;
@@ -67,6 +66,7 @@ static void inject_sim_data(void)
 #include "esp_timer.h"
 #include "mbedtls/base64.h"
 
+static const char *TAG = "capture";
 
 typedef enum {
     STEP_INCLINACION,

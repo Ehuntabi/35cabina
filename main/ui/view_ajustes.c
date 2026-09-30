@@ -33,6 +33,8 @@ static lv_obj_t *s_wifi;
 static lv_obj_t *s_ver_lbl;
 static lv_obj_t *s_ssid_ta;
 static lv_obj_t *s_brillo_lbl;   /* texto del boton de brillo/contraste */
+static lv_obj_t *s_enlace;        /* estado del enlace con la P4 */
+static lv_timer_t *s_enlace_timer;
 static lv_obj_t *s_pass_ta;
 static lv_obj_t *s_status_lbl;
 /* Usuario y clave del PORTAL de la P4 -- NO son los del Wi-Fi. Hacen falta
@@ -114,6 +116,30 @@ static void mostrar_menu(bool menu)
 
 /* El Volver del formulario de Wi-Fi no sale de Configuracion: vuelve al menu,
  * que es de donde se entro. */
+/* Pinta el estado del enlace con la P4. Calla si la pantalla no se ve. */
+static void enlace_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    if (!s_enlace || lv_obj_has_flag(s_enlace, LV_OBJ_FLAG_HIDDEN)) return;
+    if (!lv_obj_is_visible(s_enlace)) return;
+
+    char ssid[33] = {0};
+    bool asociado = false;
+    int rssi = 0, sin_datos = -1;
+    udp_rx_enlace(ssid, sizeof(ssid), &asociado, &rssi, &sin_datos);
+    if (!asociado) {
+        lv_label_set_text_fmt(s_enlace, "P4: sin red (busco %s)", ssid);
+        lv_obj_set_style_text_color(s_enlace, lv_color_hex(0xFF9800), 0);
+    } else if (sin_datos < 0 || sin_datos > 5) {
+        lv_label_set_text_fmt(s_enlace, "P4: %d dBm, sin datos %ds", rssi,
+                              sin_datos < 0 ? 0 : sin_datos);
+        lv_obj_set_style_text_color(s_enlace, lv_color_hex(0xFF9800), 0);
+    } else {
+        lv_label_set_text_fmt(s_enlace, "P4: %d dBm", rssi);
+        lv_obj_set_style_text_color(s_enlace, lv_color_hex(0x00C851), 0);
+    }
+}
+
 /* Cambia brillo y contraste, y actualiza el texto del boton. */
 static void brillo_btn_cb(lv_event_t *e)
 {
@@ -283,6 +309,18 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(blbl, &lv_font_montserrat_22, 0);
     lv_obj_center(blbl);
     s_brillo_lbl = blbl;
+
+    /* Estado del enlace con la P4. Vive AQUI y no en la pantalla de datos
+     * (mudado el 30-sep-2026): es lo que se mira cuando algo no va, y en
+     * Configuracion no le quita sitio a ningun numero. Lo pinta un temporizador
+     * de un segundo que solo trabaja si esta visible. */
+    s_enlace = lv_label_create(s_menu);
+    lv_obj_set_style_text_font(s_enlace, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(s_enlace, lv_color_hex(0x90A4AE), 0);
+    lv_label_set_text(s_enlace, "");
+    if (!s_enlace_timer) {
+        s_enlace_timer = lv_timer_create(enlace_timer_cb, 1000, NULL);
+    }
 
     /* Y el resto de la pantalla, la VERSION. GRANDE y centrada -- letra 40 para
      * el numero y 20 para el rotulo y la fecha: sobra sitio y esto se mira de

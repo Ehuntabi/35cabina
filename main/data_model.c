@@ -114,7 +114,6 @@ void data_model_update_from_msg(const struct mini_msg *msg)
      * buena": el que lo use ya distingue. */
     tmp.epoch_local = msg->epoch_local;
     tmp.gps_estado  = msg->gps_estado;
-    tmp.gps_vel_kmh_x10 = msg->gps_vel_kmh_x10;
 
     /* Alarmas activas de la P4 (bitmask). Se copia tal cual, incluido el 0 =
      * "ninguna": aqui no hay sentinel de "sin dato" porque el byte siempre

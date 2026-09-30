@@ -169,13 +169,11 @@ static lv_obj_t   *s_frigo_val;
 static lv_obj_t   *s_frigo_trend;  /* flecha de tendencia */
 static lv_obj_t   *s_ext_trend;
 static lv_obj_t   *s_pendientes;
-static lv_obj_t   *s_enlace;      /* estado del enlace con la P4 (abajo izq.) */
 
 /* Definidas abajo, con el resto de la pastilla. */
 static void pendientes_aplicar(void *arg);
 static void pendientes_click_cb(lv_event_t *e);
 static lv_obj_t   *s_gps;             /* indicador de GPS de la P4 */
-static lv_obj_t   *s_vel;             /* velocidad GPS, arriba a la izquierda */
 static lv_obj_t   *s_frigo_fan_track;
 static lv_obj_t   *s_frigo_fan_fill;
 static lv_obj_t   *s_ext_val;
@@ -1058,38 +1056,20 @@ static void refresh_cb(lv_timer_t *t)
     mini_data_t d;
     data_model_get(&d);
 
-    /* Estado del enlace: se pinta aqui (500 ms) para que la pantalla lo diga
-     * sola cuando algo va mal, sin cables ni portatil delante. */
-    if (s_enlace) {
-        char ssid[33] = {0};
-        bool asociado = false;
-        int rssi = 0, sin_datos = -1;
-        udp_rx_enlace(ssid, sizeof(ssid), &asociado, &rssi, &sin_datos);
-        if (!asociado) {
-            lv_label_set_text_fmt(s_enlace, "P4: sin red (busco %s)", ssid);
-        } else if (sin_datos < 0 || sin_datos > 5) {
-            lv_label_set_text_fmt(s_enlace, "P4: %d dBm, sin datos %ds",
-                                  rssi, sin_datos < 0 ? 0 : sin_datos);
-        } else {
-            lv_label_set_text_fmt(s_enlace, "P4: %d dBm", rssi);
-        }
-        /* Cada 30 s (60 refrescos de 500 ms) se deja el mismo texto en el log:
-         * asi queda rastro de como estaba el enlace sin tener que mirar la
-         * pantalla. */
+    /* El estado del enlace se enseña en Ajustes -> Configuracion (mudado el
+     * 30-sep-2026: es un dato de diagnostico, no de conduccion, y ahi deja
+     * libre el hueco de abajo). Aqui solo se deja rastro en el log cada 30 s,
+     * que es lo que se mira cuando algo va mal. */
+    {
         static unsigned cada_30s = 0;
         if (++cada_30s % 60 == 0) {
-            ESP_LOGI("enlace", "%s", lv_label_get_text(s_enlace));
-        }
-    }
-
-    /* Velocidad: solo si hay fix y dato. Entera, sin decimales: de un vistazo
-     * no aporta nada la decima. */
-    if (s_vel) {
-        if (d.gps_estado == 2 && d.gps_vel_kmh_x10 != MINI_NO_DATA_I16) {
-            lv_label_set_text_fmt(s_vel, "%d", (d.gps_vel_kmh_x10 + 5) / 10);
-            lv_obj_clear_flag(s_vel, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(s_vel, LV_OBJ_FLAG_HIDDEN);
+            char ssid[33] = {0};
+            bool asociado = false;
+            int rssi = 0, sin_datos = -1;
+            udp_rx_enlace(ssid, sizeof(ssid), &asociado, &rssi, &sin_datos);
+            if (!asociado)                       ESP_LOGI("enlace", "P4: sin red (busco %s)", ssid);
+            else if (sin_datos < 0 || sin_datos > 5) ESP_LOGI("enlace", "P4: %d dBm, sin datos %ds", rssi, sin_datos < 0 ? 0 : sin_datos);
+            else                                 ESP_LOGI("enlace", "P4: %d dBm", rssi);
         }
     }
 
@@ -1476,17 +1456,6 @@ void view_info_create(lv_obj_t *parent)
     /* Pastilla de pendientes: encima de todo y FUERA de la rejilla, para no
      * robarle sitio a ninguna tarjeta -- casi siempre no esta. Abajo al centro,
      * que es donde no tapa ningun numero. */
-    /* Estado del enlace con la P4. Va abajo a la izquierda, pegado al borde:
-     * la pastilla de pendientes ocupa el centro y la rejilla, el resto. Con
-     * esto, en la furgo se ve SI no hay red, SI estas asociada pero la P4 no
-     * manda nada, y con cuanta senal llega -- en vez de un punto gris y a
-     * adivinar. 30-sep-2026. */
-    s_enlace = lv_label_create(parent);
-    lv_obj_add_flag(s_enlace, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_style_text_font(s_enlace, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(s_enlace, lv_color_hex(0x90A4AE), 0);
-    lv_label_set_text(s_enlace, "");
-    lv_obj_align(s_enlace, LV_ALIGN_BOTTOM_LEFT, 6, -6);
 
     s_pendientes = lv_label_create(parent);
     lv_obj_add_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
@@ -1538,25 +1507,6 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_gps, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(s_gps, lv_color_hex(0x666666), 0);
     lv_obj_align(s_gps, LV_ALIGN_TOP_LEFT, 14, 11);
-
-    /* Velocidad de la P4, entre el icono del GPS y el titulo BATERIA: es el
-     * hueco que queda en esa fila y se lee de un vistazo desde el asiento.
-     * Se oculta cuando no hay dato (sin fix o P4 muda), para no enseñar un
-     * "0 km/h" que seria mentira con el vehiculo andando. 30-sep-2026. */
-    s_vel = lv_label_create(parent);
-    lv_obj_add_flag(s_vel, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_add_flag(s_vel, LV_OBJ_FLAG_HIDDEN);
-    /* Pastilla blanca con el numero en negro: es la combinacion que mejor se
-     * lee al sol y la que mas contraste da sin depender del tema. Letra 28,
-     * que es lo mas grande que cabe en la fila del titulo. */
-    lv_obj_set_style_bg_color(s_vel, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_bg_opa(s_vel, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(s_vel, 14, 0);
-    lv_obj_set_style_pad_hor(s_vel, 12, 0);
-    lv_obj_set_style_pad_ver(s_vel, 2, 0);
-    lv_obj_set_style_text_color(s_vel, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_text_font(s_vel, &lv_font_montserrat_28, 0);
-    lv_obj_align(s_vel, LV_ALIGN_TOP_LEFT, 44, 4);
 
     /* Aviso de la orden de silencio ("enviado" / "sin respuesta"). Abajo al
      * centro y oculto casi siempre: la pastilla de pendientes vive en el mismo
