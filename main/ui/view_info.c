@@ -175,6 +175,7 @@ static lv_obj_t   *s_enlace;      /* estado del enlace con la P4 (abajo izq.) */
 static void pendientes_aplicar(void *arg);
 static void pendientes_click_cb(lv_event_t *e);
 static lv_obj_t   *s_gps;             /* indicador de GPS de la P4 */
+static lv_obj_t   *s_vel;             /* velocidad GPS, arriba a la izquierda */
 static lv_obj_t   *s_frigo_fan_track;
 static lv_obj_t   *s_frigo_fan_fill;
 static lv_obj_t   *s_ext_val;
@@ -1081,6 +1082,17 @@ static void refresh_cb(lv_timer_t *t)
         }
     }
 
+    /* Velocidad: solo si hay fix y dato. Entera, sin decimales: de un vistazo
+     * no aporta nada la decima. */
+    if (s_vel) {
+        if (d.gps_estado == 2 && d.gps_vel_kmh_x10 != MINI_NO_DATA_I16) {
+            lv_label_set_text_fmt(s_vel, "%d", (d.gps_vel_kmh_x10 + 5) / 10);
+            lv_obj_clear_flag(s_vel, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(s_vel, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     refresh_bat(&d);
     refresh_aux(&d);
     static tendencia_t t_frigo, t_ext;
@@ -1526,6 +1538,25 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_gps, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(s_gps, lv_color_hex(0x666666), 0);
     lv_obj_align(s_gps, LV_ALIGN_TOP_LEFT, 14, 11);
+
+    /* Velocidad de la P4, entre el icono del GPS y el titulo BATERIA: es el
+     * hueco que queda en esa fila y se lee de un vistazo desde el asiento.
+     * Se oculta cuando no hay dato (sin fix o P4 muda), para no enseñar un
+     * "0 km/h" que seria mentira con el vehiculo andando. 30-sep-2026. */
+    s_vel = lv_label_create(parent);
+    lv_obj_add_flag(s_vel, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_add_flag(s_vel, LV_OBJ_FLAG_HIDDEN);
+    /* Pastilla blanca con el numero en negro: es la combinacion que mejor se
+     * lee al sol y la que mas contraste da sin depender del tema. Letra 28,
+     * que es lo mas grande que cabe en la fila del titulo. */
+    lv_obj_set_style_bg_color(s_vel, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_bg_opa(s_vel, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_vel, 14, 0);
+    lv_obj_set_style_pad_hor(s_vel, 12, 0);
+    lv_obj_set_style_pad_ver(s_vel, 2, 0);
+    lv_obj_set_style_text_color(s_vel, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_text_font(s_vel, &lv_font_montserrat_28, 0);
+    lv_obj_align(s_vel, LV_ALIGN_TOP_LEFT, 44, 4);
 
     /* Aviso de la orden de silencio ("enviado" / "sin respuesta"). Abajo al
      * centro y oculto casi siempre: la pastilla de pendientes vive en el mismo
