@@ -405,10 +405,22 @@ static void reparto_task(void *arg)
                 vTaskDelay(pdMS_TO_TICKS(REINTENTO_MS));
                 continue;
             }
-            ESP_LOGE(TAG, "la P4 rechaza el apunte con 400 tras %d intentos, "
-                          "lo DESCARTO: %s", intentos_400, cuerpo);
-            descartar_cabeza();
-            idx_400 = UINT32_MAX;
+            /* NO se descarta. Un 400 repetido sobre el mismo apunte casi nunca
+             * es que el apunte este mal: es que la P4 es mas vieja que esta
+             * pantalla y no entiende el cuerpo (paso el 30-sep-2026: la P4 de
+             * la autocaravana iba por la v2.33). Tirarlo era perder un
+             * repostaje o el cierre de un viaje por una version. Se queda en
+             * cola, marcado como atascado (el mismo aviso rojo que el 409) y se
+             * sigue intentando: en cuanto la P4 se actualice, entra solo. */
+            if (!s_atascada_409) {
+                s_atascada_409 = true;
+                ESP_LOGE(TAG, "la P4 rechaza el apunte con 400 tras %d intentos. "
+                              "NO se descarta: sigue en cola y se reintenta. "
+                              "Suele ser la P4 con firmware viejo: %s",
+                         intentos_400, cuerpo);
+                avisar_cambio();
+            }
+            vTaskDelay(pdMS_TO_TICKS(REINTENTO_MS));
             continue;
         }
 
@@ -426,9 +438,17 @@ static void reparto_task(void *arg)
          *   408 / 429 son "vuelve luego" por definicion. */
         if (estado >= 400 && estado < 500 && estado != 400 && estado != 401 &&
             estado != 408 && estado != 409 && estado != 429) {
-            ESP_LOGE(TAG, "la P4 rechaza el apunte con %d, lo DESCARTO: %s",
-                     estado, cuerpo);
-            descartar_cabeza();
+            /* Tampoco se descarta (ver el comentario del 400): se marca y se
+             * reintenta. Si de verdad el apunte esta mal, se borra desde la
+             * pantalla -- "sin cerrar" lleva justo a esa lista --, pero que lo
+             * decida el usuario y no un codigo de respuesta. */
+            if (!s_atascada_409) {
+                s_atascada_409 = true;
+                ESP_LOGE(TAG, "la P4 rechaza el apunte con %d. NO se descarta: "
+                              "sigue en cola y se reintenta: %s", estado, cuerpo);
+                avisar_cambio();
+            }
+            vTaskDelay(pdMS_TO_TICKS(REINTENTO_MS));
             continue;
         }
 
