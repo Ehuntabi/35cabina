@@ -11,6 +11,8 @@
  * sin reflashear.
  */
 #include "view_ajustes.h"
+#include "../brillo.h"
+#include "view_info.h"
 #include "../net/udp_rx.h"
 #include "confirm_screen.h"
 #include "config_storage.h"
@@ -30,6 +32,7 @@ static lv_obj_t *s_wifi;
 
 static lv_obj_t *s_ver_lbl;
 static lv_obj_t *s_ssid_ta;
+static lv_obj_t *s_brillo_lbl;   /* texto del boton de brillo/contraste */
 static lv_obj_t *s_pass_ta;
 static lv_obj_t *s_status_lbl;
 /* Usuario y clave del PORTAL de la P4 -- NO son los del Wi-Fi. Hacen falta
@@ -111,6 +114,18 @@ static void mostrar_menu(bool menu)
 
 /* El Volver del formulario de Wi-Fi no sale de Configuracion: vuelve al menu,
  * que es de donde se entro. */
+/* Cambia brillo y contraste, y actualiza el texto del boton. */
+static void brillo_btn_cb(lv_event_t *e)
+{
+    (void)e;
+    uint8_t nivel = brillo_alternar();
+    view_info_set_contraste(nivel == BRILLO_ALTO);
+    if (s_brillo_lbl) {
+        lv_label_set_text_fmt(s_brillo_lbl, LV_SYMBOL_EYE_OPEN "   Brillo y contraste: %u%%",
+                              (unsigned)nivel);
+    }
+}
+
 static void wifi_back_cb(lv_event_t *e)
 {
     (void)e;
@@ -254,6 +269,20 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_label_set_text(wlbl, LV_SYMBOL_WIFI "   Wi-Fi");
     lv_obj_set_style_text_font(wlbl, &lv_font_montserrat_24, 0);
     lv_obj_center(wlbl);
+
+    /* Brillo y contraste. Existe porque el doble toque de la pantalla de datos
+     * no sale a la primera: aqui hay un boton y se acabaron las peripecias.
+     * Cambia las dos cosas a la vez, igual que el gesto. 30-sep-2026. */
+    lv_obj_t *bbtn = lv_btn_create(s_menu);
+    lv_obj_set_size(bbtn, lv_pct(100), 64);
+    lv_obj_set_style_bg_color(bbtn, lv_color_hex(0x37474F), 0);
+    lv_obj_add_event_cb(bbtn, brillo_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *blbl = lv_label_create(bbtn);
+    lv_label_set_text_fmt(blbl, LV_SYMBOL_EYE_OPEN "   Brillo y contraste: %u%%",
+                          (unsigned)brillo_nivel());
+    lv_obj_set_style_text_font(blbl, &lv_font_montserrat_22, 0);
+    lv_obj_center(blbl);
+    s_brillo_lbl = blbl;
 
     /* Y el resto de la pantalla, la VERSION. GRANDE y centrada -- letra 40 para
      * el numero y 20 para el rotulo y la fecha: sobra sitio y esto se mira de

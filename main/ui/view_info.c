@@ -1152,9 +1152,20 @@ static void refresh_cb(lv_timer_t *t)
  * Un deslizamiento NO cuenta como toque: nav.c llama a lv_indev_wait_release()
  * en cuanto detecta el gesto, y entonces LVGL manda PRESS_LOST en vez de
  * CLICKED. O sea que cambiar de pantalla no toca el brillo por sorpresa. */
-#define DOBLE_TOQUE_MS  400
+#define DOBLE_TOQUE_MS  650
 
 static uint32_t s_toque_previo;   /* 0 = no hay ningun toque a medias */
+
+/* Toque largo: mantener el dedo un segundo. Se anyadio el 30-sep-2026 porque
+ * el doble toque de 400 ms no salia a la primera ni de lejos: con el panel y
+ * las prisas, pedir dos clics seguidos en menos de medio segundo es pedir
+ * pericia. El toque largo no falla y hace lo mismo. */
+static void toque_largo_cb(lv_event_t *e)
+{
+    (void)e;
+    s_toque_previo = 0;   /* que no encadene con un doble toque a medias */
+    view_info_set_contraste(brillo_alternar() == BRILLO_ALTO);
+}
 
 static void doble_toque_cb(lv_event_t *e)
 {
@@ -1271,6 +1282,8 @@ void view_info_create(lv_obj_t *parent)
     /* El doble toque escucha en la PANTALLA, no en la rejilla: asi tambien
      * valen los huecos que quedan fuera de ella. */
     lv_obj_add_event_cb(parent, doble_toque_cb, LV_EVENT_CLICKED, NULL);
+    /* Y el toque largo, que es lo que de verdad se consigue a la primera. */
+    lv_obj_add_event_cb(parent, toque_largo_cb, LV_EVENT_LONG_PRESSED, NULL);
 
     /* --- Bateria: toda la franja de arriba -------------------------------- */
     s_bat_card = /* La de bateria manda, y su titulo tambien: 24 contra los 20 de las de

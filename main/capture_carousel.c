@@ -1,5 +1,54 @@
 #include "capture_carousel.h"
 
+/* Estos van aqui arriba y no dentro del bloque del carrusel: la inyeccion de
+ * datos de ejemplo (modo banco) se compila tambien con el carrusel apagado. */
+#include <stdbool.h>
+#include "esp_log.h"
+#include "esp_timer.h"
+#include "mini_proto.h"
+#include "data_model.h"
+#include "ui/view_info.h"
+
+static const char *TAG = "capture_carousel";
+
+/* Datos de ejemplo para mirar la pantalla en el banco: esta placa no tiene
+ * nada conectado, asi que la P4 manda todo como "sin dato" y solo se ven --.
+ * Lo usan los dos modos: el carrusel de capturas y el "solo datos". */
+#if CAPTURE_CAROUSEL_ENABLE || CAPTURE_CAROUSEL_SOLO_DATOS
+static void inject_sim_data(void)
+{
+    mini_data_t d = {0};
+    d.has_data            = true;
+    d.shunt_soc_deci       = 782;    /* 78.2 % */
+    d.shunt_voltage_centi  = 1342;   /* 13.42 V */
+    d.shunt_current_milli  = -3500;  /* -3.5 A */
+    d.shunt_power_w        = -47;
+    d.aux_value_raw        = 1265;   /* 12.65 V */
+    d.aux_input            = 0;
+    d.aux_has_data         = true;
+    d.dcdc_v_in_centi      = 1420;
+    d.dcdc_v_out_centi     = 1385;
+    d.dcdc_state           = 4;      /* Absorption */
+    d.dcdc_has_data        = true;
+    d.frigo_temp_centi     = 420;    /* 4.2 C */
+    d.frigo_fan_pct        = 60;
+    d.exterior_temp_centi  = 2350;   /* 23.5 C */
+    d.frigo_has_data       = true;
+    d.exterior_has_data    = true;
+    d.water_clean          = 3;
+    d.water_gray           = 1;
+    d.water_clean_has_data = true;
+    d.water_gray_has_data  = true;
+    d.epoch_local          = 1788800000;
+    d.gps_estado           = 2;      /* posicion fijada */
+    /* Alarma de bateria activa (la palabra "bateria baja" es la de la P4). El
+     * bit tiene que ser el de mini_proto.h: es el mismo byte que viaja. */
+    d.alarmas              = MINI_ALARM_BATERIA;
+    d.last_update_ms       = (uint32_t)(esp_timer_get_time() / 1000);
+    data_model_set_simulated(&d);
+}
+#endif
+
 #if CAPTURE_CAROUSEL_ENABLE
 
 #include <stdio.h>
@@ -39,38 +88,6 @@ typedef enum {
  * llamaba una sola vez al arrancar y el 0xFF... del modelo dejaba el enlace
  * "caducado" a los 5 s, o sea que a partir de ahi la captura salia con los
  * datos en gris y sin el icono de alarma (los dos caducan con el enlace). */
-static void inject_sim_data(void)
-{
-    mini_data_t d = {0};
-    d.has_data            = true;
-    d.shunt_soc_deci       = 782;    /* 78.2 % */
-    d.shunt_voltage_centi  = 1342;   /* 13.42 V */
-    d.shunt_current_milli  = -3500;  /* -3.5 A */
-    d.shunt_power_w        = -47;
-    d.aux_value_raw        = 1265;   /* 12.65 V */
-    d.aux_input            = 0;
-    d.aux_has_data         = true;
-    d.dcdc_v_in_centi      = 1420;
-    d.dcdc_v_out_centi     = 1385;
-    d.dcdc_state           = 4;      /* Absorption */
-    d.dcdc_has_data        = true;
-    d.frigo_temp_centi     = 420;    /* 4.2 C */
-    d.frigo_fan_pct        = 60;
-    d.exterior_temp_centi  = 2350;   /* 23.5 C */
-    d.frigo_has_data       = true;
-    d.exterior_has_data    = true;
-    d.water_clean          = 3;
-    d.water_gray           = 1;
-    d.water_clean_has_data = true;
-    d.water_gray_has_data  = true;
-    d.epoch_local          = 1788800000;
-    d.gps_estado           = 2;      /* posicion fijada */
-    /* Alarma de bateria activa (la palabra "bateria baja" es la de la P4). El
-     * bit tiene que ser el de mini_proto.h: es el mismo byte que viaja. */
-    d.alarmas              = MINI_ALARM_BATERIA;
-    d.last_update_ms       = (uint32_t)(esp_timer_get_time() / 1000);
-    data_model_set_simulated(&d);
-}
 
 /* Vuelca la pantalla activa por UART en base64, con delimitadores para que
  * un script en el PC lo pueda extraer del log de idf.py monitor. Se llama
@@ -227,6 +244,13 @@ void capture_carousel_start(void)
 
 #else
 
-void capture_carousel_start(void) { }
+void capture_carousel_start(void)
+{
+#if CAPTURE_CAROUSEL_SOLO_DATOS
+    inject_sim_data();
+    view_info_captura_alarma_silenciada();
+    ESP_LOGW(TAG, "datos de ejemplo inyectados (modo banco, sin carrusel)");
+#endif
+}
 
 #endif

@@ -7,6 +7,8 @@
  */
 #pragma once
 
+#include <stdbool.h>
+
 #include "lvgl.h"
 #include <stddef.h>
 
@@ -26,6 +28,11 @@ void view_info_create(lv_obj_t *parent);
  * hacerlo: se queda sin corriente y ya. Por eso el aviso tiene que estar
  * visible todo el rato mientras quede algo, no saltar "al apagar". */
 void view_info_set_pendientes(size_t pendientes);
+
+/* Modo de alto contraste, que va con el brillo: 100% = contraste alto.
+ * Lo llaman la propia pantalla de datos (doble toque o toque largo) y el boton
+ * de Ajustes. */
+void view_info_set_contraste(bool activo);
 
 /* Cuantos apuntes quedan ABIERTOS (declarados y sin cerrar). Comparte pastilla
  * con los "sin enviar" -- ver el comentario de pendientes_aplicar().

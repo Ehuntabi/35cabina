@@ -17,8 +17,15 @@ void data_model_init(void) {
      * mini_msg real por UDP desde la P4. */
 }
 
+/* Con el modo captura activo (capture_carousel.c) la pantalla tiene que enseñar
+ * los datos simulados, y la P4 los pisa cada segundo con los suyos. Mientras
+ * este puesto, se ignora lo que llega por UDP. En produccion nadie lo activa:
+ * solo lo llama data_model_set_simulated(). 30-sep-2026. */
+static bool s_simulado;
+
 void data_model_update_from_msg(const struct mini_msg *msg)
 {
+    if (s_simulado) return;   /* modo captura: mandan los datos simulados */
     if (!msg || msg->version != MINI_PROTO_VERSION) return;
 
     /* Construir el snapshot completo en una copia local y solo entrar en
@@ -132,6 +139,7 @@ void data_model_get(mini_data_t *out)
 void data_model_set_simulated(const mini_data_t *sim)
 {
     if (!sim) return;
+    s_simulado = true;
     portENTER_CRITICAL(&s_data_mux);
     s_data = *sim;
     portEXIT_CRITICAL(&s_data_mux);

@@ -21,6 +21,11 @@
 #pragma once
 
 #define CAPTURE_CAROUSEL_ENABLE 0
+/* Solo datos: inyecta los valores de ejemplo y NO lanza el carrusel de capturas.
+ * Sirve para mirar la pantalla con datos en el banco (una P4 sin nada
+ * conectado manda todo como "sin dato" y se ven --). Se pone a 1, se graba, se
+ * mira, y se vuelve a 0. */
+#define CAPTURE_CAROUSEL_SOLO_DATOS 0
 
 #ifdef __cplusplus
 extern "C" {
