@@ -130,9 +130,15 @@ static void enlace_timer_cb(lv_timer_t *t)
     if (!asociado) {
         lv_label_set_text_fmt(s_enlace, "P4: sin red (busco %s)", ssid);
         lv_obj_set_style_text_color(s_enlace, lv_color_hex(0xFF9800), 0);
-    } else if (sin_datos < 0 || sin_datos > 5) {
-        lv_label_set_text_fmt(s_enlace, "P4: %d dBm, sin datos %ds", rssi,
-                              sin_datos < 0 ? 0 : sin_datos);
+    } else if (sin_datos < 0) {
+        /* Asociada pero SIN haber recibido ni un mensaje desde que arranco.
+         * Antes esto se pintaba como "sin datos 0s", que se lee justo al reves
+         * ("acaba de llegar un dato") cuando significa "nunca ha llegado nada":
+         * el usuario lo vio el 2-oct-2026 y no habia quien lo entendiera. */
+        lv_label_set_text_fmt(s_enlace, "P4: %d dBm, sin datos todavia", rssi);
+        lv_obj_set_style_text_color(s_enlace, lv_color_hex(0xFF9800), 0);
+    } else if (sin_datos > 5) {
+        lv_label_set_text_fmt(s_enlace, "P4: %d dBm, sin datos %ds", rssi, sin_datos);
         lv_obj_set_style_text_color(s_enlace, lv_color_hex(0xFF9800), 0);
     } else {
         lv_label_set_text_fmt(s_enlace, "P4: %d dBm", rssi);

@@ -39,6 +39,7 @@
 #include "lwip/sockets.h"
 #include <string.h>
 #include <errno.h>
+#include <sys/time.h>   /* struct timeval: la espera del socket (SO_RCVTIMEO) */
 
 static const char *TAG = "udp_rx";
 
@@ -64,6 +65,48 @@ static volatile int64_t s_rssi_us = 0;
 static esp_timer_handle_t s_reconnect_timer;
 static esp_timer_handle_t s_dhcp_timer;      /* asociada sin IP: ver dhcp_timer_cb */
 #define RECONNECT_DELAY_US (500 * 1000)
+
+/* ── Vigilante de DATOS (2-oct-2026) ────────────────────────────────────────
+ *
+ * Para que sirve: la cabina puede quedar ASOCIADA y MUDA. Paso el 2-oct-2026 en
+ * el banco, con la P4 recien arrancada: la radio aceptaba la asociacion (eso lo
+ * hace el C6 por su cuenta) pero NINGUN paquete cruzaba en ningun sentido, asi
+ * que ni llegaba la telemetria ni el DHCP contestaba. La pantalla se quedaba en
+ * "sin datos" y no habia forma de salir de ahi sin tocar nada.
+ *
+ * Con esto: si estamos asociados y llevamos SIN_DATOS_US sin recibir un mensaje
+ * valido, se fuerza una reconexion (desconectar y volver a conectar). El
+ * reconectar rehace la asociacion desde cero y, con ella, el camino de datos.
+ * Los primeros intentos van seguidos; si no hay manera, se espacian mucho para
+ * no estar tirando el enlace cada poco.
+ *
+ * LOS NUMEROS ESTAN ELEGIDOS CON CUIDADO (2-oct-2026, corregidos el mismo dia):
+ * al principio eran 15 s y el resultado fue PEOR, no mejor. La razon es que hay
+ * un fallo que la cabina NO puede arreglar desde su lado: cuando la P4 arranca
+ * con el camino de datos del AP muerto (asociacion si, paquetes no), por mucho
+ * que la cabina se reconecte sigue muda; lo unico que la cura es que la P4
+ * reinicie su AP, y eso su escalera lo hace en unos 4 minutos. Si la cabina se
+ * pone a desconectar cada 15 s, lo unico que consigue es que la pantalla parpadee
+ * ("sin conexion") y que el DHCP no llegue a cuajar. Por eso: 60 s de silencio
+ * para el primer intento (le da tiempo a la P4), y despues uno cada 5 minutos
+ * como mucho. La paciencia es aqui la virtud.
+ *
+ * OJO: la medida la hace la tarea de recepcion (recvfrom con espera de 2 s), no
+ * la de dibujo: preguntarle al Wi-Fi desde LVGL bloquea la UI y con el watchdog
+ * de tareas encima eso es un reinicio. Ya paso el 30-sep-2026. */
+#define SIN_DATOS_US          (60 * 1000 * 1000)      /* 1er intento: 1 min */
+#define SIN_DATOS_US_LARGO    (5 * 60 * 1000 * 1000)  /* despues: cada 5 min */
+#define SIN_DATOS_TOLERANCIA  2
+
+static int      s_sin_datos_intentos = 0;
+static int64_t  s_ultimo_intento_us  = 0;   /* ultima reconexion forzada */
+static int64_t  s_escucha_desde_us   = 0;   /* cuando se abrio el socket */
+static bool     s_aviso_mudez_dado   = false;
+/* Cierto mientras la IP la pusimos nosotros (el DHCP no contesto). Se usa para
+ * volver a intentar el DHCP en la siguiente reconexion: si no, la cabina se
+ * queda con la IP fija para siempre y la P4 (que mira sus concesiones) cree que
+ * el enlace esta roto aunque funcione. */
+static _Atomic bool s_ip_fija = false;
 
 static char s_ssid[33];
 static char s_pass[65];
@@ -217,13 +260,58 @@ static void reconnect_timer_cb(void *arg)
  * Paso el 30-sep-2026, en el banco y con la P4 reiniciandose. */
 #define DHCP_TIMEOUT_US (20 * 1000 * 1000)
 
+/* Si el DHCP de la P4 no contesta, la cabina se pone una direccion FIJA y sigue
+ * funcionando. Es la pieza que fallaba: el servidor DHCP de la P4 se atasca de
+ * vez en cuando (sobre todo tras un reinicio suyo) y la cabina se quedaba sin
+ * datos hasta desenchufar la P4. La direccion de la P4 es fija (192.168.4.1,
+ * esta en su firmware), asi que la cabina puede darse la .200 sin preguntar a
+ * nadie.
+ *
+ * Por que la .200 y no otra: el DHCP de la P4 no tiene rango configurado, asi
+ * que usa el de la IDF, que es desde la .2 hasta la .101 (empieza en la IP del
+ * servidor + 1 y lo corta DHCPS_MAX_LEASE = 100 direcciones; ver
+ * components/lwip/apps/dhcpserver/dhcpserver.c, dhcps_poll_set). La .200 queda
+ * fuera de ese rango, asi que la P4 no se la puede dar a nadie mas y no hay
+ * riesgo de que dos cacharros acaben con la misma IP.
+ *
+ * Antes de esto, al no llegar la IP, se desconectaba y reintentaba. Aquello
+ * arreglaba el caso "asociada a medias" pero seguia dependiendo del DHCP; esto
+ * lo elimina de la ecuacion. 1-oct-2026, a peticion del usuario: "que funcione
+ * a veces si y otras no no me gusta". */
+#define IP_FIJA_CABINA   "192.168.4.200"
+
+/* Espera para el DHCP: 20 s la primera vez (la P4 puede estar arrancando), y
+ * solo 5 s cuando venimos de la IP fija. El reintento de DHCP de una reconexion
+ * BORRA la IP (esp_netif_dhcpc_start hace esp_netif_reset_ip_info), asi que son
+ * segundos sin direccion: mejor pocos. Con el DHCP sano contesta en milisegundos
+ * (medido: 50 ms), asi que 5 s de sobra. */
+#define DHCP_TIMEOUT_US    (20 * 1000 * 1000)
+#define DHCP_REINTENTO_US  (5 * 1000 * 1000)
+static int64_t s_dhcp_espera_us = DHCP_TIMEOUT_US;
+
 static void dhcp_timer_cb(void *arg)
 {
     (void)arg;
     if (!s_asociado) return;                       /* ya se cayo sola */
-    ESP_LOGW(TAG, "asociada sin IP tras %d s: me desconecto y reintento",
-             (int)(DHCP_TIMEOUT_US / 1000000));
-    esp_wifi_disconnect();                         /* el reintento lo hace el evento */
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (!netif) return;
+
+    esp_netif_ip_info_t ip = { 0 };
+    ip.ip.addr = esp_ip4addr_aton(IP_FIJA_CABINA);
+    ip.netmask.addr = esp_ip4addr_aton("255.255.255.0");
+    ip.gw.addr = esp_ip4addr_aton("192.168.4.1");
+
+    esp_netif_dhcpc_stop(netif);                   /* no-op si no estaba andando */
+    if (esp_netif_set_ip_info(netif, &ip) != ESP_OK) {
+        ESP_LOGE(TAG, "no he podido ponerme la IP fija " IP_FIJA_CABINA);
+        return;
+    }
+    ESP_LOGW(TAG, "el DHCP no contesta: me pongo la IP fija " IP_FIJA_CABINA
+                  " y sigo (la P4 esta en 192.168.4.1)");
+    s_ip_fija = true;
+    s_dhcp_espera_us = DHCP_REINTENTO_US;   /* la proxima vez, ventana corta */
+    /* La tarea de recepcion espera esta bandera para abrir el socket. */
+    xEventGroupSetBits(s_wifi_events, WIFI_BIT_GOT_IP);
 }
 
 static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
@@ -238,9 +326,41 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
             case WIFI_EVENT_STA_CONNECTED:
                 s_asociado = true;
                 ESP_LOGI(TAG, "Asociado a %s", s_ssid);
-                /* A partir de aqui, 20 s para que llegue la IP. */
+                /* La senal se mide AQUI, en la tarea de eventos del Wi-Fi, y se
+                 * guarda: la pantalla solo lee el numero guardado. Antes se
+                 * media en la tarea de recepcion (que necesita un paquete) y por
+                 * eso una cabina asociada y muda ensenaba "0 dBm", un valor que
+                 * no existe y despista mas que ayuda. */
+                {
+                    wifi_ap_record_t ap_rec;
+                    if (esp_wifi_sta_get_ap_info(&ap_rec) == ESP_OK) {
+                        s_rssi_cache = ap_rec.rssi;
+                        s_rssi_us = esp_timer_get_time();
+                        ESP_LOGI(TAG, "Senal de la P4: %d dBm", s_rssi_cache);
+                    }
+                }
+                /* Si venimos de la IP fija (el DHCP fallo la vez anterior), se
+                 * le da otra oportunidad al DHCP aprovechando esta reconexion:
+                 * asi el sistema vuelve solo a lo normal y la P4 vuelve a ver su
+                 * concesion. Si no contesta en la ventana corta, dhcp_timer_cb
+                 * vuelve a poner la IP fija y seguimos funcionando. */
+                if (s_ip_fija) {
+                    esp_netif_t *n = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+                    /* La marca se quita SOLO si el cliente DHCP arranca de verdad:
+                     * si el arranque falla y la quitamos igual, no se vuelve a
+                     * intentar nunca mas y la cabina se queda con la IP fija para
+                     * siempre (y la P4, que mira sus concesiones, creyendo que el
+                     * enlace esta roto aunque funcione). */
+                    if (n && esp_netif_dhcpc_start(n) == ESP_OK) {
+                        s_ip_fija = false;
+                        ESP_LOGW(TAG, "venia con IP fija: le doy otra oportunidad al DHCP");
+                    } else {
+                        ESP_LOGW(TAG, "no he podido rearrancar el DHCP: sigo con la IP fija");
+                    }
+                }
+                /* A partir de aqui, la IP tiene que llegar en s_dhcp_espera_us. */
                 esp_timer_stop(s_dhcp_timer);      /* no-op si no estaba armado */
-                esp_timer_start_once(s_dhcp_timer, DHCP_TIMEOUT_US);
+                esp_timer_start_once(s_dhcp_timer, s_dhcp_espera_us);
                 xEventGroupSetBits(s_wifi_events, WIFI_BIT_CONNECTED);
                 s_redes_fallos_seguidos = 0;   /* la proxima caida vuelve a diagnosticar rapido */
                 break;
@@ -267,8 +387,79 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
         ip_event_got_ip_t *ev = (ip_event_got_ip_t *)data;
         ESP_LOGI(TAG, "IP: " IPSTR " GW: " IPSTR,
                  IP2STR(&ev->ip_info.ip), IP2STR(&ev->ip_info.gw));
+        s_ip_fija = false;                     /* IP del DHCP: lo normal */
+        s_dhcp_espera_us = DHCP_TIMEOUT_US;    /* y la ventana, la de siempre */
         esp_timer_stop(s_dhcp_timer);          /* ya tenemos IP: no hay nada que vigilar */
         xEventGroupSetBits(s_wifi_events, WIFI_BIT_GOT_IP);
+    }
+}
+
+/* Vigilante de mudez: lo llama la tarea de recepcion cada vez que el socket se
+ * queda sin paquete (espera de 2 s), NUNCA la tarea de dibujo. Ver el comentario
+ * de SIN_DATOS_US arriba. */
+static void vigila_datos(void)
+{
+    if (!s_asociado) {
+        /* Sin asociacion ya hay reconexion en marcha: aqui no se toca nada. */
+        s_aviso_mudez_dado = false;
+        return;
+    }
+    int64_t ahora = esp_timer_get_time();
+    int64_t ref = s_ultimo_rx_us;
+    if (s_escucha_desde_us > ref) ref = s_escucha_desde_us;
+    if (s_ultimo_intento_us > ref) ref = s_ultimo_intento_us;
+    if (ref == 0) return;                      /* todavia no escuchamos */
+
+    int64_t mudo_us = ahora - ref;
+    int64_t umbral = (s_sin_datos_intentos < SIN_DATOS_TOLERANCIA) ? SIN_DATOS_US
+                                                                  : SIN_DATOS_US_LARGO;
+    if (mudo_us < umbral) {
+        s_aviso_mudez_dado = false;
+        return;
+    }
+    if (!s_aviso_mudez_dado) {
+        ESP_LOGW(TAG, "asociada pero SIN DATOS desde hace %lld s: fuerzo reconexion "
+                      "(intento %d)", (long long)(mudo_us / 1000000),
+                 s_sin_datos_intentos + 1);
+        s_aviso_mudez_dado = true;
+    }
+    s_sin_datos_intentos++;
+    s_ultimo_intento_us = ahora;
+    esp_wifi_disconnect();   /* el evento DISCONNECTED rearma el reintento de 0,5 s */
+}
+
+/* Manda el latido a la P4 (ver mini_proto.h). Lo llama la tarea de recepcion,
+ * que es la unica que sabe cuanto llevamos sin datos, y va limitado a uno cada
+ * 2 s. Para que sirve: la P4 no tiene forma de saber si su telemetria llega,
+ * asi que se lo decimos nosotros; y el latido en si le demuestra que la subida
+ * funciona. Con eso la P4 puede reparar el AP en segundos en vez de a ciegas. */
+static void manda_latido(int sock)
+{
+    static int64_t ultimo_us = 0;
+    int64_t ahora = esp_timer_get_time();
+    if (ultimo_us != 0 && (ahora - ultimo_us) < 2 * 1000 * 1000) return;
+    ultimo_us = ahora;
+
+    mini_latido_t l;
+    memset(&l, 0, sizeof(l));
+    l.magic   = MINI_LATIDO_MAGIC;
+    l.version = MINI_PROTO_VERSION;
+    int64_t ref = s_ultimo_rx_us ? s_ultimo_rx_us : s_escucha_desde_us;
+    l.seg_sin_datos = (ref == 0) ? -1 : (int16_t)((ahora - ref) / 1000000);
+    l.ip_fija = s_ip_fija ? 1 : 0;
+    l.crc32 = esp_crc32_le(0, (const uint8_t *)&l, sizeof(l) - sizeof(uint32_t));
+
+    struct sockaddr_in dst = {0};
+    dst.sin_family      = AF_INET;
+    dst.sin_port        = htons(MINI_LATIDO_UDP_PORT);
+    dst.sin_addr.s_addr = inet_addr("192.168.4.1");   /* la P4 */
+    int n = sendto(sock, &l, sizeof(l), 0, (struct sockaddr *)&dst, sizeof(dst));
+    if (n != (int)sizeof(l)) {
+        static uint32_t fallos = 0;
+        if ((++fallos % 15) == 1) {
+            ESP_LOGW(TAG, "no he podido mandar el latido a la P4 (errno=%d, %lu fallos)",
+                     errno, (unsigned long)fallos);
+        }
     }
 }
 
@@ -278,7 +469,6 @@ static void rx_task(void *arg)
 
     xEventGroupWaitBits(s_wifi_events, WIFI_BIT_GOT_IP,
                         pdFALSE, pdTRUE, portMAX_DELAY);
-
     /* Crear (o recrear) el socket con reintento. Antes un fallo aqui hacia
      * vTaskDelete -> la tarea moria para siempre y la 3.5" se quedaba muda
      * hasta reboot, mientras que udp_tx.c (el emisor, en la P4) ya tenia este
@@ -309,6 +499,14 @@ static void rx_task(void *arg)
     ESP_LOGI(TAG, "Escuchando UDP :%d (sizeof(mini_msg_t)=%u)",
              MINI_PROTO_UDP_PORT, (unsigned)sizeof(mini_msg_t));
 
+    /* Espera maxima de 2 s: asi esta tarea se despierta aunque no llegue nada y
+     * puede vigilar si el enlace se ha quedado mudo (ver vigila_datos). Antes se
+     * quedaba bloqueada en recvfrom para siempre y una cabina asociada pero muda
+     * no se enteraba de nada. */
+    struct timeval espera = { .tv_sec = 2, .tv_usec = 0 };
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &espera, sizeof(espera));
+    s_escucha_desde_us = esp_timer_get_time();
+
     uint8_t buf[256];
     struct sockaddr_in src;
     /* IP fija del AP de la P4 (igual que P4_URL en p4_api.c): es el gateway
@@ -327,6 +525,15 @@ static void rx_task(void *arg)
         int n = recvfrom(sock, buf, sizeof(buf), 0,
                          (struct sockaddr *)&src, &slen);
         if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                /* Ni un paquete en la espera de 2 s: es lo normal cuando la P4
+                 * arranca o se reinicia. Se aprovecha para decirle a la P4 como
+                 * la vemos (latido) y para comprobar si llevamos demasiado
+                 * tiempo mudos. No se avisa en el log. */
+                manda_latido(sock);
+                vigila_datos();
+                continue;
+            }
             ESP_LOGW(TAG, "recvfrom errno=%d", errno);
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
@@ -358,6 +565,9 @@ static void rx_task(void *arg)
         data_model_update_from_msg(msg);
         reloj_set_desde_p4(msg->epoch_local);
         s_ultimo_rx_us = esp_timer_get_time();   /* enlace vivo: ver udp_rx_enlace() */
+        s_sin_datos_intentos = 0;                /* llego un paquete: escalera a cero */
+        s_aviso_mudez_dado = false;
+        manda_latido(sock);                      /* y se lo contamos a la P4 */
         if (s_asociado && esp_timer_get_time() - s_rssi_us > 2000000) {
             wifi_ap_record_t ap;
             if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
