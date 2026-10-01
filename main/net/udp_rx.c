@@ -55,7 +55,14 @@ static uint32_t s_msgs_bad = 0;
  * adivinar por que. 30-sep-2026. */
 static _Atomic bool s_asociado = false;
 static volatile int64_t s_ultimo_rx_us = 0;
+/* Senal medida por ESTA tarea, no por la de dibujo: preguntarle al Wi-Fi desde
+ * la tarea de LVGL puede bloquearla (la API coge su cerrojo) y con el vigilante
+ * de tareas encima eso es un reinicio. Paso el 30-sep-2026: la pantalla de
+ * Configuracion reiniciaba la placa por preguntar cada segundo. */
+static volatile int     s_rssi_cache = 0;
+static volatile int64_t s_rssi_us = 0;
 static esp_timer_handle_t s_reconnect_timer;
+static esp_timer_handle_t s_dhcp_timer;      /* asociada sin IP: ver dhcp_timer_cb */
 #define RECONNECT_DELAY_US (500 * 1000)
 
 static char s_ssid[33];
@@ -202,6 +209,23 @@ static void reconnect_timer_cb(void *arg)
     esp_wifi_connect();
 }
 
+/* Vigilante del DHCP. La cabina puede asociarse y quedarse SIN IP: pasa cuando
+ * la P4 se reinicia justo mientras se asocia, el DHCP no contesta y aqui nadie
+ * lo vuelve a pedir. Antes se quedaba asi para siempre -- asociada, sin socket
+ * y sin datos -- y solo se arreglaba desenchufandola. Ahora, si en 20 s no ha
+ * llegado la IP, se desconecta y el reintento de siempre la vuelve a conectar.
+ * Paso el 30-sep-2026, en el banco y con la P4 reiniciandose. */
+#define DHCP_TIMEOUT_US (20 * 1000 * 1000)
+
+static void dhcp_timer_cb(void *arg)
+{
+    (void)arg;
+    if (!s_asociado) return;                       /* ya se cayo sola */
+    ESP_LOGW(TAG, "asociada sin IP tras %d s: me desconecto y reintento",
+             (int)(DHCP_TIMEOUT_US / 1000000));
+    esp_wifi_disconnect();                         /* el reintento lo hace el evento */
+}
+
 static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg; (void)data;
@@ -214,6 +238,9 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
             case WIFI_EVENT_STA_CONNECTED:
                 s_asociado = true;
                 ESP_LOGI(TAG, "Asociado a %s", s_ssid);
+                /* A partir de aqui, 20 s para que llegue la IP. */
+                esp_timer_stop(s_dhcp_timer);      /* no-op si no estaba armado */
+                esp_timer_start_once(s_dhcp_timer, DHCP_TIMEOUT_US);
                 xEventGroupSetBits(s_wifi_events, WIFI_BIT_CONNECTED);
                 s_redes_fallos_seguidos = 0;   /* la proxima caida vuelve a diagnosticar rapido */
                 break;
@@ -229,6 +256,7 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
                  * dia escaneando (un escaneo bloquea la radio ~2 s). */
                 if (d && d->reason == WIFI_REASON_NO_AP_FOUND) log_redes_visibles();
                 xEventGroupClearBits(s_wifi_events, WIFI_BIT_CONNECTED | WIFI_BIT_GOT_IP);
+                esp_timer_stop(s_dhcp_timer);        /* sin IP que esperar */
                 esp_timer_stop(s_reconnect_timer);   /* no-op si no estaba armado */
                 esp_timer_start_once(s_reconnect_timer, RECONNECT_DELAY_US);
                 break;
@@ -239,6 +267,7 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
         ip_event_got_ip_t *ev = (ip_event_got_ip_t *)data;
         ESP_LOGI(TAG, "IP: " IPSTR " GW: " IPSTR,
                  IP2STR(&ev->ip_info.ip), IP2STR(&ev->ip_info.gw));
+        esp_timer_stop(s_dhcp_timer);          /* ya tenemos IP: no hay nada que vigilar */
         xEventGroupSetBits(s_wifi_events, WIFI_BIT_GOT_IP);
     }
 }
@@ -329,6 +358,13 @@ static void rx_task(void *arg)
         data_model_update_from_msg(msg);
         reloj_set_desde_p4(msg->epoch_local);
         s_ultimo_rx_us = esp_timer_get_time();   /* enlace vivo: ver udp_rx_enlace() */
+        if (s_asociado && esp_timer_get_time() - s_rssi_us > 2000000) {
+            wifi_ap_record_t ap;
+            if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
+                s_rssi_cache = ap.rssi;
+                s_rssi_us = esp_timer_get_time();
+            }
+        }
         s_msgs_ok++;
 
         /* El reloj de la P4 es lo unico que permite contar lo que dura una
@@ -391,6 +427,12 @@ void udp_rx_start(void)
     };
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &s_reconnect_timer));
 
+    const esp_timer_create_args_t dhcp_args = {
+        .callback = dhcp_timer_cb,
+        .name = "wifi_dhcp",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&dhcp_args, &s_dhcp_timer));
+
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
@@ -426,9 +468,10 @@ void udp_rx_enlace(char *ssid, size_t ssid_len, bool *asociado,
     }
     if (asociado) *asociado = s_asociado;
     if (rssi_dbm) {
-        wifi_ap_record_t ap;
-        *rssi_dbm = (s_asociado && esp_wifi_sta_get_ap_info(&ap) == ESP_OK)
-                        ? ap.rssi : 0;
+        /* Numero guardado: NO se llama aqui a la API de Wi-Fi. Quien pregunta
+         * puede ser la tarea de dibujo, y bloquearla es un reinicio (ver
+         * arriba). Si nunca se ha medido, 0. */
+        *rssi_dbm = s_asociado ? s_rssi_cache : 0;
     }
     if (seg_sin_datos) {
         int64_t t = s_ultimo_rx_us;
