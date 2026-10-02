@@ -39,22 +39,30 @@ void data_model_update_from_msg(const struct mini_msg *msg)
 
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
 
-    /* Shunt. Se invalida si el SoC viene como NO_DATA, igual que los otros
-     * cinco bloques: sin ese else -- que faltaba, auditando el 24-ago-2026 --
+    /* Shunt, CADA CAMPO POR SEPARADO ("NA por campo", auditoria del
+     * 23-sep-2026). La P4 pone el centinela solo en el campo que no tiene: lo
+     * normal es que el SoC venga NA mientras el SmartShunt sincroniza, con el
+     * voltaje y la corriente ya buenos. Antes se miraba SOLO el SoC y, si
+     * venia NA, se tiraban los tres: la pantalla ponia "--" en V y en I aunque
+     * los tuviera. El caso "no hay nada" sigue cubierto: si el shunt no esta
+     * fresco, la P4 manda los tres centinelas y aqui los tres quedan
+     * invalidos (es el else que faltaba y se arreglo el 24-ago-2026: sin el,
      * has_data se quedaba en true para siempre y la pantalla seguia ensenando
-     * el ultimo porcentaje con el SmartShunt apagado, ahora ademas con el punto
-     * de conexion en verde, porque el enlace con la P4 si estaba vivo. */
-    if (msg->shunt_soc_deci != MINI_NO_DATA_I16) {
-        tmp.has_data            = true;
-        tmp.shunt_soc_deci      = msg->shunt_soc_deci;
-        tmp.shunt_voltage_centi = msg->shunt_voltage_centi;
-        tmp.shunt_current_milli = msg->shunt_current_milli;
-        /* P = V * I -> centi V * milli A / 100000 = W, signo conservado. */
-        tmp.shunt_power_w = (int32_t)((int64_t)msg->shunt_voltage_centi *
-                                       msg->shunt_current_milli / 100000);
-    } else {
-        tmp.has_data = false;
-    }
+     * el ultimo porcentaje con el SmartShunt apagado). */
+    tmp.soc_valido = (msg->shunt_soc_deci != MINI_NO_DATA_I16);
+    tmp.v_valido   = (msg->shunt_voltage_centi != MINI_NO_DATA_I16);
+    tmp.i_valido   = (msg->shunt_current_milli != MINI_NO_DATA_I32);
+    tmp.has_data   = tmp.soc_valido || tmp.v_valido || tmp.i_valido;
+    tmp.shunt_soc_deci      = msg->shunt_soc_deci;      /* el centinela se guarda tal cual */
+    tmp.shunt_voltage_centi = msg->shunt_voltage_centi;
+    tmp.shunt_current_milli = msg->shunt_current_milli;
+    /* P = V * I -> centi V * milli A / 100000 = W, signo conservado. Solo si
+     * hay los dos campos; si no, 0 (nadie la pinta hoy, pero que no sea un
+     * numero inventado). */
+    tmp.shunt_power_w = (tmp.v_valido && tmp.i_valido)
+        ? (int32_t)((int64_t)msg->shunt_voltage_centi *
+                    msg->shunt_current_milli / 100000)
+        : 0;
 
     /* Aux del SmartShunt = bateria de arranque/motor. */
     if (msg->aux_input != MINI_NO_DATA_U8) {

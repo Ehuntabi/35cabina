@@ -23,6 +23,15 @@ typedef struct {
     int16_t  shunt_voltage_centi;  /* V * 100         ej: 1342 = 13.42 V */
     int32_t  shunt_current_milli;  /* A * 1000  signo */
     int32_t  shunt_power_w;
+    /* CADA CAMPO PUEDE VENIR SIN DATO POR SEPARADO (contrato en mini_proto.h):
+     * la P4 manda el centinela SOLO en el campo que no tiene -- tipicamente el
+     * SoC mientras el SmartShunt sincroniza, con el voltaje y la corriente
+     * buenos. Antes se miraba unicamente el SoC y, si venia NA, se tiraban los
+     * tres: la pantalla ponia "--" en V y en I aunque los tuviera. Auditoria
+     * del 23-sep-2026, punto "protocolo v6: NA por campo". */
+    bool     soc_valido;
+    bool     v_valido;
+    bool     i_valido;
 
     /* Canal auxiliar del SmartShunt = bateria de arranque/motor (NO es la
      * bateria de casa). Crudo, la unidad depende de aux_input. */

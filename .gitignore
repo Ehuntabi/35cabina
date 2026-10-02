@@ -50,3 +50,6 @@ main/wifi_credentials.h
 # === macOS / Windows system files ===
 .DS_Store
 Thumbs.db
+
+# Descargas del fabricante (van a documentacion/, no al repo). Ver docs/MATERIAL_FABRICANTE.md
+docs/Guition*/
