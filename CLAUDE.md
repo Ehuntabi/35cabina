@@ -46,4 +46,20 @@ descartado como producto).
     tenía forma de detectarlo él mismo.
 - `.github/workflows/build.yml` (16-sep-2026): compila con `idf.py build` en cada
   push/PR (docker `espressif/idf:v5.4.4`, target `esp32s3`). Pilla errores de
-  COMPILACION, no sustituye probar en la placa.
+  COMPILACION, no sustituye probar en la placa. Desde el 3-oct-2026 ejecuta
+  tambien `test/auditar.sh` (ver abajo).
+
+## Auditoria (`test/auditar.sh`, 3-oct-2026)
+- Equivalente al verificador de la P4, adaptado a lo que puede romperse AQUI:
+  IDF v5.4.4 dentro del binario, LVGL 8.4.0 en el cerrojo, particion de coredump,
+  Task WDT encendido y con panic, pilas de tarea >= 3072, copias de cadena sin
+  limite, **LVGL desde tareas siempre bajo `lvgl_port_lock`**, los parametros del
+  enlace (192.168.4.1 y la IP estatica .200 fuera del DHCP .2-.101 de la P4),
+  `mini_proto.h` y el contrato completo con la P4, `CUERPO_MAX` dentro de
+  `VIAJE_BODY_MAX`, `dependencies.lock` sin rutas absolutas y que el .bin no sea
+  mas viejo que el ultimo commit.
+- Se corre a mano con `bash test/auditar.sh` y solo en el CI. Las reglas que
+  necesitan el repo de la P4 al lado (`mini_proto.h`, contrato, `CUERPO_MAX`) se
+  omiten si no esta.
+- **Lo que NO verifica**: nada de tiempo de ejecucion (Wi-Fi, pantalla, tactil):
+  eso pide la placa.

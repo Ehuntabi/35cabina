@@ -45,3 +45,11 @@ jobs:
           esp_idf_version: v5.4.4
           target: esp32s3
           path: '.'
+
+      # La auditoria mira el .bin y el sdkconfig.h que acaba de dejar el build
+      # (IDF correcta, Task WDT, pilas de tarea, LVGL bajo cerrojo, enlace con la
+      # P4...). Ver test/auditar.sh: cada regla existe por un fallo o una
+      # invariante concreta. Los chequeos que necesitan el repo de la P4 al lado
+      # se omiten solos (aqui solo se clona este).
+      - name: Auditoria (reglas del proyecto)
+        run: bash test/auditar.sh
