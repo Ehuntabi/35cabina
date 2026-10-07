@@ -55,15 +55,22 @@ Al arrancar, la pantalla hace un **auto-test del canal hacia la P4** y lo deja e
 el log, en castellano, sin crear ningún viaje:
 
 ```
-p4_creds: sin credenciales en NVS: se usan las de fabrica (usuario 'victron')
-p4_test: tcp 80: contesta (HTTP/1.1 401 Unauthorized     <- el portal esta vivo
-p4_test: auth 80: CON credenciales -> HTTP/1.1 200 OK     <- las credenciales valen
-p4_test: 3) CANAL DE VIAJES OK: la P4 ha contestado HTTP 400 al apunte de prueba
+p4_test: credenciales del portal en NVS: si, usuario 'victron'
+p4_test: tcp 80: contesta (HTTP/1.1 401 Unauthorized      <- el portal esta vivo
+p4_test: auth 80: CON credenciales -> HTTP/1.1 200 OK      <- las credenciales valen
+p4_test: 3) CANAL DE VIAJES OK: HTTP 400 al apunte de prueba (rechazado a proposito)
+p4_test: 4) CANAL DE ALARMAS OK: HTTP 400 (mascara 0: no se calla nada)
+p4_test: 5) con credenciales malas la P4 contesta 401, como debe
 ```
 
-Si sale `CANAL DE VIAJES ROTO` o `CREDENCIALES MAL (401)`, los apuntes del
-cuaderno no se guardarán: se arregla poniendo usuario y clave del portal en
+Si sale `CANAL DE VIAJES ROTO`, o `401` donde debería salir un 4xx, los apuntes
+del cuaderno no se guardarán: se arregla poniendo usuario y clave del portal en
 Ajustes → WiFi.
+
+(La sonda `1) sonda informativa sin credenciales` da un falso negativo **a
+propósito documentado**: el cliente HTTP de la biblioteca de IDF no resuelve el
+reto 401 de la P4, así que las peticiones de producción mandan la cabecera
+`Authorization` a mano. El veredicto bueno son los pasos 3, 4 y 5.)
 
 ## Qué mirar los primeros minutos
 

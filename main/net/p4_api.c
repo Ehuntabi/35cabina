@@ -69,7 +69,6 @@ static void avisar_cb(void *arg)
  * portal, con Basic Auth y contando como entregado solo el 2xx. La orden de
  * silencio (p4_api_silenciar_alarma) usa el mismo, cambiando solo la URL: dos
  * copias de esto serian dos sitios donde arreglar el mismo fallo. */
-static bool p4_api_post_url(const char *url, const char *cuerpo, int *estado_out);
 static bool lanzar_a(const char *url, const char *cuerpo, p4_api_done_cb cb,
                      void *user_data);
 
@@ -110,7 +109,7 @@ static void cabecera_basic(const char *user, const char *pass, char *out, size_t
     out[k] = '\0';
 }
 
-static bool p4_api_post_url(const char *url, const char *cuerpo, int *estado_out)
+bool p4_api_post_url(const char *url, const char *cuerpo, int *estado_out)
 {
     if (!url || !cuerpo) return false;
     if (estado_out) *estado_out = 0;

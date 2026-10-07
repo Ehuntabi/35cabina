@@ -216,6 +216,28 @@ static void idf_con_cabecera(void)
     esp_http_client_cleanup(c);
 }
 
+/* Base64 de "usuario:clave" para la prueba de credenciales malas. Duplicado a
+ * proposito (el de produccion es estatico en p4_api.c): asi el test no puede
+ * romper el camino real ni al reves. */
+static void cabecera_basic_de_prueba(const char *user, const char *pass, char *out, size_t n)
+{
+    static const char *B = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    char plano[128];
+    snprintf(plano, sizeof(plano), "%s:%s", user, pass);
+    size_t lp = strlen(plano), k = 0;
+    k += snprintf(out, n, "Basic ");
+    for (size_t i = 0; i < lp && k + 5 < n; i += 3) {
+        uint32_t v = ((uint8_t)plano[i]) << 16;
+        if (i + 1 < lp) v |= ((uint8_t)plano[i+1]) << 8;
+        if (i + 2 < lp) v |= (uint8_t)plano[i+2];
+        out[k++] = B[(v >> 18) & 63];
+        out[k++] = B[(v >> 12) & 63];
+        out[k++] = (i + 1 < lp) ? B[(v >> 6) & 63] : '=';
+        out[k++] = (i + 2 < lp) ? B[v & 63] : '=';
+    }
+    out[k] = '\0';
+}
+
 static void tarea(void *arg)
 {
     (void)arg;
@@ -292,6 +314,63 @@ static void tarea(void *arg)
         ESP_LOGW(TAG, "3) la P4 ha ACEPTADO la operacion de prueba (HTTP %d): revisar", est);
     } else {
         ESP_LOGE(TAG, "3) CANAL DE VIAJES ROTO: estado %d (0 = no hubo respuesta)", est);
+    }
+
+    /* 4) El OTRO camino de subida: silenciar una alarma (/api/alarma). Se manda
+     * mascara 0 = ninguna alarma: la P4 lo acepta y no calla nada, asi que sirve
+     * para comprobar el camino sin efectos. */
+    ESP_LOGI(TAG, "paso: POST /api/alarma (camino de silenciar alarmas)");
+    est = 0;
+    ok = p4_api_post_url(P4_HOST "/api/alarma", "{\"op\":\"silencio\",\"mask\":0}", &est);
+    /* Vale cualquier 4xx menos 401: significa que la P4 autentico al cliente y
+     * enruto la peticion hasta su handler (que la rechaza por la mascara 0). Un
+     * 401 seria credenciales, y un 0 que la peticion no llego. */
+    if (est >= 400 && est < 500 && est != 401) {
+        ESP_LOGI(TAG, "4) CANAL DE ALARMAS OK: la P4 atiende la orden (HTTP %d; con mascara 0 "
+                      "no se ha callado ninguna alarma)", est);
+    } else if (est == 401) {
+        ESP_LOGE(TAG, "4) CANAL DE ALARMAS: 401 (credenciales del portal)");
+    } else {
+        ESP_LOGW(TAG, "4) canal de alarmas: HTTP %d%s", est,
+                 est == 0 ? " (sin respuesta: no llego)" : "");
+    }
+
+    /* 5) Y lo contrario: con credenciales MAL, la P4 tiene que decir 401. Si
+     * dijera otra cosa, el aviso de credenciales de Ajustes no saltaria y el
+     * usuario no sabria por que no se guardan los viajes. Se fuerza una clave
+     * incorrecta SOLO aqui; el camino de produccion no se toca. */
+    ESP_LOGI(TAG, "paso: POST /api/viaje con credenciales MAL (para ver el 401)");
+    {
+        esp_http_client_config_t cfg = {
+            .url = P4_HOST "/api/viaje", .method = HTTP_METHOD_POST,
+            .timeout_ms = P4_TIMEOUT_MS, .auth_type = HTTP_AUTH_TYPE_NONE,
+            .keep_alive_enable = false,
+        };
+        esp_http_client_handle_t c = esp_http_client_init(&cfg);
+        if (c) {
+            char cab[192];
+            cabecera_basic_de_prueba("victron", "clave-incorrecta", cab, sizeof(cab));
+            esp_http_client_set_header(c, "Authorization", cab);
+            esp_http_client_set_header(c, "Content-Type", "application/json");
+            const char *cuerpo = "{\"op\":\"autotest\"}";
+            int len = (int)strlen(cuerpo);
+            int est_mal = 0;
+            if (esp_http_client_open(c, len) == ESP_OK) {
+                esp_http_client_write(c, cuerpo, len);
+                esp_http_client_fetch_headers(c);
+                est_mal = esp_http_client_get_status_code(c);
+                char resto[32];
+                while (esp_http_client_read(c, resto, sizeof(resto)) > 0) { }
+                esp_http_client_close(c);
+            }
+            esp_http_client_cleanup(c);
+            if (est_mal == 401) {
+                ESP_LOGI(TAG, "5) con credenciales malas la P4 contesta 401, como debe "
+                              "(el aviso de Ajustes saltaria)");
+            } else {
+                ESP_LOGW(TAG, "5) con credenciales MALAS la P4 contesta %d: revisar", est_mal);
+            }
+        }
     }
 
     ESP_LOGI(TAG, "=== fin del auto-test (no se ha creado ningun viaje) ===");

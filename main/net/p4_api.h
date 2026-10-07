@@ -29,6 +29,11 @@ bool p4_api_viaje_inicio(uint32_t id, const char *destino, uint32_t fecha_dias,
  * 'estado_out' recibe el codigo HTTP, o 0 si no se llego a conectar. */
 bool p4_api_post(const char *cuerpo, int *estado_out);
 
+/* El POST a una URL concreta (mismo camino que los viajes). Lo usa el auto-test
+ * para probar /api/alarma; el resto usa p4_api_post. SINCRONO: no llamar desde
+ * la tarea de LVGL. */
+bool p4_api_post_url(const char *url, const char *cuerpo, int *estado_out);
+
 /* Montadores del cuerpo JSON, para encolar sin enviar. */
 void p4_api_cuerpo_inicio(char *out, size_t n, uint32_t id,
                           const char *destino, uint32_t fecha_dias);
