@@ -223,9 +223,19 @@ void setup(void) {
         ESP_LOGE(TAG, "xTaskCreate(heartbeat_task) fallo: sin diagnostico periodico");
     }
     /* lvgl_wdog_task es el respaldo anti-cuelgue de verdad (ver su comentario):
-     * si esto no llega a crearse, un cuelgue de LVGL ya no se recupera solo. */
-    if (xTaskCreate(lvgl_wdog_task, "lvgl_wdog", 3072, NULL, 6, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "xTaskCreate(lvgl_wdog_task) fallo: SIN recuperacion anti-cuelgue de LVGL");
+     * si esto no llega a crearse, un cuelgue de LVGL ya no se recupera solo.
+     * Se comprueba el motivo CONCRETO (errno de FreeRTOS) porque "fallo" a secas
+     * no dice si fue memoria, prioridad o tabla llena: paso en la unidad nueva el
+     * 7-oct-2026 y hubo que adivinar. La memoria interna se mira ANTES de crear
+     * la tarea, que es el dato que hace falta si el fallo es por RAM. */
+    BaseType_t crea;
+    crea = xTaskCreate(lvgl_wdog_task, "lvgl_wdog", 3072, NULL, 6, NULL);
+    if (crea != pdPASS) {
+        ESP_LOGE(TAG, "xTaskCreate(lvgl_wdog) fallo (err=%d): SIN recuperacion anti-cuelgue de LVGL"
+                      " (heap interno libre %u B, PSRAM %u B)",
+                 (int)crea,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     }
 
     /* Modo captura de pantallas (capture_carousel.c). Con el interruptor de

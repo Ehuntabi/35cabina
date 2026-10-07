@@ -184,8 +184,22 @@ static void log_redes_visibles(void)
 static void wifi_configure_sta(void)
 {
     wifi_config_t wc = {0};
-    strncpy((char *)wc.sta.ssid, s_ssid, sizeof(wc.sta.ssid));
-    strncpy((char *)wc.sta.password, s_pass, sizeof(wc.sta.password));
+    /* Copia a mano y con el cero GARANTIZADO (migracion a IDF 5.5.5,
+     * 7-oct-2026). Aqui estaban dos strncpy, que dejan la cadena sin terminar si
+     * el origen mide justo lo que el campo (SSID de 32 = el maximo permitido), y
+     * el GCC 14 que trae el 5.5 lo detecta y corta el build. Con snprintf tampoco
+     * vale: si puede truncar, avisa igual. Y el aviso era correcto -- sin el cero
+     * el driver de Wi-Fi leia lo que hubiera detras del campo. */
+    memcpy(wc.sta.ssid, s_ssid, sizeof(wc.sta.ssid));
+    wc.sta.ssid[sizeof(wc.sta.ssid) - 1] = '\0';
+    memcpy(wc.sta.password, s_pass, sizeof(wc.sta.password));
+    wc.sta.password[sizeof(wc.sta.password) - 1] = '\0';
+    /* Si la red o la clave venian mas largas que el campo, se han recortado: que
+     * quede en el log, porque el sintoma si no es un "NO_AP_FOUND" que despista. */
+    if (strlen(s_ssid) >= sizeof(wc.sta.ssid) ||
+        strlen(s_pass) >= sizeof(wc.sta.password)) {
+        ESP_LOGW(TAG, "SSID/clave mas largos que el campo del driver: recortados");
+    }
     /* 'threshold' es el cifrado MINIMO que se acepta y va por el valor del enum,
      * asi que poner uno mas alto que el del AP hace que el escaneo lo descarte y
      * el sintoma sea un enganoso "reason=201 (NO_AP_FOUND)": parece que la red

@@ -22,7 +22,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 REPO="Ehuntabi/35cabina"
-IDF_EXPORT="${IDF_EXPORT:-$HOME/.espressif/esp-idf-5.4/export.sh}"
+# Un solo entorno para los tres proyectos (7-oct-2026): la P4 y la pantalla de 5"
+# ya iban por 5.5.5, y mantener dos IDF en el mismo PC solo daba sorpresas de PATH
+# (y un CI distinto). Este proyecto vivia en 5.4.4 por herencia de la saga del
+# hang del LCD/SD; se migro a 5.5.5 y se valido en placa.
+IDF_EXPORT="${IDF_EXPORT:-$HOME/.espressif/esp-idf-5.5/export.sh}"
 RELDIR="$HOME/joint-releases"
 APP_BIN="build/35cabina.bin"
 
@@ -63,6 +67,19 @@ fi
 # ── 3) compilar ─────────────────────────────────────────────────────────────
 # shellcheck disable=SC1090
 . "$IDF_EXPORT" >/dev/null 2>&1
+
+# Mismo IDF PARCHEADO que la P4 (7-oct-2026): el arbol de 5.5 lleva los parches
+# de ~/joint/victron/patches (memcpy NULL en el SPI del P4). Aqui se aplican
+# tambien -- es idempotente -- para que los dos proyectos compilen contra el
+# MISMO arbol y no haya "en mi PC funciona". Si el repo de la P4 no esta al
+# lado, se avisa y se sigue: este firmware no usa ese camino del SPI.
+PARCHE="$HOME/joint/victron/scripts/aplicar_parche_idf.sh"
+if [ -x "$PARCHE" ]; then
+    "$PARCHE" >/dev/null && echo "[ok] parches del IDF aplicados (los mismos que la P4)"
+else
+    echo "AVISO: no encuentro $PARCHE; compilo con el IDF tal cual"
+fi
+
 idf.py reconfigure >/dev/null
 idf.py build >/dev/null
 echo "[ok] compilado"

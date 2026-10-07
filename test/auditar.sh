@@ -12,14 +12,19 @@ fallos=0
 ok()  { printf '  ok    %s\n' "$1"; }
 mal() { printf '  FALLO %s\n' "$1"; fallos=$((fallos+1)); }
 
-echo "=== 1. El binario es el de la IDF que pide el proyecto (v5.4.4) ==="
-# CLAUDE.md: la IDF de la cabina es v5.4.4 OBLIGATORIA (la P4 va por 5.5.5: son
-# proyectos distintos). Compilar con otra deja el firmware sin probar.
+echo "=== 1. El binario es el de la IDF que pide el proyecto (v5.5.5) ==="
+# 7-oct-2026: este proyecto se migro de v5.4.4 a v5.5.5 para que los tres
+# (P4, cabina 3,5" y cabina 5") compartan un solo entorno. La regla sigue igual
+# de importante: compilar con otra IDF deja el firmware sin probar, y ahora la
+# que vale es la misma que la de la P4.
 BIN=$(ls build/35cabina.bin 2>/dev/null | head -1)
 if [ -n "$BIN" ]; then
-    strings "$BIN" | grep -qE '^v5\.4\.4$' \
-        && ok "el .bin lleva IDF v5.4.4" \
-        || mal "el .bin NO lleva IDF v5.4.4 ($(strings "$BIN" | grep -oE '^v5\.[0-9]\.[0-9]+$' | head -1))"
+    # Se acepta el sufijo "-dirty": el IDF de este PC lleva los parches del
+    # proyecto de la P4 sin commitear (scripts/aplicar_parche_idf.sh), asi que
+    # git describe devuelve v5.5.5-dirty. Lo que importa es el numero.
+    strings "$BIN" | grep -qE '^v5\.5\.5(-dirty)?$' \
+        && ok "el .bin lleva IDF v5.5.5 (el mismo arbol parcheado que la P4)" \
+        || mal "el .bin NO lleva IDF v5.5.5 ($(strings "$BIN" | grep -oE '^v5\.[0-9]\.[0-9]+(-dirty)?$' | head -1))"
     ver=$(strings "$BIN" | grep -oE '^v2\.[0-9]+$' | head -1)
     [ -n "$ver" ] && ok "version embebida: $ver" || mal "el .bin no lleva version embebida (¿build sin tags?)"
 else
@@ -63,7 +68,7 @@ echo "=== 7. LVGL desde tareas: siempre bajo el cerrojo del port ==="
 # cree tareas y toque LVGL se deje el cerrojo.
 sospechosos=""
 for f in $(grep -rlE 'xTaskCreate\(' main components --include="*.c" 2>/dev/null | grep -v managed_components); do
-    nlv=$(grep -cE '\blv_[a-z_]+\(' "$f" || true)
+    nlv=$(grep -vE '^[[:space:]]*(/\*|\*|//)' "$f" | grep -cE '\blv_[a-z_]+\(' || true)
     nlock=$(grep -cE 'lvgl_port_lock|bsp_display_lock' "$f" || true)
     # main.c y lv_port.c son la tarea de LVGL y su port: ahi el lock no hace falta
     case "$f" in main/main.c|main/lv_port.c|main/esp_bsp.c) continue;; esac

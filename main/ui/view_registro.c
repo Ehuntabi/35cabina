@@ -1490,7 +1490,14 @@ static const char *val_or_dash(lv_obj_t *ta)
  * los 225 caracteres, y 256 dejaba un margen que no daba para nada. Lo que va al
  * apunte se recorta aparte a 96 (ver apunte_encolar); el desglose de verdad va
  * en columnas, no en esta linea. */
-static char s_resumen[320];
+/* 512 y no 320 (7-oct-2026, migracion a IDF 5.5.5): el GCC 14 que trae esa IDF
+ * avisa (y con -Werror corta el build) de que el caso de la pernocta junta el
+ * sitio + las noches + el precio + un `serv` de 224 + un `extras` de 16, y con
+ * 320 no cabe: "output may be truncated writing up to 15 bytes into a region of
+ * size between 8 and 295". El aviso era correcto -- con un sitio de nombre largo
+ * y seis servicios marcados, la linea se recortaba de verdad. Esta linea es la
+ * que se ve en pantalla; el apunte se recorta aparte a 96 (apunte_encolar). */
+static char s_resumen[512];
 
 /* Los servicios marcados, en una linea y con su nombre entero: el dialogo baja
  * la letra si hace falta (confirm_screen.c) y "Vaciado grises" se entiende sin

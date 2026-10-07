@@ -32,10 +32,32 @@ CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 # dio (tolera cualquier chip de flash) y el bootloader pasa a QIO de verdad
 # despues. Auditado el 07-sep-2026.
 
-# === LVGL: fuente 22 usada por ui_theme.c (cards) ===
-CONFIG_LV_FONT_MONTSERRAT_22=y
-# === LVGL: fuente 48 usada por el importe de Peaje ===
-CONFIG_LV_FONT_MONTSERRAT_48=y
+# === Tabla de particiones propia (partitions.csv, 4 MB para la app) ===
+# Sin esto el build usa la de fabrica (particion 'factory' de 1 MB) y el binario
+# de ~1,9 MB NO CABE: "app partition is too small for binary ... overflow".
+# Estaba solo en el sdkconfig; al regenerarlo (migracion a 5.5.5, 7-oct-2026) se
+# perdio y el build fallo al final, despues de compilar todo.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# === LVGL: fuentes que USA el codigo ===
+# OJO: aqui solo estaban la 22 y la 48, y el sdkconfig versionado tenia las siete
+# porque se fueron activando a mano con el tiempo. Eso funcionaba... hasta que
+# alguien borraba el sdkconfig o cambiaba de IDF: entonces el build fallaba con
+# "lv_font_montserrat_32 undeclared". Paso en la migracion a IDF 5.5.5
+# (7-oct-2026), que es justo lo que estos defaults tienen que aguantar: compilar
+# desde cero sin depender del sdkconfig de nadie.
+#
+# Si se añade una fuente nueva al codigo, SE AÑADE AQUI. La lista de verdad sale
+# de:  grep -rhoE "lv_font_montserrat_[0-9]+" main/ | sort -u
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_22=y   # cards de ui_theme.c
+CONFIG_LV_FONT_MONTSERRAT_24=y
+CONFIG_LV_FONT_MONTSERRAT_32=y
+CONFIG_LV_FONT_MONTSERRAT_40=y
+CONFIG_LV_FONT_MONTSERRAT_48=y   # importe de Peaje
 
 # === LVGL: usar malloc (PSRAM) en vez del pool interno de 32KB ===
 # Sin esto las asignaciones LVGL se quedan sin sitio y crashea el boot.
@@ -51,3 +73,83 @@ CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
 CONFIG_ESP_COREDUMP_CHECKSUM_SHA256=y
 CONFIG_ESP_COREDUMP_MAX_TASKS_NUM=64
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Lo que se perdio al regenerar el sdkconfig (migracion a IDF 5.5.5, 7-oct-2026)
+# ══════════════════════════════════════════════════════════════════════════════
+# Este fichero solo tenia dos fuentes, la tabla de particiones y cuatro cosas
+# mas: TODO lo demas vivia unicamente en el sdkconfig versionado. Mientras nadie
+# borrara el sdkconfig, funcionaba; al migrar de IDF hubo que regenerarlo y el
+# proyecto se quedo sin PSRAM, sin 240 MHz, con el reloj de FreeRTOS a 100 Hz...
+# Si algo de esto falta, el build no tiene por que fallar: FALLA AL ARRANCAR
+# (la PSRAM es donde LVGL hace malloc). Por eso va aqui y no en el sdkconfig.
+#
+# Se saca comparando los dos sdkconfig (5.4 vs 5.5) y quedandose con lo que
+# cambia el comportamiento:
+#   git show <commit-viejo>:sdkconfig > /tmp/viejo && diff ...
+
+# ── Flash: 16 MB (el modulo es N16R8) ────────────────────────────────────────
+# Sin esto el default es 2 MB y la tabla de particiones de 4 MB no cabe.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_HEADER_FLASHSIZE_UPDATE=y
+
+# ── PSRAM octal 8 MB (de aqui come LVGL con LV_MEM_CUSTOM) ───────────────────
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_TYPE_AUTO=y
+CONFIG_SPIRAM_BOOT_INIT=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=0
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_SPIRAM_ECC_ENABLE=y
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY=y
+CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
+CONFIG_SPIRAM_PRE_CONFIGURE_MEMORY_PROTECTION=y
+# XIP/RODATA en PSRAM: en el 3,5" NO se usan (a diferencia de la P4).
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=n
+CONFIG_SPIRAM_RODATA=n
+CONFIG_SPIRAM_XIP_FROM_PSRAM=n
+CONFIG_STDATOMIC_S32C1I_SPIRAM_WORKAROUND=y
+
+# ── Rendimiento ──────────────────────────────────────────────────────────────
+# El sdkconfig de 5.4 estaba en -O2 (PERF); el default de IDF es -Og (DEBUG),
+# que ademas de ir mas lento mete codigo de sobra.
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_COMPILER_ORPHAN_SECTIONS_PLACE=y
+CONFIG_PM_SLP_IRAM_OPT=y
+CONFIG_HAL_SPI_MASTER_FUNC_IN_IRAM=y
+CONFIG_HAL_SPI_SLAVE_FUNC_IN_IRAM=y
+
+# ── Reloj de sistema y latidos ───────────────────────────────────────────────
+# 1000 Hz: el watchdog del proyecto y los timeouts del port LVGL cuentan en ms.
+CONFIG_FREERTOS_HZ=1000
+CONFIG_LOG_COLORS=y
+
+# ── Watchdog de tareas: NO vigilar las tareas IDLE ───────────────────────────
+# El proyecto tiene su propio watchdog (watchdog.c) y la P4 hace lo mismo. Con
+# las IDLE vigiladas, un borrado de flash largo (OTA, guardar un CSV) reinicia
+# la placa. Y el plazo, 10 s como estaba.
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+
+# ── HTTP: cabeceras largas (el portal manda y recibe bastante) ───────────────
+# Sin esto el default del 5.5 es 1024 y las peticiones con cabeceras gordas
+# (subidas, sesiones de la app) se rechazan con 431.
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=4096
+
+# ── Coredump: dejarlo en la pila de la tarea que peta ────────────────────────
+CONFIG_ESP_COREDUMP_USE_STACK_SIZE=y
+CONFIG_ESP_COREDUMP_STACK_SIZE=1792
+
+# ── Varios del 5.4 que afectan al comportamiento ─────────────────────────────
+CONFIG_FATFS_ALLOC_PREFER_EXTRAM=y
+CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
+CONFIG_MBEDTLS_ECP_FIXED_POINT_OPTIM=y
+CONFIG_LWIP_SO_RCVBUF=y
+CONFIG_ESP_HTTP_CLIENT_ENABLE_DIGEST_AUTH=y
+CONFIG_ESP_SYSTEM_PANIC_REBOOT_DELAY_SECONDS=5
