@@ -83,8 +83,10 @@ Se reutiliza:
 
 ## Target / toolchain
 
-**ESP-IDF v5.4.4** (obligatorio en todos los proyectos Victron de este
-usuario, ver memoria `project_victron_esp_idf`). Target `esp32s3`.
+**ESP-IDF v5.5.5** — el mismo entorno que la P4 y que la pantalla de 5" (se
+migro de 5.4.4 el 7-oct-2026, para no mantener dos IDF en el mismo PC). Target
+`esp32s3`. El IDF instalado lleva los parches del proyecto de la P4, asi que
+`idf.py --version` dice `v5.5.5-dirty`: es lo normal.
 
 ## Estructura
 
@@ -744,7 +746,7 @@ siempre sincronizado (mismo patrón que `~/joint/victron`):
 ## Build
 
 ```bash
-. $HOME/.espressif/esp-idf-5.4/export.sh   # alias "get_idf" en ~/.bashrc
+. $HOME/.espressif/esp-idf-5.5/export.sh   # alias "get_idf" en ~/.bashrc
 cp main/wifi_credentials.h.example main/wifi_credentials.h   # rellenar valores reales
 idf.py set-target esp32s3
 idf.py build
@@ -779,7 +781,7 @@ See the roadmap above (Fases 0-4) for what's implemented vs. planned.
 ### Build
 
 ```bash
-. $HOME/.espressif/esp-idf-5.4/export.sh
+. $HOME/.espressif/esp-idf-5.5/export.sh
 cp main/wifi_credentials.h.example main/wifi_credentials.h   # fill in real values
 idf.py set-target esp32s3
 idf.py build
