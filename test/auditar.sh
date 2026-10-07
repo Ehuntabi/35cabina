@@ -128,14 +128,21 @@ if git show HEAD:dependencies.lock >/dev/null 2>&1; then
         || ok "el dependencies.lock commiteado solo tiene rutas relativas"
 fi
 
-echo "=== 12. El build no puede ser mas viejo que el ultimo commit ==="
+echo "=== 12. El build no puede ser mas viejo que el codigo ==="
+# Se compara con los FICHEROS FUENTE, no con la fecha del commit: un commit que
+# no cambia el binario (documentacion, o un fichero que se toco y se dejo igual)
+# dejaba esta regla en rojo para siempre, porque el build no regenera el .bin si
+# no hay nada que recompilar. Visto el 7-oct-2026. Lo que importa es que ningun
+# fichero que entre en el binario sea mas nuevo que el .bin.
 if [ -n "$BIN" ]; then
-    ultimo=$(git log -1 --format=%ct -- main components partitions.csv sdkconfig 2>/dev/null || echo 0)
     mtime=$(stat -c %Y "$BIN" 2>/dev/null || echo 0)
-    if [ "$ultimo" -gt 0 ] && [ "$mtime" -lt "$ultimo" ]; then
-        mal "el .bin es MAS VIEJO que el ultimo commit de codigo: recompila antes de auditarlo"
+    mas_nuevo=$(find main components partitions.csv sdkconfig -newer "$BIN" \
+                \( -name '*.c' -o -name '*.h' -o -name '*.csv' -o -name 'sdkconfig' \) \
+                2>/dev/null | grep -v managed_components | head -3)
+    if [ -n "$mas_nuevo" ]; then
+        mal "hay fuentes mas nuevos que el .bin: recompila antes de auditarlo ($(echo $mas_nuevo | tr '\n' ' '))"
     else
-        ok "el .bin es posterior al ultimo commit de codigo"
+        ok "el .bin es posterior a todo el codigo (nada que recompilar)"
     fi
 fi
 
