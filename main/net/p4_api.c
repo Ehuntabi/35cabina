@@ -140,21 +140,35 @@ static bool p4_api_post_url(const char *url, const char *cuerpo, int *estado_out
     if (hay_creds) esp_http_client_set_header(c, "Authorization", cab);
 
     esp_http_client_set_header(c, "Content-Type", "application/json");
-    esp_http_client_set_post_field(c, cuerpo, strlen(cuerpo));
+    if (hay_creds) esp_http_client_set_header(c, "Authorization", cab);
 
+    /* ENVIO A MANO (7-oct-2026): con el camino normal (set_post_field +
+     * perform) el POST no terminaba NUNCA contra la P4: el cliente se quedaba
+     * esperando respuesta y el apunte no salia. Comprobado bajando un piso que
+     * la autenticacion va bien (GET con cabecera = 200), asi que el problema
+     * esta en como la biblioteca manda el cuerpo. Aqui se abre, se escribe el
+     * cuerpo con su longitud explicita y se lee la respuesta: es el mismo camino
+     * que el sondeo a pelo, que si funciona. */
     bool ok = false;
-    esp_err_t err = esp_http_client_perform(c);
-    if (err == ESP_OK) {
-        int estado = esp_http_client_get_status_code(c);
-        if (estado_out) *estado_out = estado;
-        /* Solo 2xx cuenta como entregado. Un 401 (credenciales), un 409 (ya
-         * habia viaje abierto) o un 501 (todavia no implementado) NO son
-         * exito: si se dieran por buenos, el apunte se daria por guardado sin
-         * estarlo. */
-        ok = (estado >= 200 && estado < 300);
-        ESP_LOGI(TAG, "%s -> HTTP %d", cuerpo, estado);
+    int len = (int)strlen(cuerpo);
+    if (esp_http_client_open(c, len) == ESP_OK) {
+        int escritos = esp_http_client_write(c, cuerpo, len);
+        if (escritos == len) {
+            esp_http_client_fetch_headers(c);     /* lee cabeceras (bounded) */
+            int estado = esp_http_client_get_status_code(c);
+            if (estado_out) *estado_out = estado;
+            ok = (estado >= 200 && estado < 300);
+            ESP_LOGI(TAG, "%s -> HTTP %d", cuerpo, estado);
+            /* Drenar el cuerpo de la respuesta si lo hay, para poder reutilizar
+             * o cerrar limpio. */
+            char resto[64];
+            while (esp_http_client_read(c, resto, sizeof(resto)) > 0) { }
+        } else {
+            ESP_LOGW(TAG, "no se pudo escribir el cuerpo (%d de %d bytes)", escritos, len);
+        }
+        esp_http_client_close(c);
     } else {
-        ESP_LOGW(TAG, "no se pudo entregar: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "no se pudo abrir la conexion con el portal");
     }
     esp_http_client_cleanup(c);
     return ok;

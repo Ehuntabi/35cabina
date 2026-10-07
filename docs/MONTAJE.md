@@ -49,6 +49,22 @@ La de la autocaravana tiene que llevar el arreglo del publicador UDP
 los que la P4 se queda muda y la cabina no recibe nada hasta reiniciarla a mano.
 Se graba por USB: `idf.py -p PUERTO flash` desde `~/joint/victron`.
 
+## El canal de subida se prueba solo (v2.17 en adelante)
+
+Al arrancar, la pantalla hace un **auto-test del canal hacia la P4** y lo deja en
+el log, en castellano, sin crear ningún viaje:
+
+```
+p4_creds: sin credenciales en NVS: se usan las de fabrica (usuario 'victron')
+p4_test: tcp 80: contesta (HTTP/1.1 401 Unauthorized     <- el portal esta vivo
+p4_test: auth 80: CON credenciales -> HTTP/1.1 200 OK     <- las credenciales valen
+p4_test: 3) CANAL DE VIAJES OK: la P4 ha contestado HTTP 400 al apunte de prueba
+```
+
+Si sale `CANAL DE VIAJES ROTO` o `CREDENCIALES MAL (401)`, los apuntes del
+cuaderno no se guardarán: se arregla poniendo usuario y clave del portal en
+Ajustes → WiFi.
+
 ## Qué mirar los primeros minutos
 
 1. **Datos en pantalla** con la P4 encendida: batería/solar/DC-DC con sus cifras

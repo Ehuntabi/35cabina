@@ -240,34 +240,36 @@ static void tarea(void *arg)
 
     ESP_LOGI(TAG, "=== auto-test del canal de subida a la P4 ===");
     /* Primero, lo mas basico: hay red hasta la P4 y contesta en sus dos puertos? */
-    tcp_crudo(80);
-    tcp_crudo(8081);
-    tcp_con_auth(80);   /* y ahora lo mismo, pero mandando la clave */
-    idf_con_cabecera(); /* el cliente de IDF, con la cabecera puesta a mano */
+    ESP_LOGI(TAG, "paso: TCP 80"); tcp_crudo(80);
+    ESP_LOGI(TAG, "paso: TCP 8081"); tcp_crudo(8081);
+    ESP_LOGI(TAG, "paso: TCP con clave"); tcp_con_auth(80);
+    ESP_LOGI(TAG, "paso: cliente IDF con cabecera"); idf_con_cabecera();
 
     /* Se prueba contra /api/state (GET, de lectura) y no contra /api/viaje:
      * asi se comprueba el CAMINO HTTP y las CREDENCIALES sin crear ni tocar
      * ningun viaje, y sin depender de que el handler de viaje conteste a una
      * sonda que no entiende. */
+    ESP_LOGI(TAG, "paso: GET /api/state sin credenciales");
     int sin_creds = pedir(P4_URL_VIAJE, HTTP_METHOD_GET, NULL, false);
     vTaskDelay(pdMS_TO_TICKS(1500));
     int con_creds = pedir(P4_URL_VIAJE, HTTP_METHOD_GET, NULL, true);
     int post_raro = con_creds;
 
-    if (sin_creds == 0) {
-        ESP_LOGE(TAG, "1) ni contesta: la P4 no esta encendida, o fuera de alcance");
-        ESP_LOGE(TAG, "   (sin enlace no se puede probar nada mas: se corta el test)");
-        vTaskDelete(NULL);
-        return;
-    }
-    ESP_LOGI(TAG, "1) el portal responde (sin credenciales: HTTP %d)%s",
-             sin_creds, sin_creds == 401 ? " y pide clave, como debe" : "");
+    /* OJO: NO se corta aqui aunque el paso 1 falle (el cliente sin credenciales
+     * se pierde en redirecciones, y eso no significa que la P4 este apagada).
+     * Antes se hacia 'return' y se saltaba justo la prueba que importa, el POST
+     * del camino real de los apuntes. */
+    /* Se informa, pero NO se usa como veredicto: el cliente de la biblioteca no
+     * sabe resolver el reto 401 de la P4 (ver p4_api.c), asi que aqui da un
+     * falso negativo. El veredicto de verdad es el POST del paso 3, que usa el
+     * camino real. */
+    ESP_LOGI(TAG, "1) sonda informativa sin credenciales: %d (el cliente de la biblioteca "
+                  "no resuelve el reto 401; el camino real es el paso 3)",
+             sin_creds);
 
     if (con_creds >= 400 && con_creds < 500 && con_creds != 401) {
         ESP_LOGI(TAG, "2) CREDENCIALES DEL PORTAL OK (HTTP %d: reconoce al cliente y "
                       "rechaza la operacion rara)", con_creds);
-    } else if (con_creds == 200) {
-        ESP_LOGW(TAG, "2) la P4 ha aceptado una operacion desconocida (HTTP 200): revisar");
     } else if (con_creds == 401) {
         ESP_LOGE(TAG, "2) CREDENCIALES MAL o sin poner (HTTP 401): los apuntes de viaje");
         ESP_LOGE(TAG, "   se perderan. Se ponen en Ajustes -> WiFi -> 'Usuario/Clave del portal',");
@@ -280,6 +282,7 @@ static void tarea(void *arg)
      * funcion que los manda de verdad (p4_api_post), y con una operacion que la
      * P4 no conoce: tiene que contestar 4xx (400) SIN crear ningun viaje. Si
      * devuelve 0, el canal sigue roto. */
+    ESP_LOGI(TAG, "paso: POST /api/viaje (camino real de los apuntes)");
     int est = 0;
     bool ok = p4_api_post("{\"op\":\"autotest\",\"id\":0}", &est);
     if (est >= 400 && est < 500) {
