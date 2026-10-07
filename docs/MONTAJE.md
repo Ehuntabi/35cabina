@@ -91,3 +91,34 @@ reto 401 de la P4, así que las peticiones de producción mandan la cabecera
   radio sigue emitiendo y la cabina recibe aunque haya estado apagada horas.
 - La cabina apagada **no** se interpreta como avería en la P4 (el watchdog vigila
   que su tarea de latido siga viva, no que la cabina hable).
+
+## Cuadro de pruebas del enlace (banco, 7-oct-2026)
+
+Todo lo comprobable sin datos reales ni sondas, con las dos placas en el banco:
+
+| Que se prueba | Como | Resultado |
+|---|---|---|
+| P4 -> cabina, telemetria | UDP :4242, contador y CRC | **OK**: 1 paquete/s, 0 corruptos |
+| Centinelas de "sin dato" | P4 sin shunt + simulador | **OK**: se pintan como `--` |
+| Cabina -> P4, latido | UDP :4243 | **OK**: la P4 lo registra con su IP |
+| Cabina -> P4, viajes | POST /api/viaje (auth ESTRICTA) | **OK**: HTTP 400 a la operacion de prueba |
+| Cabina -> P4, alarmas | POST /api/alarma | **OK**: HTTP 400 con mascara 0 |
+| Credenciales malas | POST con clave incorrecta | **OK**: 401, el aviso de Ajustes saltaria |
+| Contrato entre repos | `test/protocolo_cabina.sh` | **OK**: 15 campos y 4 operaciones |
+| Reinicio rapido de la P4 | reset y cronometro | **OK**: vuelve a los ~15 s |
+| Arranque lento de la P4 | P4 tardando ~50 s en levantar el AP | **OK**: reintenta y entra sola |
+| Apagon/encendido de la cabina | reset del satelite | **OK**: datos a los ~7 s |
+| Portal HTTP parado | ver abajo | No pasa con la cabina encendida |
+
+### El auto-off del portal de la P4 (por que NO hay que preocuparse)
+
+`config_server_ap.c` para el servidor web a los 15 min sin actividad, **pero no
+para si hay algun cliente asociado**, y la cabina lo esta mientras tiene
+contacto. Comprobado en el banco con una P4 de prueba que tenia el plazo bajado
+a 1 minuto: la cabina mantiene el portal vivo, y ademas el auto-off solo se
+rearma con peticiones AUTENTICADAS o con un cliente que entra o sale (un 401 no
+lo rearma, visto en `config_server_auth.c`).
+
+O sea: con la cabina encendida, los apuntes salen; con la cabina apagada no hay
+nada que enviar. El aviso que habia en el codigo ("la cola no se vacia nunca")
+aplica a un caso que en la practica no se da.
