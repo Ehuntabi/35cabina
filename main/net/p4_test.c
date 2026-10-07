@@ -35,7 +35,9 @@
 #include "freertos/task.h"
 
 #include "p4_api.h"          /* p4_api_post: el POST crudo, sincrono */
-#include "config_storage.h"  /* load_portal_creds */
+#include "lwip/sockets.h"    /* TCP a pelo: para distinguir "no hay red" de "no contesta" */
+#include "p4_creds.h"       /* credenciales: NVS o fabrica */
+#include "esp_log_level.h"   /* subir el nivel del cliente HTTP a DEBUG en la prueba */
 
 static const char *TAG = "p4_test";
 
@@ -49,8 +51,7 @@ static int pedir(const char *url, esp_http_client_method_t metodo,
                  const char *cuerpo, bool con_creds)
 {
     char user[33] = {0}, pass[65] = {0};
-    size_t ul = sizeof(user), pl = sizeof(pass);
-    bool hay = con_creds && (load_portal_creds(user, &ul, pass, &pl) == ESP_OK) && user[0];
+    bool hay = con_creds && p4_creds_cargar(user, sizeof(user), pass, sizeof(pass));
 
     esp_http_client_config_t cfg = {
         .url        = url,
@@ -81,6 +82,140 @@ static int pedir(const char *url, esp_http_client_method_t metodo,
     return estado;
 }
 
+/* Prueba TCP A PELO: abre un socket, conecta al puerto y manda un GET minimo.
+ * Es el nivel de abajo del HTTP: distingue "no hay red / no resuelve" de "la
+ * conexion se abre pero el servidor no contesta", que es lo que hay que saber.
+ * Se prueban los dos puertos de la P4: el 80 (portal normal) y el 8081 (pesado). */
+static void tcp_crudo(int puerto)
+{
+    int s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s < 0) { ESP_LOGW(TAG, "tcp %d: no se pudo crear el socket", puerto); return; }
+
+    struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+    struct sockaddr_in dir = {0};
+    dir.sin_family = AF_INET;
+    dir.sin_port = htons((uint16_t)puerto);
+    dir.sin_addr.s_addr = inet_addr("192.168.4.1");
+
+    if (connect(s, (struct sockaddr *)&dir, sizeof(dir)) != 0) {
+        ESP_LOGW(TAG, "tcp %d: la P4 no acepta la conexion (errno=%d)", puerto, errno);
+        close(s);
+        return;
+    }
+    const char *peticion = "GET / HTTP/1.0\r\nHost: 192.168.4.1\r\n\r\n";
+    int enviado = send(s, peticion, strlen(peticion), 0);
+    if (enviado <= 0) {
+        ESP_LOGW(TAG, "tcp %d: conecta pero no deja enviar (errno=%d)", puerto, errno);
+        close(s);
+        return;
+    }
+    char buf[128] = {0};
+    int n = recv(s, buf, sizeof(buf) - 1, 0);
+    if (n > 0) {
+        ESP_LOGI(TAG, "tcp %d: contesta (%.40s)", puerto, buf);
+    } else if (n == 0) {
+        ESP_LOGW(TAG, "tcp %d: cierra la conexion sin contestar", puerto);
+    } else {
+        ESP_LOGW(TAG, "tcp %d: conecta y traga el GET pero NO contesta (errno=%d)",
+                 puerto, errno);
+    }
+    close(s);
+}
+
+/* Peticion A MANO con la cabecera Authorization (Basic). Es la prueba que
+ * decide: si ESTA funciona y la del cliente de IDF no, el fallo esta en el
+ * cliente de la biblioteca, no en la P4 ni en las credenciales. */
+static void tcp_con_auth(int puerto)
+{
+    char user[33] = {0}, pass[65] = {0};
+    if (!p4_creds_cargar(user, sizeof(user), pass, sizeof(pass))) {
+        ESP_LOGW(TAG, "auth %d: no hay credenciales", puerto);
+        return;
+    }
+    /* Basic = base64("usuario:clave"). Se hace a mano para no depender de nadie. */
+    char plano[128];
+    snprintf(plano, sizeof(plano), "%s:%s", user, pass);
+    static const char *b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    char cod[192]; size_t n = 0;
+    for (size_t i = 0; i < strlen(plano); i += 3) {
+        uint32_t v = ((uint8_t)plano[i]) << 16;
+        if (i + 1 < strlen(plano)) v |= ((uint8_t)plano[i+1]) << 8;
+        if (i + 2 < strlen(plano)) v |= (uint8_t)plano[i+2];
+        cod[n++] = b64[(v >> 18) & 63];
+        cod[n++] = b64[(v >> 12) & 63];
+        cod[n++] = (i + 1 < strlen(plano)) ? b64[(v >> 6) & 63] : '=';
+        cod[n++] = (i + 2 < strlen(plano)) ? b64[v & 63] : '=';
+    }
+    cod[n] = '\0';
+
+    int s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s < 0) return;
+    struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    struct sockaddr_in dir = {0};
+    dir.sin_family = AF_INET; dir.sin_port = htons((uint16_t)puerto);
+    dir.sin_addr.s_addr = inet_addr("192.168.4.1");
+    if (connect(s, (struct sockaddr *)&dir, sizeof(dir)) != 0) {
+        ESP_LOGW(TAG, "auth %d: no conecta (errno=%d)", puerto, errno); close(s); return;
+    }
+    char pet[400];
+    snprintf(pet, sizeof(pet),
+             "GET /api/state HTTP/1.0\r\nHost: 192.168.4.1\r\n"
+             "Authorization: Basic %s\r\nConnection: close\r\n\r\n", cod);
+    send(s, pet, strlen(pet), 0);
+    char buf[128] = {0};
+    int r = recv(s, buf, sizeof(buf) - 1, 0);
+    if (r > 0) ESP_LOGI(TAG, "auth %d: CON credenciales -> %.45s", puerto, buf);
+    else       ESP_LOGW(TAG, "auth %d: CON credenciales no contesta (errno=%d)", puerto, errno);
+    close(s);
+}
+
+/* El cliente DE IDF pero mandando la cabecera a mano (sin esperar al reto 401).
+ * Si esto funciona, el problema esta SOLO en el ciclo de autenticacion del
+ * cliente; si tampoco, es el cliente entero y hay que mandar por socket. */
+static void idf_con_cabecera(void)
+{
+    char user[33] = {0}, pass[65] = {0};
+    if (!p4_creds_cargar(user, sizeof(user), pass, sizeof(pass))) return;
+    char plano[128], cod[192]; size_t n = 0;
+    snprintf(plano, sizeof(plano), "%s:%s", user, pass);
+    static const char *b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    size_t lp = strlen(plano);
+    for (size_t i = 0; i < lp; i += 3) {
+        uint32_t v = ((uint8_t)plano[i]) << 16;
+        if (i + 1 < lp) v |= ((uint8_t)plano[i+1]) << 8;
+        if (i + 2 < lp) v |= (uint8_t)plano[i+2];
+        cod[n++] = b64[(v >> 18) & 63];
+        cod[n++] = b64[(v >> 12) & 63];
+        cod[n++] = (i + 1 < lp) ? b64[(v >> 6) & 63] : '=';
+        cod[n++] = (i + 2 < lp) ? b64[v & 63] : '=';
+    }
+    cod[n] = '\0';
+    char cab[256];
+    snprintf(cab, sizeof(cab), "Basic %s", cod);
+
+    esp_http_client_config_t cfg = {
+        .url = P4_HOST "/api/state",
+        .method = HTTP_METHOD_GET,
+        .timeout_ms = 6000,
+        .keep_alive_enable = false,
+        .auth_type = HTTP_AUTH_TYPE_NONE,     /* la cabecera la ponemos nosotros */
+    };
+    esp_http_client_handle_t c = esp_http_client_init(&cfg);
+    if (!c) return;
+    esp_http_client_set_header(c, "Authorization", cab);
+    esp_err_t err = esp_http_client_perform(c);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "idf con cabecera: HTTP %d", esp_http_client_get_status_code(c));
+    } else {
+        ESP_LOGW(TAG, "idf con cabecera: fallo (%s)", esp_err_to_name(err));
+    }
+    esp_http_client_cleanup(c);
+}
+
 static void tarea(void *arg)
 {
     (void)arg;
@@ -89,7 +224,26 @@ static void tarea(void *arg)
      * fallaria por impaciencia y asustaria sin motivo. */
     vTaskDelay(pdMS_TO_TICKS(12000));
 
+    /* Que se vea lo que hace el cliente HTTP por dentro: sin esto, un fallo suyo
+     * solo dice "no se pudo entregar" y no hay forma de saber por que. */
+    esp_log_level_set("esp_http_client", ESP_LOG_DEBUG);
+    esp_log_level_set("HTTP_CLIENT", ESP_LOG_DEBUG);
+
+    /* Y lo primero que hay que saber: hay credenciales guardadas? La placa nueva
+     * viene con la NVS vacia, y SIN credenciales la P4 responde 401 y los
+     * apuntes de viaje se pierden. */
+    char u[33] = {0}, pw[65] = {0};
+    bool hay = p4_creds_cargar(u, sizeof(u), pw, sizeof(pw));
+    ESP_LOGI(TAG, "credenciales del portal en NVS: %s%s", hay ? "si, usuario '" : "NO hay",
+             hay ? u : " (se ponen en Ajustes -> WiFi)");
+    if (hay) ESP_LOGI(TAG, "%s", "");
+
     ESP_LOGI(TAG, "=== auto-test del canal de subida a la P4 ===");
+    /* Primero, lo mas basico: hay red hasta la P4 y contesta en sus dos puertos? */
+    tcp_crudo(80);
+    tcp_crudo(8081);
+    tcp_con_auth(80);   /* y ahora lo mismo, pero mandando la clave */
+    idf_con_cabecera(); /* el cliente de IDF, con la cabecera puesta a mano */
 
     /* Se prueba contra /api/state (GET, de lectura) y no contra /api/viaje:
      * asi se comprueba el CAMINO HTTP y las CREDENCIALES sin crear ni tocar
@@ -122,7 +276,20 @@ static void tarea(void *arg)
         ESP_LOGW(TAG, "2) respuesta rara de la P4 con credenciales: HTTP %d", con_creds);
     }
 
-    ESP_LOGI(TAG, "3) la P4 contesta al GET de la cabina (HTTP %d)", post_raro);
+    /* LA PRUEBA QUE IMPORTA: el camino REAL de los apuntes de viaje, con la
+     * funcion que los manda de verdad (p4_api_post), y con una operacion que la
+     * P4 no conoce: tiene que contestar 4xx (400) SIN crear ningun viaje. Si
+     * devuelve 0, el canal sigue roto. */
+    int est = 0;
+    bool ok = p4_api_post("{\"op\":\"autotest\",\"id\":0}", &est);
+    if (est >= 400 && est < 500) {
+        ESP_LOGI(TAG, "3) CANAL DE VIAJES OK: la P4 ha contestado HTTP %d al apunte de prueba "
+                      "(rechazado a proposito, no se ha creado nada)", est);
+    } else if (ok) {
+        ESP_LOGW(TAG, "3) la P4 ha ACEPTADO la operacion de prueba (HTTP %d): revisar", est);
+    } else {
+        ESP_LOGE(TAG, "3) CANAL DE VIAJES ROTO: estado %d (0 = no hubo respuesta)", est);
+    }
 
     ESP_LOGI(TAG, "=== fin del auto-test (no se ha creado ningun viaje) ===");
     vTaskDelete(NULL);

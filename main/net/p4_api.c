@@ -21,6 +21,7 @@
  */
 #include "p4_api.h"
 #include "config_storage.h"
+#include "p4_creds.h"   /* NVS y, si no hay, valores de fabrica */
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -80,6 +81,35 @@ bool p4_api_post(const char *cuerpo, int *estado_out)
     return p4_api_post_url(P4_URL, cuerpo, estado_out);
 }
 
+/* Cabecera "Authorization: Basic xxx" montada a mano.
+ *
+ * POR QUE A MANO (7-oct-2026): con `auth_type = HTTP_AUTH_TYPE_BASIC`, el
+ * cliente de IDF tiene que resolver el reto 401 de la P4 y NO LO HACE: en el
+ * banco devolvia ESP_ERR_HTTP_MAX_REDIRECT (o EAGAIN) contra un servidor que
+ * responde 401 correctamente — comprobado con un socket a pelo, que da 401 sin
+ * credenciales y 200 con ellas. Mandando la cabecera nosotros, el cliente no
+ * tiene que resolver ningun reto y contesta 200 (probado en la placa). */
+static const char *B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static void cabecera_basic(const char *user, const char *pass, char *out, size_t n)
+{
+    char plano[128];
+    snprintf(plano, sizeof(plano), "%s:%s", user, pass);
+    size_t lp = strlen(plano), k = 0;
+    if (n < 16) { out[0] = '\0'; return; }
+    k += snprintf(out + k, n - k, "Basic ");
+    for (size_t i = 0; i < lp && k + 5 < n; i += 3) {
+        uint32_t v = ((uint8_t)plano[i]) << 16;
+        if (i + 1 < lp) v |= ((uint8_t)plano[i+1]) << 8;
+        if (i + 2 < lp) v |= (uint8_t)plano[i+2];
+        out[k++] = B64[(v >> 18) & 63];
+        out[k++] = B64[(v >> 12) & 63];
+        out[k++] = (i + 1 < lp) ? B64[(v >> 6) & 63] : '=';
+        out[k++] = (i + 2 < lp) ? B64[v & 63] : '=';
+    }
+    out[k] = '\0';
+}
+
 static bool p4_api_post_url(const char *url, const char *cuerpo, int *estado_out)
 {
     if (!url || !cuerpo) return false;
@@ -89,22 +119,25 @@ static bool p4_api_post_url(const char *url, const char *cuerpo, int *estado_out
      * corregirlas en Ajustes entre un intento y el siguiente, y con una copia
      * en RAM seguiria fallando sin entender por que. */
     char user[33] = {0}, pass[65] = {0};
-    size_t ul = sizeof(user), pl = sizeof(pass);
-    bool hay_creds = (load_portal_creds(user, &ul, pass, &pl) == ESP_OK) && user[0];
+    bool hay_creds = p4_creds_cargar(user, sizeof(user), pass, sizeof(pass));
+
+    char cab[192] = {0};
+    if (hay_creds) cabecera_basic(user, pass, cab, sizeof(cab));
 
     esp_http_client_config_t cfg = {
         .url            = url,
         .method         = HTTP_METHOD_POST,
         .timeout_ms     = P4_TIMEOUT_MS,
-        .auth_type      = hay_creds ? HTTP_AUTH_TYPE_BASIC : HTTP_AUTH_TYPE_NONE,
-        .username       = hay_creds ? user : NULL,
-        .password       = hay_creds ? pass : NULL,
+        /* Sin auth_type: la cabecera va puesta a mano (ver cabecera_basic). */
+        .auth_type      = HTTP_AUTH_TYPE_NONE,
+        .keep_alive_enable = false,
     };
     esp_http_client_handle_t c = esp_http_client_init(&cfg);
     if (!c) {
         ESP_LOGE(TAG, "no puedo crear el cliente HTTP");
         return false;
     }
+    if (hay_creds) esp_http_client_set_header(c, "Authorization", cab);
 
     esp_http_client_set_header(c, "Content-Type", "application/json");
     esp_http_client_set_post_field(c, cuerpo, strlen(cuerpo));
