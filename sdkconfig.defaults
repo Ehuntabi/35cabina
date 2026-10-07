@@ -151,5 +151,10 @@ CONFIG_FATFS_ALLOC_PREFER_EXTRAM=y
 CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
 CONFIG_MBEDTLS_ECP_FIXED_POINT_OPTIM=y
 CONFIG_LWIP_SO_RCVBUF=y
+# Basic Auth: la P4 pide usuario y clave en su portal (Basic), y SIN esto el
+# cliente HTTP devuelve ESP_ERR_NOT_SUPPORTED antes de mandar nada. No es un
+# extra: los apuntes de viaje (POST /api/viaje) no salen sin ello. El default de
+# IDF es 'n' porque Basic va sin cifrar; aqui el enlace es el AP directo.
+CONFIG_ESP_HTTP_CLIENT_ENABLE_BASIC_AUTH=y
 CONFIG_ESP_HTTP_CLIENT_ENABLE_DIGEST_AUTH=y
 CONFIG_ESP_SYSTEM_PANIC_REBOOT_DELAY_SECONDS=5

@@ -19,6 +19,7 @@
 #include "ui/nav.h"
 #include "net/udp_rx.h"
 #include "net/viaje_cola.h"
+#include "net/p4_test.h"   /* auto-test del canal de subida a la P4 */
 #include "ui/view_info.h"
 #include "capture_carousel.h"   /* modo captura de pantallas por USB */
 #include "esp_log.h"
@@ -209,6 +210,11 @@ void setup(void) {
      * quede algo del encendido anterior (esta pantalla se apaga con el
      * contacto, y los apuntes se hacen justo antes). */
     viaje_cola_init(view_info_set_pendientes);
+
+    /* Auto-test del canal de subida (cabina -> P4 por HTTP): deja en el log si
+     * la ruta existe, si las credenciales del portal valen y si acepta POST.
+     * No crea ningun viaje. Ver net/p4_test.c. */
+    p4_test_start();
 
     /* NO hay reinicio programado, y es a proposito: se quito el de 12 h el
      * 10-sep-2026. Esta pantalla ya se reinicia con cada corte de contacto (es
