@@ -379,7 +379,14 @@ static lv_disp_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         .sw_rotate = cfg->rotate,
         .hres = hres,
         .vres = vres,
-        .trans_size = hres * vres / 10,
+        /* Bufers de TRANSPORTE: van en RAM INTERNA (MALLOC_CAP_DMA, tienen que
+         * poder ir por DMA) y son DOS. Con la pantalla completa /10 eran 2 x
+         * 30 KB = 60 KB de los ~320 KB de RAM interna de este chip. Al migrar a
+         * IDF 5.5.5 el heap interno se quedo en 3,5 KB y ya no cabia ni la pila
+         * de la tarea del watchdog de LVGL (err=-1 al crearla). Con /32 son 2 x
+         * 9,4 KB = 18,8 KB: sobran ~41 KB. El transporte solo parte el envio en
+         * mas trozos; el ancho de banda de la pantalla no cambia. */
+        .trans_size = hres * vres / 32,
         .draw_wait_cb = bsp_display_sync_cb,
         .flags = {
             .buff_dma = false,
