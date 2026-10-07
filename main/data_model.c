@@ -136,12 +136,43 @@ void data_model_update_from_msg(const struct mini_msg *msg)
     portEXIT_CRITICAL(&s_data_mux);
 }
 
+/* Plazo sin recibir NADA de la P4 a partir del cual los datos se dan por
+ * caducados. 5 s = el mismo que usa la UI para el punto de enlace y el icono del
+ * GPS, para que todo diga lo mismo a la vez. La P4 emite cada 1 s. */
+#define DATA_CADUCA_MS 5000
+
 void data_model_get(mini_data_t *out)
 {
     if (!out) return;
     portENTER_CRITICAL(&s_data_mux);
     *out = s_data;
     portEXIT_CRITICAL(&s_data_mux);
+
+    /* SI EL ENLACE SE HA CAIDO, LOS DATOS NO VALEN.
+     *
+     * Antes se quedaban congelados con la ultima lectura y la pantalla los
+     * seguia enseñando como si fueran de ahora: con la P4 apagada se veia una
+     * tension de bateria de hace media hora, y eso puede hacer tomar una
+     * decision mala (lo vio el usuario el 7-oct-2026). El modelo ya guardaba
+     * last_update_ms para el punto de conexion y el GPS, pero las cifras no lo
+     * miraban.
+     *
+     * Se invalidan TODOS los bloques aqui, en un solo sitio: la UI ya sabe
+     * pintar "sin dato" cuando has_data es false, asi que no hay que tocar cada
+     * widget. El aviso de que no hay enlace lo da ademas el punto rojo/gris. */
+    if (out->last_update_ms != 0) {
+        uint32_t ms = (uint32_t)(esp_timer_get_time() / 1000);
+        if ((ms - out->last_update_ms) >= DATA_CADUCA_MS) {
+            out->has_data = false;
+            out->soc_valido = out->v_valido = out->i_valido = false;
+            out->aux_has_data = false;
+            out->dcdc_has_data = false;
+            out->frigo_has_data = false;
+            out->exterior_has_data = false;
+            out->water_clean_has_data = false;
+            out->water_gray_has_data = false;
+        }
+    }
 }
 
 void data_model_set_simulated(const mini_data_t *sim)
