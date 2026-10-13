@@ -84,11 +84,21 @@ echo "=== 8. Parametros del enlace con la P4 ==="
 grep -q "192.168.4.1" main/net/p4_api.c && ok "la P4 se busca en 192.168.4.1" \
     || mal "p4_api.c no apunta a 192.168.4.1"
 ip=$(grep -oE 'IP_FIJA_CABINA +"192\.168\.4\.[0-9]+"' main/net/udp_rx.c | grep -oE '[0-9]+"$' | tr -d '"')
-if [ -n "$ip" ]; then
-    [ "$ip" -ge 150 ] && ok "IP estatica de la cabina = .$ip (fuera del DHCP .2-.101)" \
-        || mal "IP estatica de la cabina = .$ip: DENTRO del rango DHCP de la P4 (.2-.101)"
-else
+if [ -z "$ip" ]; then
     mal "no encuentro IP_FIJA_CABINA en udp_rx.c"
+elif [ "$ip" -lt 150 ]; then
+    mal "IP de respaldo = .$ip: DENTRO del rango DHCP de la P4 (.2-.101)"
+else
+    ok "IP de emergencia (respaldo) = .$ip (fuera del DHCP .2-.101)"
+fi
+# Desde el 13-oct-2026 la IP de emergencia NO es una sola: se deriva de la MAC
+# (.200 + ultimo octeto & 0x1F = .200-.231) porque con dos pantallas encendidas
+# las dos se ponian la .200 y se pisaban. Lo que hay que vigilar ahora es que
+# ESE calculo siga fuera del rango del DHCP (.2-.101) y dentro de la subred.
+if grep -q '192\.168\.4\.%u", 200u + (unsigned)(mac\[5\] & 0x1F)' main/net/udp_rx.c; then
+    ok "la IP de emergencia se deriva de la MAC: .200-.231 (fuera del DHCP .2-.101)"
+else
+    mal "la IP de emergencia ya no se deriva de la MAC como se espera (udp_rx.c)"
 fi
 
 echo "=== 9. mini_proto.h y el contrato, contra el repo de la P4 (si esta al lado) ==="
@@ -96,6 +106,13 @@ if [ -f ../victron/main/net/mini_proto.h ]; then
     diff -q main/net/mini_proto.h ../victron/main/net/mini_proto.h >/dev/null 2>&1 \
         && ok "mini_proto.h identico al de la P4" \
         || mal "mini_proto.h DISTINTO del de la P4 (se sincroniza a mano)"
+    # Y con la 5", que desde el 13-oct-2026 tambien se comprueba en el CI (antes
+    # no la miraba nadie desde aqui).
+    if [ -f ../cabina5/main/net/mini_proto.h ]; then
+        diff -q main/net/mini_proto.h ../cabina5/main/net/mini_proto.h >/dev/null 2>&1 \
+            && ok "mini_proto.h identico al de la 5\"" \
+            || mal "mini_proto.h DISTINTO del de la 5\" (se sincroniza a mano)"
+    fi
     if [ -x ../victron/test/protocolo_cabina.sh ]; then
         if bash ../victron/test/protocolo_cabina.sh ../victron . >/dev/null 2>&1; then
             ok "el contrato completo con la P4 pasa (ops, JSON, campos)"
