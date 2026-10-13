@@ -2248,6 +2248,15 @@ static void viaje_do_finalizar(void *ud)
     }
     viaje_marcar_terminado();
     salida_cerrar();
+    /* EL DESTINO PENDIENTE SE BORRA AL CERRAR, y hacia falta (13-oct-2026,
+     * encontrado en la auditoria): save_trip_inicio() limpia la copia de NVS al
+     * ABRIR viaje, pero la RAM (s_destino_nuevo) se quedaba con el nombre. Como
+     * la tira prefiere el de RAM, el viaje SIGUIENTE enseñaba el nombre del
+     * anterior TODA la ruta y, al cerrar, la P4 le renombraba la carpeta con el
+     * destino viejo. La carpeta es el identificador del viaje: mentia, y encima
+     * sobrevivia a los apagones. */
+    s_destino_nuevo[0] = 0;
+    save_trip_destino_nuevo("");
     show_grid();
 }
 
@@ -3683,6 +3692,15 @@ static void puntual_do_terminar(void *ud)
     }
     save_trip_fin();   /* mismo cierre del contador que un viaje real; ver arriba */
     salida_cerrar();
+    /* EL DESTINO PENDIENTE SE BORRA AL CERRAR, y hacia falta (13-oct-2026,
+     * encontrado en la auditoria): save_trip_inicio() limpia la copia de NVS al
+     * ABRIR viaje, pero la RAM (s_destino_nuevo) se quedaba con el nombre. Como
+     * la tira prefiere el de RAM, el viaje SIGUIENTE enseñaba el nombre del
+     * anterior TODA la ruta y, al cerrar, la P4 le renombraba la carpeta con el
+     * destino viejo. La carpeta es el identificador del viaje: mentia, y encima
+     * sobrevivia a los apagones. */
+    s_destino_nuevo[0] = 0;
+    save_trip_destino_nuevo("");
     mostrar_menu(PAN_PRINCIPAL);
 }
 
@@ -4371,6 +4389,15 @@ static void puntual_do_cancelar(void *ud)
         save_trip_fin();
     }
     salida_cerrar();
+    /* EL DESTINO PENDIENTE SE BORRA AL CERRAR, y hacia falta (13-oct-2026,
+     * encontrado en la auditoria): save_trip_inicio() limpia la copia de NVS al
+     * ABRIR viaje, pero la RAM (s_destino_nuevo) se quedaba con el nombre. Como
+     * la tira prefiere el de RAM, el viaje SIGUIENTE enseñaba el nombre del
+     * anterior TODA la ruta y, al cerrar, la P4 le renombraba la carpeta con el
+     * destino viejo. La carpeta es el identificador del viaje: mentia, y encima
+     * sobrevivia a los apagones. */
+    s_destino_nuevo[0] = 0;
+    save_trip_destino_nuevo("");
     mostrar_menu(PAN_PRINCIPAL);
 }
 
