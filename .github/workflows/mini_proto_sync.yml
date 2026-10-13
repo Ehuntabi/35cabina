@@ -102,3 +102,46 @@ jobs:
             echo "CUERPO_MAX ($cuerpo_max) ya no cabe con margen en VIAJE_BODY_MAX ($body_max) -- subir VIAJE_BODY_MAX en victron"
             exit 1
           fi
+
+  # LOS FICHEROS DEL VIAJE, BYTE A BYTE EN LAS DOS CABINAS (auditoria del
+  # 14-oct-2026). El ciclo del viaje -- la cola, la reconciliacion del arranque,
+  # el contador, los cuerpos que se mandan a la P4 -- es el MISMO codigo en las
+  # dos, y las dos placas escriben sobre el mismo viaje de la P4. Una edicion en
+  # una sola pasaba el CI en verde (solo se comparaban mini_proto.h y
+  # CUERPO_MAX) y a partir de ahi las dos cuentan, reconcilian o descartan
+  # distinto sobre el mismo viaje. Aqui se cae solo.
+  viaje_sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 35cabina
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: 35cabina
+
+      - name: Checkout cabina5
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: Ehuntabi/cabina5
+          path: cabina5
+
+      - name: El ciclo del viaje, identico en las dos cabinas
+        run: |
+          fallo=0
+          for f in main/net/viaje_cola.c main/net/viaje_cola.h \
+                   main/net/p4_api.c main/net/p4_api.h \
+                   main/net/apunte.c main/net/apunte.h \
+                   main/net/udp_rx.c main/net/reloj.c main/net/mini_proto.h \
+                   main/salida.c main/salida.h \
+                   components/config_storage/config_storage.c \
+                   components/config_storage/include/config_storage.h ; do
+            if [ ! -f "35cabina/$f" ] || [ ! -f "cabina5/$f" ]; then
+              echo "FALTA $f en alguno de los dos repos"; fallo=1; continue
+            fi
+            if ! diff -q "35cabina/$f" "cabina5/$f" >/dev/null; then
+              echo "DISTINTO: $f"
+              diff -u "35cabina/$f" "cabina5/$f" | head -40
+              fallo=1
+            fi
+          done
+          [ "$fallo" = 0 ] || { echo "Las dos cabinas tienen que llevar el MISMO ciclo de viaje"; exit 1; }
+          echo "ciclo del viaje identico en las dos cabinas"
