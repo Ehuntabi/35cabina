@@ -13,6 +13,12 @@ on:
   push:
   pull_request:
 
+# El GITHUB_TOKEN por defecto puede escribir en el repo; estos jobs solo leen.
+# Con acciones PUBLICAS y sin fijar por SHA (auditoria de seguridad del
+# 13-oct-2026) lo minimo es no darles permiso de escritura.
+permissions:
+  contents: read
+
 jobs:
   mini_proto_sync:
     runs-on: ubuntu-latest
@@ -28,8 +34,20 @@ jobs:
           repository: Ehuntabi/victron-jc1060p470c-esp32p4
           path: victron
 
-      - name: Comparar mini_proto.h entre los dos proyectos
-        run: diff 35cabina/main/net/mini_proto.h victron/main/net/mini_proto.h
+      # La 5" (cabina5) tambien habla el mismo protocolo y NO estaba en este
+      # job: tocar mini_proto.h alli no lo detectaba nadie (auditoria del
+      # 13-oct-2026). Hoy los tres son identicos; esto es la bomba de
+      # relojeria que se desactiva.
+      - name: Checkout cabina5
+        uses: actions/checkout@v4
+        with:
+          repository: Ehuntabi/cabina5
+          path: cabina5
+
+      - name: Comparar mini_proto.h entre los tres proyectos
+        run: |
+          diff 35cabina/main/net/mini_proto.h victron/main/net/mini_proto.h
+          diff 35cabina/main/net/mini_proto.h cabina5/main/net/mini_proto.h
 
   # Espejo del job "viaje_body_sync" de victron (el otro repo del par): el
   # limite de cuerpo del apunte tambien se mantiene sincronizado A MANO
@@ -53,11 +71,23 @@ jobs:
           repository: Ehuntabi/victron-jc1060p470c-esp32p4
           path: victron
 
+      - name: Checkout cabina5
+        uses: actions/checkout@v4
+        with:
+          repository: Ehuntabi/cabina5
+          path: cabina5
+
       - name: Comprobar que CUERPO_MAX (satelite) cabe en VIAJE_BODY_MAX (P4)
         run: |
           cuerpo_max=$(grep -oP '#define\s+CUERPO_MAX\s+\K[0-9]+' 35cabina/main/net/viaje_cola.h)
+          cuerpo_max5=$(grep -oP '#define\s+CUERPO_MAX\s+\K[0-9]+' cabina5/main/net/viaje_cola.h)
           body_max=$(grep -oP '#define\s+VIAJE_BODY_MAX\s+\K[0-9]+' victron/main/portal/config_server_viaje.c)
           echo "CUERPO_MAX (35cabina) = $cuerpo_max"
+          echo "CUERPO_MAX (cabina5)  = $cuerpo_max5"
+          if [ "$cuerpo_max" != "$cuerpo_max5" ]; then
+            echo "CUERPO_MAX distinto entre las dos cabinas ($cuerpo_max vs $cuerpo_max5)"
+            exit 1
+          fi
           echo "VIAJE_BODY_MAX (victron) = $body_max"
           if [ -z "$cuerpo_max" ] || [ -z "$body_max" ]; then
             echo "No se pudo leer alguna de las dos constantes"; exit 1
