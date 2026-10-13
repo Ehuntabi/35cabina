@@ -16,6 +16,12 @@ on:
 # El GITHUB_TOKEN por defecto puede escribir en el repo; estos jobs solo leen.
 # Con acciones PUBLICAS y sin fijar por SHA (auditoria de seguridad del
 # 13-oct-2026) lo minimo es no darles permiso de escritura.
+# Las acciones van FIJADAS POR SHA, no por etiqueta (auditoria de seguridad del
+# 13-oct-2026): una etiqueta la puede mover quien controle el repo de la accion
+# -- o quien se haga con el -- y el runner ejecutaria ese codigo con el token
+# del reposo (contents: read). Con el SHA, lo que corre es exactamente lo que se
+# reviso. Para actualizar: mira el SHA de la etiqueta nueva y cambialo aqui.
+
 permissions:
   contents: read
 
@@ -24,12 +30,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout 35cabina
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: 35cabina
 
       - name: Checkout victron
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Ehuntabi/victron-jc1060p470c-esp32p4
           path: victron
@@ -39,7 +45,7 @@ jobs:
       # 13-oct-2026). Hoy los tres son identicos; esto es la bomba de
       # relojeria que se desactiva.
       - name: Checkout cabina5
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Ehuntabi/cabina5
           path: cabina5
@@ -61,18 +67,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout 35cabina
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: 35cabina
 
       - name: Checkout victron
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Ehuntabi/victron-jc1060p470c-esp32p4
           path: victron
 
       - name: Checkout cabina5
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Ehuntabi/cabina5
           path: cabina5
