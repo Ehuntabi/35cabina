@@ -60,6 +60,13 @@ Lo que manda la P4, una vez por segundo. No se toca nada aquí, solo se mira.
   La flecha tarda un poco en cambiar, a propósito: mira la tendencia de fondo y
   no cada oscilación del sensor, para que no esté bailando todo el rato.
 
+> **En la pantalla de 5"** —que sustituye a esta— la de Datos lleva además una
+> tarjeta en medio, de lado a lado, con los **kilómetros de la salida en curso** a
+> la izquierda y las **horas de conducción acumuladas** a la derecha (ver §9).
+> Los dos números los manda la P4; sin viaje abierto, o con la P4 sin hablar, se
+> quedan en `--`. En la 3,5" no caben: su pantalla de Datos son dos filas y no
+> hay hueco para una tercera.
+
 ### Silenciar una alarma desde aquí
 
 **El pitido de las alarmas lo hace la pantalla de 7"**, que es la que lleva
@@ -488,18 +495,28 @@ prohibirlo dejaría la pantalla sin salida.
 
 ## 5. Viaje: empezar y terminar
 
-Al elegir **Viaje** te pide **el destino** con el teclado grande: no un nombre
-para el viaje, sino *a dónde vas*, que es mucho más fácil de contestar con el
-motor en marcha. Con eso la P4 crea la carpeta en su tarjeta, con la fecha
-delante para que se ordenen solas:
+Al elegir **Viaje** te pide dos cosas, una detrás de otra:
+
+1. **El destino**, con el teclado grande: no un nombre para el viaje, sino *a
+   dónde vas*, que es mucho más fácil de contestar con el motor en marcha.
+2. **Los kilómetros que marca el cuadro** en ese momento (16-oct-2026), con el
+   teclado de números. Es **opcional**: se puede dejar en blanco y el viaje
+   empieza igual. Sirve para saber después lo que ha hecho el viaje de verdad y
+   compararlo con lo que mide el GPS (ver §9), y se pide **ahora** porque es
+   cuando lo tienes delante.
+
+Después sale el cartel de confirmación con los dos datos: si te has equivocado
+al teclear el número, se ve ahí antes de empezar nada. Con eso la P4 crea la
+carpeta en su tarjeta, con la fecha delante para que se ordenen solas:
 
 ```
 /sdcard/viajes/2026-08-22_Zumaia/
 ```
 
 - Sin acentos ni ñ, y máximo 20 caracteres. La pantalla no te deja teclear otra
-  cosa.
-- **El nombre no se puede cambiar después.** Te avisa antes de empezar.
+  cosa. Los kilómetros son seis cifras como mucho.
+- **El nombre no se puede cambiar después** (los kilómetros, tampoco: van con el
+  viaje). Te avisa antes de empezar.
 - **Hace falta la P4 encendida.** Si no, avisa («Enciende la P4 primero») y no
   empieza: la carpeta lleva la fecha en el nombre y esta pantalla no tiene reloj.
 - **Si el GPS todavía no tiene posición**, pregunta si continuar igual o
@@ -536,6 +553,12 @@ cerrar**: antes te dice cuántos apuntes se van a perder y pide un segundo toque
 («Sí, descartar» / «No, dejarlo»), porque al cerrar la salida se olvidan los
 apuntes abiertos y se pierden. Como se cuenta en el apartado 4, no se impide a
 propósito: prohibirlo dejaría la pantalla sin salida.
+
+Al pulsar **Finalizar viaje** pasa lo mismo que al empezar, al revés: primero te
+pide **los kilómetros que marca el cuadro al llegar** (16-oct-2026, también
+opcional) y después confirma, con el número a la vista. Con las dos lecturas —la
+de la salida y la de la llegada— el resumen del viaje dice cuánto has hecho de
+verdad y lo compara con el GPS (ver §9).
 
 A diferencia del inicio, el fin **no exige la P4 delante**: entra en la cola de
 pendientes, detrás de los apuntes que falten por entregar, y se manda cuando
@@ -801,8 +824,26 @@ ENERGIA
   De la placa ...     6180 Wh   (31.4 h de sol)
 
 Recorrido: 412.6 km
-  Combustible y peajes: 0.256 EUR por km
+  Conduciendo: 6 h 12 min
+  Cuadro al salir: 84320 km
+  Cuadro al llegar: 84761 km
+  El cuadro dice 441 km; el GPS midio 412.6 km (-28.4 km)
 ```
+
+Las tres líneas de debajo del recorrido son del viaje y de nadie más:
+
+- **Conduciendo** es tiempo de volante de verdad (lo que el vehículo estuvo en
+  movimiento según el GPS), no el tiempo con el viaje abierto: las noches
+  paradas de un viaje de tres días no cuentan.
+- **Cuadro al salir / al llegar** son los kilómetros que tecleaste al empezar y
+  al terminar. Con los dos se sabe lo que ha hecho el viaje **de verdad**, que es
+  el número que uno mira al llegar a casa.
+- Y la última línea los compara. Si el GPS midió bastante menos, es que se perdió
+  un tramo (un túnel, un parking cubierto, la antena tapada); si midió más, es
+  que alguna lectura está mal tecleada. Cuando al llegar marcas **menos** que al
+  salir, el resumen lo dice en vez de restar, que daría un número negativo con
+  pinta de dato. Y si el GPS no llegó a tener posición, solo sale lo del cuadro,
+  porque no hay con qué comparar.
 
 El **recorrido lo mide el GPS** de la P4 mientras conduces. Cuenta por lo bajo
 a propósito: si pierde la señal —un túnel, un parking cubierto— no une los dos
