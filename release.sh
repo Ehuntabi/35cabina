@@ -135,11 +135,27 @@ else
             fi
         } > "$NOTAS_TMP"
     fi
-    gh release create "$TAG" -R "$REPO" \
-        --title "35cabina $TAG" \
-        --notes-file "$NOTAS_TMP" \
-        "$OUT"
-    echo "[ok] Release $TAG publicada"
+    if gh release create "$TAG" -R "$REPO" \
+         --title "35cabina $TAG" \
+         --notes-file "$NOTAS_TMP" \
+         "$OUT"; then
+        :
+    else
+        echo "AVISO: GitHub no ha creado la Release (¿un 5xx suyo? paso el 16-oct-2026)."
+    fi
+    # SE COMPRUEBA, no se da por hecho: si la Release no existe, el tag esta
+    # subido y el .bin en ~/joint-releases, pero nadie puede descargarlo -- y
+    # scripts/grabar.sh no dejaria grabar la placa. Mejor decirlo aqui, con el
+    # comando exacto para reintentarlo.
+    if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+        echo "[ok] Release $TAG publicada"
+    else
+        echo
+        echo "LA RELEASE $TAG NO ESTA PUBLICADA (el tag si). Reintenta con:"
+        echo "  gh release create $TAG -R $REPO --title \"35cabina $TAG\" \\"
+        echo "     --notes-file $NOTAS_TMP \"$OUT\""
+        exit 1
+    fi
 fi
 
 echo
