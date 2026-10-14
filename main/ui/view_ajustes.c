@@ -11,7 +11,6 @@
  * sin reflashear.
  */
 #include "view_ajustes.h"
-#include "../brillo.h"
 #include "view_info.h"
 #include "../net/udp_rx.h"
 #include "../net/mini_proto.h"   /* MINI_PROTO_VERSION: el diagnostico del enlace */
@@ -33,7 +32,6 @@ static lv_obj_t *s_wifi;
 
 static lv_obj_t *s_ver_lbl;
 static lv_obj_t *s_ssid_ta;
-static lv_obj_t *s_brillo_lbl;   /* texto del boton de brillo/contraste */
 static lv_obj_t *s_enlace;        /* estado del enlace con la P4 */
 static lv_timer_t *s_enlace_timer;
 static lv_obj_t *s_pass_ta;
@@ -186,17 +184,15 @@ static void enlace_timer_cb(lv_timer_t *t)
     }
 }
 
-/* Cambia brillo y contraste, y actualiza el texto del boton. */
-static void brillo_btn_cb(lv_event_t *e)
-{
-    (void)e;
-    uint8_t nivel = brillo_alternar();
-    view_info_set_contraste(nivel == BRILLO_ALTO);
-    if (s_brillo_lbl) {
-        lv_label_set_text_fmt(s_brillo_lbl, LV_SYMBOL_EYE_OPEN "   Brillo y contraste: %u%%",
-                              (unsigned)nivel);
-    }
-}
+/* (aqui vivia brillo_btn_cb, el boton de brillo y contraste del menu: quitado el
+ * 16-oct-2026, como en la pantalla de 5".)
+ *
+ * El brillo (y el contraste, que en la 3,5" van juntos) se cambian con el DOBLE
+ * TOQUE o el TOQUE LARGO en la pantalla de datos -- view_info.c, doble_toque_cb y
+ * toque_largo_cb, los dos llaman a brillo_alternar(). El boton existia porque el
+ * gesto no se descubre solo, pero en el menu sobraba.
+ * OJO: si algun dia se quitan tambien los gestos, aqui se queda sin forma de
+ * cambiar el brillo en marcha. */
 
 static void wifi_back_cb(lv_event_t *e)
 {
@@ -342,19 +338,9 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(wlbl, &lv_font_montserrat_24, 0);
     lv_obj_center(wlbl);
 
-    /* Brillo y contraste. Existe porque el doble toque de la pantalla de datos
-     * no sale a la primera: aqui hay un boton y se acabaron las peripecias.
-     * Cambia las dos cosas a la vez, igual que el gesto. 30-sep-2026. */
-    lv_obj_t *bbtn = lv_btn_create(s_menu);
-    lv_obj_set_size(bbtn, lv_pct(100), 64);
-    lv_obj_set_style_bg_color(bbtn, lv_color_hex(0x37474F), 0);
-    lv_obj_add_event_cb(bbtn, brillo_btn_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *blbl = lv_label_create(bbtn);
-    lv_label_set_text_fmt(blbl, LV_SYMBOL_EYE_OPEN "   Brillo y contraste: %u%%",
-                          (unsigned)brillo_nivel());
-    lv_obj_set_style_text_font(blbl, &lv_font_montserrat_22, 0);
-    lv_obj_center(blbl);
-    s_brillo_lbl = blbl;
+    /* AQUI ESTABA EL BOTON DE BRILLO Y CONTRASTE. El usuario lo mando quitar el
+     * 16-oct-2026 (el mismo dia que en la 5"): el gesto de la pantalla de datos
+     * es donde se esta mirando, y en el menu solo hacia ruido. */
 
     /* Estado del enlace con la P4. Vive AQUI y no en la pantalla de datos
      * (mudado el 30-sep-2026): es lo que se mira cuando algo no va, y en
