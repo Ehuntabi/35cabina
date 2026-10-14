@@ -154,6 +154,15 @@ static lv_obj_t *s_peaje_currency_dd;
  * Viaje no hay formulario donde ponerlo. */
 static lv_obj_t *s_viaje_destino_ta;
 static char      s_viaje_destino[24];
+/* CUENTAKILOMETROS DEL VIAJE (16-oct-2026), igual que en la pantalla de 5":
+ * al empezar un viaje se pide la lectura del cuadro y viaja a la P4 dentro del
+ * inicio (campo km_cuadro), que la guarda y la escribe en resumen.txt. 0 = no
+ * se apunto (se puede dejar en blanco: no bloquea empezar el viaje).
+ *
+ * NO se guarda aqui en NVS a proposito: es un dato DEL VIAJE y su sitio es el
+ * viaje de la P4; una segunda copia aqui solo puede acabar discrepando. */
+static uint32_t  s_viaje_km_cuadro;
+static lv_obj_t *s_viaje_km_ta;
 /* DESTINO NUEVO, pedido A MITAD DE VIAJE (12-oct-2026).
  *
  * El usuario: "al iniciar viaje puse un destino y al ponernos en marcha
@@ -2237,7 +2246,8 @@ static void viaje_iniciar_real(void *ud)
     (void)ud;
     uint32_t ahora = reloj_p4();
     if (!p4_api_viaje_inicio(next_trip_seq(), s_viaje_destino,
-                             ahora / 86400u, inicio_resultado_cb)) {
+                             ahora / 86400u, s_viaje_km_cuadro,
+                             inicio_resultado_cb)) {
         aviso_envio_fallo(0, "Viaje");
     }
 }
@@ -2349,7 +2359,8 @@ static void cambiar_destino_cb(lv_event_t *e)
     entry_screen_open(s_destino_nuevo_ta, "Nuevo destino", false);
 }
 
-/* Se llama al aceptar el editor del destino. */
+/* Se llama al aceptar el editor del destino: PRIMER paso de dos. Detras va el
+ * cuentakilometros (16-oct-2026) y la confirmacion final enseña los dos. */
 static void viaje_destino_listo_cb(lv_event_t *e)
 {
     (void)e;
@@ -2357,12 +2368,41 @@ static void viaje_destino_listo_cb(lv_event_t *e)
     if (!txt || !txt[0]) return;      /* lo dejo en blanco: no se hace nada */
     snprintf(s_viaje_destino, sizeof(s_viaje_destino), "%s", txt);
 
-    char cuerpo[120];
+    /* En BLANCO y no con el numero de la ultima vez: el vehiculo ha andado
+     * desde entonces, y un valor viejo ya puesto se acepta sin mirarlo. */
+    lv_textarea_set_text(s_viaje_km_ta, "");
+    entry_screen_open(s_viaje_km_ta, "Km que marca el cuadro (opcional)", true);
+}
+
+/* SEGUNDO paso: el cuentakilometros. Se puede dejar en blanco -- el viaje se
+ * empieza con el motor en marcha y a veces no hay ganas de mirar el cuadro -- y
+ * entonces el inicio viaja sin el campo y la P4 lo apunta como "no se apunto". */
+static void viaje_km_listo_cb(lv_event_t *e)
+{
+    (void)e;
+    const char *txt = lv_textarea_get_text(s_viaje_km_ta);
+    unsigned long v = 0;
+    if (txt && txt[0]) {
+        char *fin = NULL;
+        v = strtoul(txt, &fin, 10);
+        /* Basura o fuera del rango del cuadro (6 cifras): como si no hubiera
+         * lectura. El teclado ya solo admite digitos, esto es el cinturon. */
+        if (!fin || *fin || v > 999999UL) v = 0;
+    }
+    s_viaje_km_cuadro = (uint32_t)v;
+
+    char cuerpo[160];
     /* El cartel ya NO dice que el destino no se puede cambiar: desde el
      * 12-oct-2026 se puede, y la carpeta se renombra al terminar el viaje. */
-    snprintf(cuerpo, sizeof(cuerpo), "Destino: %s\n\nLa carpeta se llamara asi.\n"
-             "Podras cambiarlo despues,\nhasta que termines el viaje.",
-             s_viaje_destino);
+    if (s_viaje_km_cuadro) {
+        snprintf(cuerpo, sizeof(cuerpo), "Destino: %s\nCuadro: %lu km\n\nLa carpeta se llamara asi.\n"
+                 "Podras cambiarlo despues,\nhasta que termines el viaje.",
+                 s_viaje_destino, (unsigned long)s_viaje_km_cuadro);
+    } else {
+        snprintf(cuerpo, sizeof(cuerpo), "Destino: %s\n\nLa carpeta se llamara asi.\n"
+                 "Podras cambiarlo despues,\nhasta que termines el viaje.",
+                 s_viaje_destino);
+    }
     confirm_screen_open("Empezar el viaje?", cuerpo, COL_ACCION_OK,
                         "Si, empezar", "Cancelar", viaje_do_iniciar, NULL);
 }
@@ -2378,6 +2418,10 @@ static void viaje_iniciar_cb(lv_event_t *e)
         return;
     }
     lv_textarea_set_text(s_viaje_destino_ta, "");
+    /* El cuentakilometros del intento anterior, fuera: si esta vez se cancela o
+     * se deja en blanco, no puede colarse el numero de la vez pasada. */
+    s_viaje_km_cuadro = 0;
+    lv_textarea_set_text(s_viaje_km_ta, "");
     entry_screen_open(s_viaje_destino_ta, "Destino", false);
 }
 
@@ -3632,8 +3676,11 @@ static void puntual_iniciar_real(void *ud)
     (void)ud;
     s_puntual_iniciando = true;
     uint32_t ahora = reloj_p4();
+    /* Sin cuentakilometros (0): una salida puntual es ir a repostar o a la ITV
+     * y volver, no un viaje del cuaderno. La lectura se pide al empezar un
+     * VIAJE, que es lo que pidio el usuario. */
     if (!p4_api_viaje_inicio(next_trip_seq(), EV_NOMBRE[s_puntual_tipo],
-                             ahora / 86400u, inicio_puntual_resultado_cb)) {
+                             ahora / 86400u, 0, inicio_puntual_resultado_cb)) {
         /* lanzar() ha fallado en el acto (sin memoria para la tarea): la
          * respuesta nunca va a llegar, asi que aqui nadie mas va a soltar
          * el guardian -- hay que hacerlo ya mismo. */
@@ -4918,6 +4965,21 @@ void view_registro_create(lv_obj_t *parent)
                         LV_EVENT_READY, NULL);
 
     lv_obj_add_event_cb(s_viaje_destino_ta, viaje_destino_listo_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+
+    /* El cuentakilometros del inicio de viaje: mismo apaño que el destino (un
+     * textarea escondido porque el editor a pantalla completa vuelca sobre uno),
+     * pero SOLO digitos y 6 cifras, que es lo que mide un cuadro. El editor copia
+     * del destino los caracteres admitidos y el largo (ver entry_screen_open),
+     * asi que el teclado numerico no deja teclear otra cosa. */
+    s_viaje_km_ta = lv_textarea_create(parent);
+    lv_obj_add_flag(s_viaje_km_ta, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_viaje_km_ta, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_size(s_viaje_km_ta, 0, 0);
+    lv_textarea_set_one_line(s_viaje_km_ta, true);
+    lv_textarea_set_max_length(s_viaje_km_ta, 6);
+    lv_textarea_set_accepted_chars(s_viaje_km_ta, "0123456789");
+    lv_obj_add_event_cb(s_viaje_km_ta, viaje_km_listo_cb,
                         LV_EVENT_VALUE_CHANGED, NULL);
 
     /* --- Menus de la salida ---

@@ -143,7 +143,8 @@ jobs:
                    components/config_storage/include/config_storage.h \
                    test/viaje_cola_control_arnes.c test/viaje_cola_control.sh \
                    test/viaje_cola_libre_arnes.c test/viaje_cola_libre.sh \
-                   test/viaje_horario_arnes.c test/viaje_horario.sh ; do
+                   test/viaje_horario_arnes.c test/viaje_horario.sh \
+                   test/viaje_contadores.sh test/viaje_contadores_arnes.c ; do
             if [ ! -f "35cabina/$f" ] || [ ! -f "cabina5/$f" ]; then
               echo "FALTA $f en alguno de los dos repos"; fallo=1; continue
             fi
@@ -175,3 +176,9 @@ jobs:
       # salto atras de 3600 s: la P4 manda su desfase y la cabina corrige).
       - name: El cambio de horario no acorta las pernoctas
         run: bash 35cabina/test/viaje_horario.sh
+
+      # Y que los contadores del viaje (km y horas de conduccion) lleguen enteros
+      # de la P4 a la cabina: van partidos en cuatro bytes sueltos del struct y
+      # cruzarlos no salta a la vista (un viaje de 1200 km se lee como 4920).
+      - name: Los km y las horas de conduccion llegan enteros
+        run: bash 35cabina/test/viaje_contadores.sh
