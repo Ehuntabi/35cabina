@@ -2359,6 +2359,8 @@ static void cambiar_destino_cb(lv_event_t *e)
     entry_screen_open(s_destino_nuevo_ta, "Nuevo destino", false);
 }
 
+static void viaje_km_listo_cb(lv_event_t *e);   /* ver abajo */
+
 /* Se llama al aceptar el editor del destino: PRIMER paso de dos. Detras va el
  * cuentakilometros (16-oct-2026) y la confirmacion final enseña los dos. */
 static void viaje_destino_listo_cb(lv_event_t *e)
@@ -2368,10 +2370,20 @@ static void viaje_destino_listo_cb(lv_event_t *e)
     if (!txt || !txt[0]) return;      /* lo dejo en blanco: no se hace nada */
     snprintf(s_viaje_destino, sizeof(s_viaje_destino), "%s", txt);
 
+    /* Si el campo del cuentakilometros no existiera (no deberia), se sigue
+     * directos a la confirmacion: un flujo que se queda a medias por un widget
+     * que falta seria no poder empezar el viaje. */
+    if (!s_viaje_km_ta) { s_viaje_km_cuadro = 0; viaje_km_listo_cb(NULL); return; }
+
     /* En BLANCO y no con el numero de la ultima vez: el vehiculo ha andado
-     * desde entonces, y un valor viejo ya puesto se acepta sin mirarlo. */
+     * desde entonces, y un valor viejo ya puesto se acepta sin mirarlo.
+     *
+     * CON entry_screen_open_SIGUIENTE, no con entry_screen_open: esto corre
+     * dentro del "Aceptar" del campo anterior, que todavia tiene que cerrarlo
+     * (ver el comentario largo en entry_screen.c). Con el de siempre, el paso
+     * nuevo nacia escondido y no se pedia nada (fallo del 16-oct-2026). */
     lv_textarea_set_text(s_viaje_km_ta, "");
-    entry_screen_open(s_viaje_km_ta, "Km que marca el cuadro (opcional)", true);
+    entry_screen_open_siguiente(s_viaje_km_ta, "Km que marca el cuadro (opcional)", true);
 }
 
 /* SEGUNDO paso: el cuentakilometros. Se puede dejar en blanco -- el viaje se

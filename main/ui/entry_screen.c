@@ -1,5 +1,6 @@
 /* entry_screen.c - Editor de un campo a pantalla completa. Ver entry_screen.h. */
 #include "entry_screen.h"
+#include <stdio.h>   /* snprintf (el encadenado de campos copia el rotulo) */
 
 /* Reparto vertical de los 320 px (ver display.h; la pantalla va apaisada).
  * El teclado se lleva 240 -- tres cuartas partes -- porque es lo que se toca
@@ -42,6 +43,48 @@ static void kb_cancel_cb(lv_event_t *e)
 {
     (void)e;
     close_overlay();
+}
+
+/* ENCADENAR DOS CAMPOS: abrir el siguiente DESDE el callback del anterior.
+ *
+ * POR QUE NO VALE entry_screen_open() A SECAS, y esto costo un fallo en la
+ * placa el 16-oct-2026 ("la 5 no pide km al iniciar"): el "Aceptar" del teclado
+ * avisa PRIMERO a quien escucha (kb_ready_cb manda VALUE_CHANGED, y ahi es donde
+ * el flujo del viaje abre el campo siguiente) y SOLO DESPUES cierra este panel
+ * (close_overlay). Si el que escucha abre el paso nuevo con entry_screen_open(),
+ * ese close_overlay -- que viene detras, en la misma llamada -- lo vuelve a
+ * esconder: el usuario ve cerrarse el primer campo y no aparece ninguno mas.
+ *
+ * Aplazando la apertura al ciclo siguiente de LVGL, el cierre ya ha pasado y el
+ * paso nuevo se queda abierto. Va con un temporizador de un solo uso y no con
+ * lv_async_call() porque el valor de "ha ido bien" se llama distinto en LVGL 8
+ * (LV_RES_OK) y en LVGL 9 (LV_RESULT_OK), y este fichero es el mismo en las dos
+ * pantallas salvo los includes. */
+static lv_obj_t *s_sig_target;
+static char      s_sig_label[48];
+static bool      s_sig_numeric;
+
+static void abrir_siguiente_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    entry_screen_open(s_sig_target, s_sig_label, s_sig_numeric);
+}
+
+void entry_screen_open_siguiente(lv_obj_t *target, const char *label, bool numeric)
+{
+    s_sig_target  = target;
+    s_sig_numeric = numeric;
+    snprintf(s_sig_label, sizeof(s_sig_label), "%s", label ? label : "");
+
+    lv_timer_t *t = lv_timer_create(abrir_siguiente_timer_cb, 20, NULL);
+    if (!t) {
+        /* Sin memoria para el temporizador: se abre ya. Con el cierre de por
+         * medio el panel se escondera, pero es mejor eso que quedarse sin el
+         * paso y sin poder empezar el viaje. */
+        entry_screen_open(s_sig_target, s_sig_label, s_sig_numeric);
+        return;
+    }
+    lv_timer_set_repeat_count(t, 1);   /* de un solo uso */
 }
 
 void entry_screen_init(lv_obj_t *parent)
