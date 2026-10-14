@@ -163,6 +163,11 @@ static char      s_viaje_destino[24];
  * viaje de la P4; una segunda copia aqui solo puede acabar discrepando. */
 static uint32_t  s_viaje_km_cuadro;
 static lv_obj_t *s_viaje_km_ta;
+/* Y el cuentakilometros AL CERRAR (16-oct-2026): lo que marca el cuadro al
+ * llegar. Con el de la salida, la P4 escribe en el resumen lo que ha hecho el
+ * viaje de verdad y lo compara con los km del GPS. 0 = no apuntado. */
+static uint32_t  s_viaje_km_llegada;
+static lv_obj_t *s_viaje_km_fin_ta;
 /* DESTINO NUEVO, pedido A MITAD DE VIAJE (12-oct-2026).
  *
  * El usuario: "al iniciar viaje puse un destino y al ponernos en marcha
@@ -2295,7 +2300,7 @@ static void viaje_do_finalizar(void *ud)
      * revision adversarial del 13-oct-2026, el mismo dia que se anadio 'dev'). */
     char cuerpo[160];
     p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), trip_eventos_get() + 1,
-                      s_destino_nuevo);
+                      s_destino_nuevo, s_viaje_km_llegada);
 
     viaje_cola_error_t motivo;
     if (!viaje_cola_push(cuerpo, &motivo)) {
@@ -2303,6 +2308,7 @@ static void viaje_do_finalizar(void *ud)
                              COL_ACCION_STOP, "Entendido");
         return;
     }
+    s_viaje_km_llegada = 0;   /* ya va en el fin encolado: que no se cuele en el proximo */
     viaje_marcar_terminado();
     salida_cerrar();
     /* EL DESTINO PENDIENTE SE BORRA AL CERRAR, y hacia falta (13-oct-2026,
@@ -2437,10 +2443,47 @@ static void viaje_iniciar_cb(lv_event_t *e)
     entry_screen_open(s_viaje_destino_ta, "Destino", false);
 }
 
+/* PRIMERO se pide el cuentakilometros del cuadro al llegar (16-oct-2026) y
+ * DESPUES se confirma el cierre, igual que al empezar: asi el cartel final
+ * enseña el numero y un dedazo se ve antes de cerrar nada. Se puede dejar en
+ * blanco y entonces el fin viaja sin el campo. */
 static void viaje_finalizar_cb(lv_event_t *e)
 {
     (void)e;
-    confirm_screen_open("Finalizar el viaje?", NULL, COL_ACCION_STOP,
+    if (!s_viaje_km_fin_ta) {          /* no deberia: se crea con la pantalla */
+        confirm_screen_open("Finalizar el viaje?", NULL, COL_ACCION_STOP,
+                            "Si, finalizar", "Cancelar", viaje_do_finalizar, NULL);
+        confirm_screen_ok_destructivo();
+        return;
+    }
+    s_viaje_km_llegada = 0;
+    lv_textarea_set_text(s_viaje_km_fin_ta, "");
+    entry_screen_open(s_viaje_km_fin_ta, "Km del cuadro al llegar (opcional)", true);
+}
+
+/* Se llama al aceptar el editor del km del cierre. */
+static void viaje_km_fin_listo_cb(lv_event_t *e)
+{
+    (void)e;
+    const char *txt = lv_textarea_get_text(s_viaje_km_fin_ta);
+    unsigned long v = 0;
+    if (txt && txt[0]) {
+        char *fin = NULL;
+        v = strtoul(txt, &fin, 10);
+        if (!fin || *fin || v > 999999UL) v = 0;   /* basura: como si no hubiera */
+    }
+    s_viaje_km_llegada = (uint32_t)v;
+
+    char cuerpo[160];
+    if (s_viaje_km_llegada) {
+        snprintf(cuerpo, sizeof(cuerpo),
+                 "Cuadro al llegar: %lu km\n\nSe cierra el viaje y se guarda\nel resumen en la carpeta.",
+                 (unsigned long)s_viaje_km_llegada);
+    } else {
+        snprintf(cuerpo, sizeof(cuerpo),
+                 "Se cierra el viaje y se guarda\nel resumen en la carpeta.");
+    }
+    confirm_screen_open("Finalizar el viaje?", cuerpo, COL_ACCION_STOP,
                         "Si, finalizar", "Cancelar", viaje_do_finalizar, NULL);
     confirm_screen_ok_destructivo();
 }
@@ -3804,8 +3847,10 @@ static void puntual_do_terminar(void *ud)
      * apunte_encolar() ya lo incrementa con el mismo trip_eventos_inc() que
      * usa un viaje real -- mismo patron que viaje_do_finalizar. Detectado
      * el 09-sep-2026. */
+    /* Sin cuentakilometros (0): una salida puntual no lo pide ni al empezar ni
+     * al cerrar (la lectura es del VIAJE del cuaderno). */
     p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), trip_eventos_get() + 1,
-                      s_destino_nuevo);
+                      s_destino_nuevo, 0);
 
     viaje_cola_error_t motivo;
     if (!viaje_cola_push(cuerpo, &motivo)) {
@@ -4992,6 +5037,18 @@ void view_registro_create(lv_obj_t *parent)
     lv_textarea_set_max_length(s_viaje_km_ta, 6);
     lv_textarea_set_accepted_chars(s_viaje_km_ta, "0123456789");
     lv_obj_add_event_cb(s_viaje_km_ta, viaje_km_listo_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+
+    /* El del CIERRE: otro textarea escondido y otro callback, no el mismo (el de
+     * arriba abre la confirmacion de EMPEZAR). */
+    s_viaje_km_fin_ta = lv_textarea_create(parent);
+    lv_obj_add_flag(s_viaje_km_fin_ta, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_viaje_km_fin_ta, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_size(s_viaje_km_fin_ta, 0, 0);
+    lv_textarea_set_one_line(s_viaje_km_fin_ta, true);
+    lv_textarea_set_max_length(s_viaje_km_fin_ta, 6);
+    lv_textarea_set_accepted_chars(s_viaje_km_fin_ta, "0123456789");
+    lv_obj_add_event_cb(s_viaje_km_fin_ta, viaje_km_fin_listo_cb,
                         LV_EVENT_VALUE_CHANGED, NULL);
 
     /* --- Menus de la salida ---
