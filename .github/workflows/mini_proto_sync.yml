@@ -124,6 +124,16 @@ jobs:
           repository: Ehuntabi/cabina5
           path: cabina5
 
+      # Y LA P4, que hasta el 16-oct-2026 no se bajaba en este job: el test de
+      # los contadores del viaje saca de udp_tx.c el trozo que los parte en
+      # bytes, y sin el repo al lado no puede comprobar nada (fallaba con "no
+      # encuentro el repo victron").
+      - name: Checkout victron
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: Ehuntabi/victron-jc1060p470c-esp32p4
+          path: victron
+
       - name: El ciclo del viaje, identico en las dos cabinas
         run: |
           fallo=0
