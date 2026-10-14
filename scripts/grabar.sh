@@ -141,7 +141,7 @@ fi
 # comprobada: se escribe y punto. `build/flash_args` es la lista de offsets que
 # mantiene el propio build (bootloader, tabla de particiones, app, spiffs).
 echo "[..] grabando en $PUERTO"
-( cd build && python -m esptool --chip esp32s3 -p "$PUERTO" -b 460800 \
+( cd build && python3 -m esptool --chip esp32s3 -p "$PUERTO" -b 460800 \
     --before default_reset --after hard_reset write_flash @flash_args )
 
 # Esta placa tiene UN hueco de aplicacion (factory, 0x20000): `idf.py flash`
