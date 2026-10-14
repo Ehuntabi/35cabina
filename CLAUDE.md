@@ -37,7 +37,9 @@ export IDF_TARGET=esp32s3
 . ~/.espressif/esp-idf-5.5/export.sh          # el mismo que la P4 y la de 5"
 export PATH="$HOME/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20260121/xtensa-esp-elf/bin:$PATH"   # el 5.5 NO lo mete solo
 export PATH="$HOME/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20260121/xtensa-esp-elf/bin:$PATH"
-idf.py -p /dev/ttyACM0 flash monitor          # confirmar el puerto ANTES: ls /dev/serial/by-id/
+scripts/grabar.sh /dev/ttyACM0                # graba Y comprueba que este publicado
+# (o a mano, sin comprobaciones: idf.py -p /dev/ttyACM0 flash monitor)
+# confirmar el puerto ANTES: ls /dev/serial/by-id/
 ```
 
 Si no aparece `/dev/ttyACM*` o dice `Wrong boot mode`: **BOOT pulsado → RESET →
