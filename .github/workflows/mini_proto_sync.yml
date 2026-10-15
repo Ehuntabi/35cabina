@@ -144,6 +144,8 @@ jobs:
                    main/net/apunte.c \
                    main/net/apunte.h \
                    main/net/udp_rx.c \
+                   main/data_model.c \
+                   main/data_model.h \
                    main/reloj.c \
                    main/reloj.h \
                    main/net/mini_proto.h \

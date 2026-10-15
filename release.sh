@@ -13,6 +13,8 @@
 #      binario con la versión anterior dentro.
 #   4. VERIFICA que la versión embebida en el .bin coincide con el tag.
 #   5. Sube código y tag, y publica la Release en GitHub con el binario.
+#      Sin 'gh' no se publica: se exige ANTES de crear el tag, y al final se
+#      comprueba que la Release lleve su .bin de verdad.
 #
 # Existe porque este proyecto no tenía ninguno: 20 etiquetas creadas y CERO
 # Releases publicadas. Y en el proyecto hermano, que sí lo tenía, el script
@@ -43,6 +45,18 @@ if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+$'; then
 fi
 TAG="v$VER"
 MSG="${2:-Release $TAG}"
+
+# ── 0b) hace falta 'gh': sin él no hay Release ──────────────────────────────
+# Se mira AQUÍ, antes de crear el tag y de compilar, que es cuando abortar no
+# cuesta nada. Antes se miraba al final y, si faltaba 'gh', el script se quedaba
+# en "AVISO" y seguía: código y tag subidos, Release sin publicar, o sea una
+# publicación a medias (auditoría del 15-oct-2026).
+if ! command -v gh >/dev/null 2>&1; then
+    echo "ERROR: no está 'gh' (GitHub CLI) y sin él no se puede publicar la Release."
+    echo "       Instálalo (https://cli.github.com), entra con 'gh auth login' y"
+    echo "       vuelve a lanzar ./release.sh $1. Todavía no se ha tocado nada."
+    exit 1
+fi
 
 # ── 1) el árbol, limpio ─────────────────────────────────────────────────────
 if [ -n "$(git status --porcelain)" ]; then
@@ -108,8 +122,15 @@ echo "[ok] binario en $OUT"
 git push origin "$(git branch --show-current)" "$TAG"
 
 if ! command -v gh >/dev/null 2>&1; then
-    echo "AVISO: no está 'gh': la Release NO se ha publicado."
-    exit 0
+    # No debería llegar aquí (se comprueba en el paso 0b, antes de crear el tag),
+    # pero si pasa NO se sigue: el código y el tag YA están subidos, así que
+    # dejarlo así es una publicación a medias, que es lo que este script evita.
+    echo "ERROR: 'gh' ha desaparecido a mitad de la publicación (¿el PATH?)."
+    echo "       El código y el tag $TAG YA están subidos; falta la Release. Instala"
+    echo "       'gh', entra con 'gh auth login' y publícala con:"
+    echo "       gh release create $TAG -R $REPO --title \"35cabina $TAG\" \\"
+    echo "          --notes-from-tag \"$OUT\""
+    exit 1
 fi
 if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
     echo "[ok] la Release $TAG ya existe, no la toco"
@@ -147,19 +168,38 @@ else
     # subido y el .bin en ~/joint-releases, pero nadie puede descargarlo -- y
     # scripts/grabar.sh no dejaria grabar la placa. Mejor decirlo aqui, con el
     # comando exacto para reintentarlo.
-    if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
-        echo "[ok] Release $TAG publicada"
-    else
+    if ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
         echo
         echo "LA RELEASE $TAG NO ESTA PUBLICADA (el tag si). Reintenta con:"
         echo "  gh release create $TAG -R $REPO --title \"35cabina $TAG\" \\"
         echo "     --notes-file $NOTAS_TMP \"$OUT\""
         exit 1
     fi
+    # Y ADEMÁS tiene que llevar su .bin: una Release sin asset no la puede
+    # descargar nadie, y scripts/grabar.sh la rechazaría (auditoría del
+    # 15-oct-2026). GitHub tarda un momento en procesar lo que acaba de subir
+    # `gh release create`, así que se hacen 5 comprobaciones con 2 s de espera
+    # (unos 10 s en total) antes de darla por incompleta.
+    ASSETS=""
+    for _ in 1 2 3 4 5; do
+        ASSETS="$(gh release view "$TAG" -R "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+        if printf '%s\n' "$ASSETS" | grep -q '\.bin$'; then break; fi
+        sleep 2
+    done
+    if ! printf '%s\n' "$ASSETS" | grep -q '\.bin$'; then
+        echo
+        echo "ERROR: el tag $TAG quedó subido, pero la Release está INCOMPLETA: no"
+        echo "       tiene ningún asset .bin (visto: ${ASSETS:-ninguno}). El firmware"
+        echo "       está en $OUT; súbelo a mano:"
+        echo "  gh release upload $TAG -R $REPO \"$OUT\""
+        exit 1
+    fi
+    echo "[ok] Release $TAG publicada con su .bin ($(printf '%s' "$ASSETS" | tr '\n' ' '))"
 fi
 
 echo
 echo "────────────────────────────────────────────────────────────"
 echo "PUBLICADO $TAG. Solo queda grabar:"
-echo "  idf.py -p /dev/ttyACM1 flash"   # la cabina es la S3; la P4 es ttyACM0
+echo "  scripts/grabar.sh /dev/ttyACM1     # la 3,5 pulgadas (USB-JTAG). La P4"\
+     " es ttyACM0 y la 5 pulgadas ttyUSB0"
 echo "────────────────────────────────────────────────────────────"

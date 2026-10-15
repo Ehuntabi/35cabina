@@ -30,6 +30,13 @@ Se reutiliza:
 > siga enchufado: subir `MINI_PROTO_VERSION` lo deja mudo, porque rechaza
 > las versiones que no conoce.
 
+## Antes de grabar: la P4 va PRIMERO
+
+La tarjeta del viaje lee cuatro bytes de la telemetría (km y horas de conducción).
+En una P4 anterior a la **v4.44** esos cuatro bytes eran relleno y llegan a cero,
+así que la tarjeta enseña `0,0 km / 0:00` en vez de `--`. **Graba la P4 primero** (o
+las dos a la vez) y no verás ese número raro.
+
 ## Hardware
 
 - **Pantalla**: Guition JC3248W535 3.5" — ESP32-S3-WROOM-1, controlador
