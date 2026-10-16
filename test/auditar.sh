@@ -70,8 +70,13 @@ sospechosos=""
 for f in $(grep -rlE 'xTaskCreate\(' main components --include="*.c" 2>/dev/null | grep -v managed_components); do
     nlv=$(grep -vE '^[[:space:]]*(/\*|\*|//)' "$f" | grep -cE '\blv_[a-z_]+\(' || true)
     nlock=$(grep -cE 'lvgl_port_lock|bsp_display_lock' "$f" || true)
-    # main.c y lv_port.c son la tarea de LVGL y su port: ahi el lock no hace falta
-    case "$f" in main/main.c|main/lv_port.c|main/esp_bsp.c) continue;; esac
+    # lv_port.c y esp_bsp.c son el port de LVGL y su montaje: ahi el lock no
+    # hace falta (y esp_bsp.c lo usa igual, que es lo que esta regla mira).
+    # main/main.c ESTABA EN ESTA LISTA Y NO PINTA NADA AQUI (16-oct-2026): no es
+    # la tarea de LVGL, es la tarea de arranque -- de ahi salen los temporizadores
+    # y la reconciliacion. Eximirla escondia justo el fallo que se cazo ese dia:
+    # un lv_timer_create() sin cerrojo tres lineas despues de otro CON cerrojo.
+    case "$f" in main/lv_port.c|main/esp_bsp.c) continue;; esac
     [ "$nlv" -gt 0 ] && [ "$nlock" -eq 0 ] && sospechosos="$sospechosos $f"
 done
 [ -z "$sospechosos" ] && ok "ningun fichero con tareas toca LVGL sin cerrojo" \

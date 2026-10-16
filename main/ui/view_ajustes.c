@@ -26,6 +26,33 @@
 #include <stdio.h>
 #include <string.h>
 
+/* El boton "Volver" de las dos cabeceras de este fichero (la del menu y la del
+ * Wi-Fi): 80 px de ancho, pegado al borde izquierdo y separado 8 px de lo que
+ * venga detras. Se saca a constantes porque el TITULO tambien tiene que saber
+ * cuanto ocupa (ver CAB_TITULO_X). */
+#define CAB_BACK_W    80
+#define CAB_BACK_GAP  8
+
+/* Lo que hay que dejar libre a la izquierda del titulo para no pisar el boton.
+ * 320 px de ancho no dan para centrar "CONFIGURACIÓN" (185,9 px) en la fila
+ * entera: el rotulo empezaba en x=59 y el boton llega a x=80 -- 21 px de solape
+ * (visto en la placa; con "AJUSTES WI-FI" eran 9,3 px). Centrandolo en el hueco
+ * que queda a la derecha del Volver sigue centrado y no se pisan. */
+#define CAB_TITULO_X  (CAB_BACK_W + CAB_BACK_GAP)
+
+/* Centra un titulo de cabecera en el hueco de la derecha del Volver: la
+ * etiqueta ocupa la fila entera (para poder centrar el texto) y se le reserva a
+ * la izquierda el ancho del boton con un pad. El pad de la etiqueta ES el hueco
+ * del texto: lv_label dibuja dentro del area de contenido (lv_label.c), asi que
+ * el centrado del texto sale dentro del hueco y no de la fila. */
+static void titulo_cabecera(lv_obj_t *lbl)
+{
+    lv_obj_set_width(lbl, lv_pct(100));
+    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_pad_left(lbl, CAB_TITULO_X, 0);
+    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);   /* TODOS los titulos van centrados (usuario, 16-oct) */
+}
+
 static const char *TAG = "view_ajustes";
 
 /* Las dos caras de la pantalla: se ensena una y se esconde la otra. */
@@ -233,6 +260,17 @@ static void do_guardar(void *ud)
     (void)ud;
     const char *ssid = lv_textarea_get_text(s_ssid_ta);
     const char *pass = lv_textarea_get_text(s_pass_ta);
+
+    /* Sin SSID no hay red que guardar (ver udp_rx_set_credentials): se dice POR
+     * QUE en vez del generico "No he podido guardarlo", que no explica nada al
+     * que acaba de borrar el campo sin querer. No se toca nada mas: ni la NVS,
+     * ni la referencia de "lo que habia", ni las credenciales del portal. */
+    if (ssid[0] == '\0') {
+        lv_label_set_text(s_status_lbl, "Falta el SSID: no lo he guardado");
+        ESP_LOGW(TAG, "Guardado cancelado: el SSID esta vacio");
+        return;
+    }
+
     bool ok_wifi = udp_rx_set_credentials(ssid, pass);
 
     /* La referencia pasa a ser lo recien guardado: un segundo toque seguido ya
@@ -329,7 +367,7 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_clear_flag(mrow, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *mback = lv_btn_create(mrow);
-    lv_obj_set_size(mback, 80, 32);
+    lv_obj_set_size(mback, CAB_BACK_W, 32);
     lv_obj_set_style_bg_color(mback, UI_COLOR_BOTON, 0);
     lv_obj_align(mback, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_add_event_cb(mback, back_cb, LV_EVENT_CLICKED, NULL);
@@ -341,7 +379,7 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_label_set_text(mtitle, "CONFIGURACIÓN");
     lv_obj_set_style_text_color(mtitle, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_text_font(mtitle, &lv_font_montserrat_22, 0);
-    lv_obj_align(mtitle, LV_ALIGN_CENTER, 0, 0);   /* TODOS los titulos van centrados (usuario, 16-oct) */
+    titulo_cabecera(mtitle);
 
     /* El unico boton, y grande: es lo unico que se toca aqui. */
     lv_obj_t *wbtn = lv_btn_create(s_menu);
@@ -390,7 +428,13 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_scroll_dir(vcard, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(vcard, LV_SCROLLBAR_MODE_AUTO);
     lv_obj_set_flex_flow(vcard, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(vcard, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+    /* START Y NO CENTER EN EL EJE PRINCIPAL (auditoria del 16-oct-2026): con
+     * CENTER, lo que sobresale por ARRIBA de un contenedor con scroll queda
+     * FUERA del rango alcanzable -- el scroll solo llega de [-scroll_bottom, 0],
+     * asi que lo de arriba no se puede ni deslizar ni tocar, y el cartel rojo de
+     * dos lineas de diag_reset_resumen() se recortaba unos 9 px. Alineado
+     * ARRIBA, la tarjeta empieza en 0 y todo lo que sobra se alcanza bajando. */
+    lv_obj_set_flex_align(vcard, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
 
     const esp_app_desc_t *app = esp_app_get_description();
@@ -474,7 +518,7 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *back = lv_btn_create(row);
-    lv_obj_set_size(back, 80, 32);
+    lv_obj_set_size(back, CAB_BACK_W, 32);
     lv_obj_set_style_bg_color(back, UI_COLOR_BOTON, 0);
     lv_obj_align(back, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_add_event_cb(back, wifi_back_cb, LV_EVENT_CLICKED, NULL);
@@ -486,7 +530,7 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_label_set_text(title, "AJUSTES WI-FI");
     lv_obj_set_style_text_color(title, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_22, 0);
-    lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);    /* centrado, como el resto de titulos */
+    titulo_cabecera(title);
 
     lv_obj_t *hint = lv_label_create(s_wifi);
     lv_label_set_text(hint, "Red de la P4 a la que se asocia la 35cabina\n(cambiar aqui al pasar a otra P4, sin reflashear)");
@@ -495,8 +539,16 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_width(hint, lv_pct(100));
 
-    s_ssid_ta = make_field(s_wifi, "SSID", 32, false);          /* s_ssid[33] en udp_rx.c */
-    s_pass_ta = make_field(s_wifi, "Password", 64, true);      /* s_pass[65] en udp_rx.c */
+    /* 31 Y 63, no 32 y 64 (16-oct-2026): el campo del driver (wifi_config_t,
+     * sta.ssid[32] / sta.password[64]) reserva un byte para el cero final, asi
+     * que el SSID mas largo que admite son 31 caracteres y la clave 63. Con el
+     * tope en 32/64 se podia guardar un valor que wifi_configure_sta() recortaba
+     * en silencio (ssid[31] = 0) y el resultado era un NO_AP_FOUND que parecia
+     * "la P4 no emite" -- con un simple ESP_LOGW en el log. El editor a pantalla
+     * completa hereda este tope solo (entry_screen_open copia el max_length del
+     * campo de destino: ver el comentario de make_field). */
+    s_ssid_ta = make_field(s_wifi, "SSID", 31, false);          /* s_ssid[33] en udp_rx.c */
+    s_pass_ta = make_field(s_wifi, "Password", 63, true);      /* s_pass[65] en udp_rx.c */
 
     lv_obj_t *hint2 = lv_label_create(s_wifi);
     lv_label_set_text(hint2, "Usuario y clave del PORTAL de la P4 (no del wifi),\npara mandarle los apuntes del viaje");

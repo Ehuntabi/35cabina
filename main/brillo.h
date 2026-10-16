@@ -1,9 +1,12 @@
-/* brillo.h - Brillo de la pantalla en dos niveles, con memoria.
+/* brillo.h - Brillo de la pantalla en dos niveles.
  *
- * Se alterna con un doble toque en la pantalla de datos (ver view_info.c) y se
- * recuerda al reiniciar (config_storage, namespace "display"). Hasta la v1.10
- * el brillo estaba clavado al 5% en main.c, heredado del ejemplo del
- * fabricante, y no habia forma de cambiarlo.
+ * Se alterna con un doble toque (o un toque largo) en la pantalla de datos (ver
+ * view_info.c). Hasta la v1.10 el brillo estaba clavado al 5% en main.c,
+ * heredado del ejemplo del fabricante, y no habia forma de cambiarlo.
+ *
+ * YA NO SE APLICA AL ARRANCAR (16-oct-2026): el nivel se sigue guardando
+ * (config_storage, namespace "display"), pero al encender la luz va SIEMPRE al
+ * maximo. Ver el comentario largo de brillo_init() en brillo.c.
  */
 #pragma once
 
@@ -13,24 +16,31 @@
 extern "C" {
 #endif
 
-/* Los dos unicos valores validos. Si se cambian, el nivel guardado de antes
- * deja de ser valido y brillo_init() cae al ALTO: es a proposito, mas vale
- * pasarse de luz que quedarse con una pantalla que no se ve. */
+/* Los dos unicos valores validos. */
 #define BRILLO_BAJO   30
 #define BRILLO_ALTO  100
 
-/* Aplica el nivel guardado (ALTO la primera vez). Necesita NVS ya arrancado y
- * el display ya iniciado, porque el PWM de la retroiluminacion se configura
- * dentro de bsp_display_start_with_config(). */
+/* Enciende la retroiluminacion AL MAXIMO, siempre, mire lo que mire la NVS.
+ * Necesita NVS ya arrancado y el display ya iniciado, porque el PWM de la
+ * retroiluminacion se configura dentro de bsp_display_start_with_config().
+ *
+ * NO aplica el nivel guardado a proposito: el 30 % se ve como una pantalla
+ * apagada (tema oscuro) y, como el valor se recuerda, un arranque a oscuras se
+ * grababa y volvia a pasar. Arrancando al maximo, un desliz bajando el brillo
+ * siempre se arregla desenchufando. */
 void brillo_init(void);
 
 /* Cambia al otro nivel, lo aplica, lo guarda y devuelve el nivel nuevo.
- * Devuelve el valor para que quien lo llama pueda ajustar el contraste de la
- * pantalla al mismo tiempo (ver view_info.c): el 30% se queda como estaba y el
- * 100% sube el contraste, que es lo que hace falta para verlo al sol. */
+ *
+ * Devuelve el valor porque es util para el log y para quien lo llame, pero OJO:
+ * YA NO TIENE QUE MOVER EL CONTRASTE. Estuvo atado a el (100 % = contraste
+ * alto) y en la placa se veia como DOS pantallas distintas en vez de la misma
+ * mas clara o mas oscura, que es lo que conto el usuario. Mismo arreglo que en
+ * la 5" (ver view_info_set_contraste). */
 uint8_t brillo_alternar(void);
 
-/* Nivel actual (BRILLO_BAJO o BRILLO_ALTO), para pintar acorde al arrancar. */
+/* Nivel actual (BRILLO_BAJO o BRILLO_ALTO). Hoy no lo usa nadie para pintar:
+ * el contraste ya no sigue al brillo. Se queda como parte de la API. */
 uint8_t brillo_nivel(void);
 
 #ifdef __cplusplus

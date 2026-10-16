@@ -122,7 +122,18 @@ static void paleta_aplicar(void)
     }
 }
 
-/* Modo contraste: se llama desde el doble toque (con el brillo) y al arrancar. */
+/* Modo contraste: YA NO LO ENCIENDE NADIE (16-oct-2026). Mismo arreglo que en
+ * la 5", donde se quito el 9-oct.
+ *
+ * Estaba atado al brillo: al 100 % se ponia el contraste alto y al 30 % se
+ * quedaba el color. Tiene sentido para el sol, pero en la placa se veia como
+ * DOS pantallas distintas en vez de la misma mas clara o mas oscura -- "es o
+ * encendido o apagado, no 100% 50%" --, porque el doble toque cambiaba a la vez
+ * la luz y toda la paleta.
+ *
+ * AHORA el doble toque cambia SOLO la luz. La maquinaria del contraste se queda
+ * entera (la paleta, el registro y esta funcion) por si algun dia se quiere un
+ * "modo sol" con su propio boton; lo que se quita es que vaya pegado al brillo. */
 void view_info_set_contraste(bool activo)
 {
     if (s_contraste == activo) return;
@@ -131,8 +142,8 @@ void view_info_set_contraste(bool activo)
         paleta_aplicar();
         lvgl_port_unlock();
     }
-    ESP_LOGI("view_info", "Contraste %s (brillo %s)",
-             activo ? "ALTO" : "normal", activo ? "100%" : "30%");
+    ESP_LOGI("view_info", "Contraste %s (a mano; ya no sigue al brillo)",
+             activo ? "ALTO" : "normal");
 }
 
 #define COL_TEXT_DIM     col2(0x888888, 0xE0E0E0)
@@ -1174,7 +1185,10 @@ static void toque_largo_cb(lv_event_t *e)
 {
     (void)e;
     s_toque_previo = 0;   /* que no encadene con un doble toque a medias */
-    view_info_set_contraste(brillo_alternar() == BRILLO_ALTO);
+    /* SOLO la luz. El contraste ya no va pegado al brillo: ver el comentario de
+     * view_info_set_contraste() -- cambiar los dos a la vez hacia que el toque
+     * pareciese encender y apagar, no subir o bajar la luz. */
+    brillo_alternar();
 }
 
 static void doble_toque_cb(lv_event_t *e)
@@ -1182,9 +1196,8 @@ static void doble_toque_cb(lv_event_t *e)
     (void)e;
     if (s_toque_previo && lv_tick_elaps(s_toque_previo) <= DOBLE_TOQUE_MS) {
         s_toque_previo = 0;   /* un tercer toque empieza cuenta nueva, no encadena */
-        /* Un solo gesto: el 30% se queda como estaba y el 100% sube el
-         * contraste, que es lo que hace falta al sol. */
-        view_info_set_contraste(brillo_alternar() == BRILLO_ALTO);
+        /* Solo la luz, igual que el toque largo. */
+        brillo_alternar();
     } else {
         uint32_t t = lv_tick_get();
         s_toque_previo = t ? t : 1;   /* el 0 esta reservado para "ninguno" */
@@ -1268,8 +1281,13 @@ static lv_obj_t *make_fila_dato(lv_obj_t *padre, const char *etiqueta,
 
 void view_info_create(lv_obj_t *parent)
 {
-    /* La paleta pinta desde el primer objeto con el modo que toque. */
-    s_contraste = (brillo_nivel() == BRILLO_ALTO);
+    /* SIEMPRE EN COLOR (16-oct-2026): ver el comentario de
+     * view_info_set_contraste. Antes esto era `brillo_nivel() == BRILLO_ALTO`,
+     * que con el arranque al 100 % (ver brillo.c) habria dejado la pantalla de
+     * datos en blanco y negro en CADA encendido -- sin forma de volver al color
+     * mas que bajando el brillo. La referencia de como tiene que verse es la
+     * captura de la 5" (.scratch/cabina/screenshot/info.png). */
+    s_contraste = false;
     /* Resolucion logica LANDSCAPE 480x320 (ver esp_bsp.c:390-396).
      *
      * DOS columnas y DOS filas, con la bateria ocupando la fila de arriba
@@ -1606,9 +1624,9 @@ static void pendientes_aplicar(void *arg)
      * el aviso tiene que saltar contra ESE tope, no contra 16. */
     bool casi = s_pend_valor + 3 >= VIAJE_COLA_APUNTES_MAX;
     /* Un 409 sostenido no se arregla solo aunque la P4 este encendida y
-     * respondiendo (es un choque de numeracion, no que este apagada) -- por
-     * eso lleva su propio aviso, distinto de "casi llena". Ver el comentario
-     * de INTENTOS_409_ATASCO en viaje_cola.c. */
+     * respondiendo (es un apunte del viaje anterior, o un choque de numeracion;
+     * NO es que este apagada) -- por eso lleva su propio aviso, distinto de
+     * "casi llena". Ver el comentario de INTENTOS_409_ATASCO en viaje_cola.c. */
     /* Credenciales mal puestas NO se arreglan solas ni encendiendo la P4 (a
      * diferencia de "sin llegar" a secas, que puede ser solo que este
      * apagada): aviso propio para no hacer perder el tiempo mirando el cable
@@ -1617,6 +1635,7 @@ static void pendientes_aplicar(void *arg)
     viaje_cola_atasco_t atasco = viaje_cola_atasco();
     bool cred_mal   = (atasco == VIAJE_COLA_ATASCO_CLAVE);
     bool atascada   = (atasco == VIAJE_COLA_ATASCO_NUMERACION ||
+                       atasco == VIAJE_COLA_ATASCO_REZAGADO ||
                        atasco == VIAJE_COLA_ATASCO_RECHAZO);
     /* La P4 viva pero sin poder escribir (507: tarjeta llena). Antes esto era
      * indistinguible de "la P4 esta apagada" y mandaba a mirar la corriente,
@@ -1723,9 +1742,31 @@ static void pendientes_click_cb(lv_event_t *e)
             }
             return;
         }
+        if (atasco == VIAJE_COLA_ATASCO_REZAGADO) {
+            /* El 409 del APUNTE rezagado (16-oct-2026): la P4 lo dice en el
+             * cuerpo del rechazo ("ese apunte es de un viaje ya cerrado"). Antes
+             * este caso caia en "NO NOS ENTENDEMOS / hemos perdido la
+             * numeracion", y eso es FALSO: la numeracion esta bien; lo que pasa
+             * es que ese apunte es del viaje anterior y no va a entrar nunca en
+             * el que hay abierto. Se dice lo que pasa y lo que se pierde al
+             * descartarlo, que es la unica salida. */
+            confirm_screen_open("UN APUNTE ES DE UN VIAJE YA CERRADO",
+                                "El mas antiguo de la cola es de\nun viaje que la P4 ya cerro,\n"
+                                "asi que no entra en el que\ntiene abierto ahora.\n\n"
+                                "Si lo descartas, ese apunte no\nllega a la P4: apuntalo a\nmano si te hace falta.",
+                                0xFF4444, "Descartarlo", "Cancelar",
+                                descartar_apunte_cb, NULL);
+            confirm_screen_ok_destructivo();
+            return;
+        }
         if (atasco == VIAJE_COLA_ATASCO_NUMERACION) {
-            confirm_screen_open("NO NOS ENTENDEMOS",
-                                "La P4 y esta pantalla han\nperdido la numeracion del\nviaje.\n\n"
+            /* 409 sostenido que NO es un apunte rezagado: lo que la P4 rechaza
+             * es el VIAJE (ya tiene otro abierto -- p.ej. se borro la NVS de
+             * esta pantalla a mitad de viaje y empezo uno nuevo con la
+             * numeracion desde 1). Antes el cartel decia "hemos perdido la
+             * numeracion" para los dos casos; ahora solo para el que lo es. */
+            confirm_screen_open("LA P4 NO ACEPTA ESTE VIAJE",
+                                "Alli sigue abierto el viaje de\nantes, asi que este no entra.\n\n"
                                 "Descartar el apunte mas\nantiguo deja seguir con los\ndemas.",
                                 0xFF4444, "Descartarlo", "Cancelar",
                                 descartar_apunte_cb, NULL);
