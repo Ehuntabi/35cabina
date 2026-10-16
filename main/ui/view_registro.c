@@ -1007,7 +1007,7 @@ static uint16_t btnmatrix_checked(lv_obj_t *bm, uint16_t count)
      * guarda de NULL no tapaba porque el puntero no era NULL. Mismo patron que
      * selector_reset(), que ya lo comprobaba desde el 9-oct (por un crash
      * identico). */
-    if (!lv_obj_check_type(bm, &lv_buttonmatrix_class)) return 0;
+    if (!lv_obj_check_type(bm, &lv_btnmatrix_class)) return 0;   /* LVGL 8: btnmatrix, sin 'button' */
     for (uint16_t i = 0; i < count; i++) {
         if (lv_btnmatrix_has_btn_ctrl(bm, i, LV_BTNMATRIX_CTRL_CHECKED)) return i;
     }
