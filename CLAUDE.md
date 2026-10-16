@@ -36,10 +36,15 @@ cd ~/joint/35cabina
 export IDF_TARGET=esp32s3
 . ~/.espressif/esp-idf-5.5/export.sh          # el mismo que la P4 y la de 5"
 export PATH="$HOME/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20260121/xtensa-esp-elf/bin:$PATH"   # el 5.5 NO lo mete solo
-export PATH="$HOME/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20260121/xtensa-esp-elf/bin:$PATH"
-scripts/grabar.sh /dev/ttyACM0                # graba Y comprueba que este publicado
-# (o a mano, sin comprobaciones: idf.py -p /dev/ttyACM0 flash monitor)
-# confirmar el puerto ANTES: ls /dev/serial/by-id/
+scripts/grabar.sh /dev/ttyACM1                # graba Y comprueba que este publicado
+# (o a mano, sin comprobaciones: idf.py -p /dev/ttyACM1 flash monitor)
+# confirmar el puerto ANTES: ls -l /dev/serial/by-id/
+#   P4         -> /dev/ttyACM0   (ESP32-P4, MAC 30:ed:a0:ea:ae:e5)
+#   3,5" (esta)-> /dev/ttyACM1   (ESP32-S3, MAC 28:84:85:54:87:70)
+#   5"         -> /dev/ttyUSB0   (ESP32-S3 tras un CH340)
+# grabar.sh comprueba la CLASE de puerto y el CHIP (esp32s3), asi que si los dos
+# cables USB-JTAG estan cambiados se niega a grabar en vez de meter el firmware
+# de la P4 en esta placa.
 ```
 
 Si no aparece `/dev/ttyACM*` o dice `Wrong boot mode`: **BOOT pulsado → RESET →
