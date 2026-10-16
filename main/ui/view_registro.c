@@ -4823,13 +4823,16 @@ static void crear_menus(lv_obj_t *parent)
                           LV_FLEX_ALIGN_CENTER);
     boton_grande(body, ICO_MAS, "NUEVA SALIDA", "viaje o gestion suelta",
                  COL_ACCION_OK, ir_a_cb, (void *)(uintptr_t)PAN_TIPO);
-    /* DEL ANCHO DE LA COLUMNA, como el boton grande de arriba (16-oct-2026).
-     * Estaba en 160 px FIJOS: el rotulo "Configuración" mide 197 px en letra 22
-     * (y mas con la letra nueva), asi que el ajuste automatico lo bajaba de
-     * escalon hasta el tope y aun asi quedaba apretado. El usuario lo vio en la
-     * 5" como "un churro pequeno": un boton que se encoge junto a uno que ocupa
-     * toda la columna no parece un boton. */
-    boton_chico(body, "Configuración", COL_AJUSTES, lv_pct(100), ajustes_click_cb, NULL);
+    /* 160 px, Y AQUI SE QUEDA (16-oct-2026).
+     *
+     * En la 5" este boton se cambio a lo ancho de la columna porque el usuario
+     * lo vio "un churro pequeno" con el texto diminuto. En la 3,5", que tiene la
+     * mitad de pantalla, dijo que SE VEIA BIEN tal cual: aqui el boton pequeno
+     * (160 px, con el rotulo ajustado por rotulo_autoajustable) es proporcionado
+     * al lado del grande, y ensancharlo y subirle la letra lo dejaba con mas
+     * peso del que le toca. Las dos placas no tienen por que verse iguales de
+     * tamano: se ven iguales de criterio. */
+    boton_chico(body, "Configuración", COL_AJUSTES, 160, ajustes_click_cb, NULL);
 
     /* --- 2. Tipo de salida --- */
     body = pantalla_crear(parent, PAN_TIPO, "TIPO DE SALIDA", PAN_PRINCIPAL);
