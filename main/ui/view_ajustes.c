@@ -106,28 +106,51 @@ static void ta_click_cb(lv_event_t *e)
  * editor. Lo llevan las DOS claves (la del Wi-Fi y la del portal) desde la
  * auditoria de seguridad del 13-oct-2026: estaban a la vista, y de pie junto a
  * la pantalla se leian de un vistazo. En el P4 ya se hacia asi. */
+/* ── UN CAMPO: ROTULO A LA IZQUIERDA Y CAJA A LA DERECHA, EN LA MISMA LINEA ──
+ *
+ * PEDIDO POR EL USUARIO (16-oct-2026): "no has seguido el mismo criterio de
+ * disposicion en la 3,5 de la pantalla configuracion wifi: ssid y nombre en la
+ * misma linea y las demas tambien". La 5" ya lo tenia asi (make_field_en:
+ * rotulo de 190 px con la caja a su derecha, en la misma fila) y aqui el rotulo
+ * iba ENCIMA de la caja: las dos pantallas se leian distinto y cada campo
+ * gastaba una linea de mas. Ahora se copia el criterio de la 5": rotulo a la
+ * izquierda, con ancho FIJO para que todas las cajas empiecen en la misma x, y
+ * la caja ocupando lo que sobra.
+ *
+ * Los numeros son fijos, como en la 5" ("posiciones a mano, sin flex"): esta
+ * pantalla son 480x320 logicos, el formulario deja 8 px de margen a cada lado
+ * (464 utiles), y 92 del rotulo + 8 de aire dejan 364 para la caja. En 92 px
+ * entra el rotulo mas largo ("Password", 62 px medidos con la Inter 14). */
+#define WF_MARGEN     8
+#define WF_ROTULO_W   92
+#define WF_AIRE       8
+#define WF_CAMPO_H    40                                  /* el rotulo ya no ocupa linea propia */
+#define WF_CAJA_W     (480 - 2 * WF_MARGEN - WF_ROTULO_W - WF_AIRE)
+
 static lv_obj_t *make_field(lv_obj_t *parent, const char *label_text, uint32_t max_len,
                             bool oculto)
 {
     lv_obj_t *cont = lv_obj_create(parent);
-    lv_obj_set_size(cont, lv_pct(100), 56);
+    lv_obj_set_size(cont, lv_pct(100), WF_CAMPO_H);
     lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(cont, 0, 0);
-    lv_obj_set_style_pad_all(cont, 2, 0);
+    lv_obj_set_style_pad_all(cont, 0, 0);
     lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
 
+    /* El rotulo, a la izquierda y centrado en el alto de la fila (con su tamaño
+     * natural y alineado al centro izquierda cae centrado solo). */
     lv_obj_t *lbl = lv_label_create(cont);
     lv_label_set_text(lbl, label_text);
     lv_obj_set_style_text_color(lbl, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 0, 0);
 
     lv_obj_t *ta = lv_textarea_create(cont);
     lv_textarea_set_one_line(ta, true);
     lv_textarea_set_max_length(ta, max_len);
     if (oculto) lv_textarea_set_password_mode(ta, true);
-    lv_obj_set_size(ta, lv_pct(100), 34);
-    lv_obj_align(ta, LV_ALIGN_TOP_LEFT, 0, 18);
+    lv_obj_set_size(ta, WF_CAJA_W, 34);
+    lv_obj_align(ta, LV_ALIGN_RIGHT_MID, 0, 0);
     /* En CLICKED y no en FOCUSED: al volver del editor el campo conserva el
      * foco, asi que con FOCUSED el segundo toque no volveria a abrirlo. El
      * rotulo viaja en el user_data y es el titulo que saca el editor. */
@@ -135,6 +158,19 @@ static lv_obj_t *make_field(lv_obj_t *parent, const char *label_text, uint32_t m
     lv_obj_add_event_cb(ta, ta_click_cb, LV_EVENT_CLICKED, NULL);
 
     return ta;
+}
+
+/* Cabecera de grupo: dice QUE es cada bloque de campos. Mismo criterio (y
+ * mismos textos) que la 5": antes aqui eran dos parrafos de ayuda sueltos, que
+ * se comian 58 px de alto y se leian peor porque no estaban pegados a lo que
+ * explicaban. */
+static void make_grupo(lv_obj_t *parent, const char *texto)
+{
+    lv_obj_t *l = lv_label_create(parent);
+    lv_label_set_text(l, texto);
+    lv_obj_set_style_text_color(l, UI_COLOR_ORANGE, 0);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
+    lv_obj_set_width(l, lv_pct(100));
 }
 
 static void mostrar_menu(bool menu)
@@ -532,12 +568,12 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(title, &lv_font_montserrat_22, 0);
     titulo_cabecera(title);
 
-    lv_obj_t *hint = lv_label_create(s_wifi);
-    lv_label_set_text(hint, "Red de la P4 a la que se asocia la 35cabina\n(cambiar aqui al pasar a otra P4, sin reflashear)");
-    lv_obj_set_style_text_color(hint, UI_COLOR_TEXT_DIM, 0);
-    lv_obj_set_style_text_font(hint, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_width(hint, lv_pct(100));
+    /* DOS GRUPOS CON CABECERA, como en la 5" (16-oct-2026): las dos
+     * explicaciones que iban sueltas pasan a ser el titulo de cada bloque, y los
+     * rotulos se acortan a lo que dice la 5" ("Usuario" y "Clave" en vez de
+     * "Usuario del portal" y "Clave del portal"): el grupo ya dice que son los
+     * del portal. Asi las dos pantallas se leen igual. */
+    make_grupo(s_wifi, "RED DE LA P4 (la del wifi)");
 
     /* 31 Y 63, no 32 y 64 (16-oct-2026): el campo del driver (wifi_config_t,
      * sta.ssid[32] / sta.password[64]) reserva un byte para el cero final, asi
@@ -550,14 +586,11 @@ void view_ajustes_create(lv_obj_t *parent)
     s_ssid_ta = make_field(s_wifi, "SSID", 31, false);          /* s_ssid[33] en udp_rx.c */
     s_pass_ta = make_field(s_wifi, "Password", 63, true);      /* s_pass[65] en udp_rx.c */
 
-    lv_obj_t *hint2 = lv_label_create(s_wifi);
-    lv_label_set_text(hint2, "Usuario y clave del PORTAL de la P4 (no del wifi),\npara mandarle los apuntes del viaje");
-    lv_obj_set_style_text_color(hint2, UI_COLOR_TEXT_DIM, 0);
-    lv_obj_set_style_text_font(hint2, &lv_font_montserrat_14, 0);
-    lv_obj_set_width(hint2, lv_pct(100));
+    make_grupo(s_wifi, "PORTAL DE LA P4 (usuario y clave, no los del wifi)");
 
-    s_http_user_ta = make_field(s_wifi, "Usuario del portal", 32, false);   /* hu[33] en view_ajustes_refresh */
-    s_http_pass_ta = make_field(s_wifi, "Clave del portal", 64, true);     /* hp[65] en view_ajustes_refresh */
+    lv_obj_t *hint2 = lv_label_create(s_wifi);
+    s_http_user_ta = make_field(s_wifi, "Usuario", 32, false);   /* hu[33] en view_ajustes_refresh */
+    s_http_pass_ta = make_field(s_wifi, "Clave", 64, true);      /* hp[65] en view_ajustes_refresh */
 
     lv_obj_t *btn = lv_btn_create(s_wifi);
     lv_obj_set_width(btn, lv_pct(100));
