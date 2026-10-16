@@ -41,7 +41,7 @@ static void inject_sim_data(void)
     d.water_gray_has_data  = true;
     d.epoch_local          = 1788800000;
     d.gps_estado           = 2;      /* posicion fijada */
-    /* Alarma de bateria activa (la palabra "bateria baja" es la de la P4). El
+    /* Alarma de bateria activa (la palabra "batería baja" es la de la P4). El
      * bit tiene que ser el de mini_proto.h: es el mismo byte que viaja. */
     d.alarmas              = MINI_ALARM_BATERIA;
     d.last_update_ms       = (uint32_t)(esp_timer_get_time() / 1000);

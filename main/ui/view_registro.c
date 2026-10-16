@@ -21,6 +21,7 @@
  * (net/viaje_cola.c) -- ver viaje_do_iniciar() y viaje_do_finalizar().
  */
 #include "view_registro.h"
+#include "ui/ui_style.h"   /* la paleta, en un solo sitio */
 #include "fonts/fonts_es.h"   /* Inter + acentos: ver fonts_es.h */
 #include "nav.h"
 #include "entry_screen.h"
@@ -116,7 +117,7 @@ static bool      s_viaje_p4_ajeno;
  *   verde    0x66BB6A ->  8,8:1      turquesa 0x4DB6AC ->  8,6:1
  *   morado   0xCE93D8 ->  8,8:1
  */
-#define COL_VIAJE         0x4FC3F7   /* azul     */
+#define COL_VIAJE         UI_COLOR_CYAN_HEX   /* azul     */
 #define COL_REPOSTAJE     0x66BB6A   /* verde    */
 #define COL_PEAJE         0xCE93D8   /* morado   */
 #define COL_BOMBONA       0xFFA726   /* naranja  */
@@ -124,25 +125,25 @@ static bool      s_viaje_p4_ajeno;
 /* Ajustes Wi-Fi: gris azulado a proposito, para que NO parezca una categoria
  * de registro mas -- no apunta nada del viaje, configura el aparato.
  * 0xB0BEC5 -> 11,4:1 con el negro. */
-#define COL_AJUSTES       0xB0BEC5   /* gris azulado */
+#define COL_AJUSTES       UI_COLOR_TEXT_DIM_HEX   /* gris azulado */
 
 /* Contenido de las tarjetas: negro puro, que es lo que da el maximo contraste
  * sobre los fondos claros de arriba. */
-#define COL_TILE_FG       0x000000
+#define COL_TILE_FG       UI_COLOR_BG_HEX
 
 /* Rotulos de campo ("Importe", "Litros"...) sobre el fondo negro del
  * formulario. Estaban en 0x888888, un gris medio que daba 5,9:1 y en la placa
  * apenas se leia. Subido a casi blanco: 14:1. Se queda un punto por debajo del
  * blanco puro del VALOR para que siga notandose cual es el rotulo y cual el
  * dato, jerarquia que refuerza el tamano (16 el rotulo, 24 el valor). */
-#define COL_LABEL         0xDDDDDD
+#define COL_LABEL         UI_COLOR_TEXT_SOFT_HEX
 
 /* Botones de accion, mismo criterio: claros con texto negro.
  *   verde  0x66BB6A -> 8,8:1     rojo 0xE57373 -> 7,0:1
  * El rojo se queda algo por debajo del resto a proposito: bajarlo mas lo
  * volveria rosa palido y "Finalizar viaje" tiene que LEERSE como rojo. */
 #define COL_ACCION_OK     0x66BB6A
-#define COL_ACCION_STOP   0xE57373
+#define COL_ACCION_STOP   UI_COLOR_RED_HEX
 
 static lv_obj_t *s_peaje_importe_ta;
 static lv_obj_t *s_peaje_currency_dd;
@@ -341,7 +342,7 @@ static lv_obj_t *s_itv_currency_dd;
  * Los datos del evento se copian aqui al abrir el formulario y no se releen al
  * guardar: la hora de fin es la del momento en que dijiste "Terminarla", no la
  * de cuando acabaste de rellenarlo. */
-static lv_obj_t *s_pern_info_lbl;      /* "Area de pago  -  2 noches" */
+static lv_obj_t *s_pern_info_lbl;      /* "Área de pago  -  2 noches" */
 static lv_obj_t *s_pern_precio_row;    /* oculta si el sitio es gratis */
 static lv_obj_t *s_pern_precio_lbl;
 static lv_obj_t *s_pern_precio_ta;
@@ -360,7 +361,7 @@ static int s_serv_desde;
  * fichero: la redaccion de un rotulo puede cambiar, y si las columnas fueran los
  * rotulos ese cambio partiria el historico en dos. */
 static const char *const SITIO_NOMBRE[SITIO_COUNT] = {
-    "Parking gratis", "Parking de pago", "Area gratis", "Area de pago", "Camping"
+    "Parking gratis", "Parking de pago", "Área gratis", "Área de pago", "Camping"
 };
 static const char *const SITIO_CLAVE[SITIO_COUNT] = {
     "parking_gratis", "parking_pago", "area_gratis", "area_pago", "camping"
@@ -842,7 +843,7 @@ static lv_obj_t *make_check_grid(lv_obj_t *parent, const char *const *options,
         /* Alto explicito: con LV_SIZE_CONTENT cada casilla salia de una altura
          * distinta segun el texto y la fila de abajo se recortaba. */
         lv_obj_set_size(cb, lv_pct(48), CHK_H);
-        lv_obj_set_style_text_color(cb, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_color(cb, UI_COLOR_TEXT, 0);
         lv_obj_set_style_text_font(cb, &lv_font_montserrat_20, 0);
         /* Casilla grande: la de serie es diminuta para un dedo en marcha. */
         lv_obj_set_style_width(cb, 28, LV_PART_INDICATOR);
@@ -888,7 +889,7 @@ static void make_check_money_row(lv_obj_t *parent, const char *label_text,
     lv_obj_t *cb = lv_checkbox_create(row);
     lv_checkbox_set_text(cb, label_text);
     lv_obj_align(cb, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_set_style_text_color(cb, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_color(cb, UI_COLOR_TEXT, 0);
     lv_obj_set_style_text_font(cb, &lv_font_montserrat_20, 0);
     /* Casilla grande, igual que en make_check_grid(): la de serie es diminuta
      * para un dedo en la cabina. */
@@ -1215,7 +1216,7 @@ static void build_filtros_screen(void)
     s_filtros_screen = lv_obj_create(lv_layer_top());
     lv_obj_remove_style_all(s_filtros_screen);
     lv_obj_set_size(s_filtros_screen, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(s_filtros_screen, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(s_filtros_screen, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(s_filtros_screen, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(s_filtros_screen, 12, 0);
     lv_obj_set_style_pad_row(s_filtros_screen, 12, 0);
@@ -1240,7 +1241,7 @@ static void build_filtros_screen(void)
     lv_obj_t *ok_lbl = lv_label_create(ok);
     lv_label_set_text(ok_lbl, "Aceptar");
     lv_obj_set_style_text_font(ok_lbl, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(ok_lbl, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_text_color(ok_lbl, UI_COLOR_SOBRE_CLARO, 0);
     lv_obj_center(ok_lbl);
 }
 
@@ -1333,7 +1334,7 @@ static lv_obj_t *make_readonly_row(lv_obj_t *parent, const char *label_text)
 
     lv_obj_t *val = lv_label_create(cont);
     lv_label_set_text(val, "--");
-    lv_obj_set_style_text_color(val, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_color(val, UI_COLOR_TEXT, 0);
     lv_obj_set_style_text_font(val, &lv_font_montserrat_24, 0);
     lv_obj_align(val, LV_ALIGN_RIGHT_MID, 0, 0);
 
@@ -1344,7 +1345,7 @@ static lv_obj_t *make_form_container(lv_obj_t *parent)
 {
     lv_obj_t *form = lv_obj_create(parent);
     lv_obj_set_size(form, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(form, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(form, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(form, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(form, 0, 0);
     lv_obj_set_style_pad_all(form, 8, 0);
@@ -1373,7 +1374,7 @@ static lv_obj_t *add_header(lv_obj_t *form, const char *title, lv_color_t color,
     lv_obj_t *back = lv_btn_create(row);
     lv_obj_set_size(back, 128, 42);
     lv_obj_set_style_radius(back, 21, 0);
-    lv_obj_set_style_bg_color(back, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(back, UI_COLOR_CARD, 0);
     lv_obj_set_style_border_width(back, 2, 0);
     lv_obj_set_style_border_color(back, color, 0);
     lv_obj_set_style_bg_color(back, color, LV_STATE_PRESSED);
@@ -1395,7 +1396,7 @@ static lv_obj_t *add_header(lv_obj_t *form, const char *title, lv_color_t color,
      *
      * Con ANCHO TOPE, y no es un adorno: el boton ocupa de 0 a 128, asi que un
      * titulo centrado solo puede medir 2*(232-128) = 208 px antes de metersele
-     * encima. "SERVICIOS DEL AREA" media ~219 y lo pisaba. Fijando el ancho, un
+     * encima. "SERVICIOS DEL ÁREA" media ~219 y lo pisaba. Fijando el ancho, un
      * titulo demasiado largo sale con puntos suspensivos -- feo, pero visible y
      * sin tapar el boton, en vez de solaparse en silencio.
      * En letra 22 caben ~14 caracteres: "VIAJE EN CURSO" (~175 px) y
@@ -2603,7 +2604,7 @@ static void build_repostaje(lv_obj_t *form)
      * primer dia, los repostajes viejos no los tendran nunca. */
     s_repo_importe_ta = make_money_field(form, "Importe", &s_repo_currency_dd, false);
     make_dual_number_row(form, "Litros",     &s_repo_litros_ta,
-                               "Kilometros", &s_repo_km_ta, false);
+                               "Kilómetros", &s_repo_km_ta, false);
     lv_obj_add_event_cb(s_repo_importe_ta, repo_recalc_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s_repo_litros_ta, repo_recalc_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s_repo_km_ta, repo_recalc_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -2751,7 +2752,7 @@ static void build_itv(lv_obj_t *form)
     /* Los kilometros, como en el repostaje: si no se piden desde el primer dia,
      * las ITV viejas no los tendran nunca y no habra manera de saber a que
      * kilometraje toco cada una. */
-    s_itv_km_ta = make_number_field(form, "Kilometros");
+    s_itv_km_ta = make_number_field(form, "Kilómetros");
     s_itv_precio_ta = make_money_field(form, "Precio", &s_itv_currency_dd, false);
 
     make_save_button(form, "Guardar ITV", save_generic_cb,
@@ -2854,7 +2855,7 @@ static lv_obj_t *make_precio_row(lv_obj_t *parent, precio_row_t *o,
  * dentro de los 304 utiles. Por eso los servicios del area viven en OTRA
  * pantalla: seis casillas mas (otros 116) no caben de ninguna manera.
  *
- * "Servicios del area" comparte fila con Guardar en vez de llevar la suya: asi
+ * "Servicios del área" comparte fila con Guardar en vez de llevar la suya: asi
  * no cuesta ni un pixel de alto, y cuando no hay area marcada Guardar se queda
  * con toda la fila. */
 /* Como se paga la noche AHORA MISMO en el formulario de la pernocta. En un
@@ -2969,7 +2970,7 @@ static void build_pernocta(lv_obj_t *form)
 
 static void build_servicios(lv_obj_t *form)
 {
-    /* "SERVICIOS" a secas: "SERVICIOS DEL AREA" no cabe sin pisar el Volver
+    /* "SERVICIOS" a secas: "SERVICIOS DEL ÁREA" no cabe sin pisar el Volver
      * (ver el tope de add_header). */
     add_header(form, "SERVICIOS", lv_color_hex(COL_VIAJE), BACK_TO_ORIGEN);
 
@@ -3013,7 +3014,7 @@ static void build_servicios(lv_obj_t *form)
         lv_obj_set_flex_grow(btn, 1);
         lv_obj_set_style_radius(btn, 10, 0);
         lv_obj_set_style_bg_color(btn, lv_color_hex(VALORACION_COL[i]), 0);
-        lv_obj_set_style_border_color(btn, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_border_color(btn, UI_COLOR_TEXT, 0);
         lv_obj_add_event_cb(btn, valoracion_nota_cb, LV_EVENT_CLICKED,
                             (void *)(uintptr_t)i);
 
@@ -3123,13 +3124,13 @@ static lv_obj_t *punto_crear(lv_obj_t *padre, const char *texto)
     lv_obj_set_size(dot, 8, 8);
     lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_border_width(dot, 0, 0);
-    lv_obj_set_style_bg_color(dot, lv_color_hex(0x666666), 0);
+    lv_obj_set_style_bg_color(dot, UI_COLOR_TEXT_DIM, 0);
     lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *l = lv_label_create(w);
     lv_label_set_text(l, texto);
     lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(l, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(l, UI_COLOR_TEXT_DIM, 0);
     return dot;
 }
 
@@ -3171,7 +3172,7 @@ static lv_obj_t *pantalla_crear(lv_obj_t *parent, pantalla_t id,
         lv_obj_t *b = lv_label_create(bar);
         lv_label_set_text(b, LV_SYMBOL_LEFT " Atras");
         lv_obj_set_style_text_font(b, &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(b, lv_color_hex(0xB0BEC5), 0);
+        lv_obj_set_style_text_color(b, UI_COLOR_TEXT_DIM, 0);
         /* Area de toque generosa: el rotulo solo son 60x14 px y con la
          * autocaravana en marcha eso no se acierta. */
         lv_obj_set_ext_click_area(b, 14);
@@ -3181,14 +3182,14 @@ static lv_obj_t *pantalla_crear(lv_obj_t *parent, pantalla_t id,
         s_bar_hora[id] = lv_label_create(bar);
         lv_label_set_text(s_bar_hora[id], "--:--");
         lv_obj_set_style_text_font(s_bar_hora[id], &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(s_bar_hora[id], lv_color_hex(0xDDDDDD), 0);
+        lv_obj_set_style_text_color(s_bar_hora[id], UI_COLOR_TEXT_SOFT, 0);
     }
 
     if (titulo) {
         lv_obj_t *t = lv_label_create(bar);
         lv_label_set_text(t, titulo);
         lv_obj_set_style_text_font(t, &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(t, lv_color_hex(0x888888), 0);
+        lv_obj_set_style_text_color(t, UI_COLOR_TEXT_DIM, 0);
         lv_obj_set_style_text_letter_space(t, 1, 0);
         lv_obj_set_flex_grow(t, 1);
         lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
@@ -3375,7 +3376,7 @@ static lv_obj_t *casilla(lv_obj_t *padre, const char *icono, const char *texto,
  *
  * Aqui el color dice el SITIO y no el precio, al reves que en la primera
  * version. Con verde/ambar las cinco casillas eran dos colores repetidos y con
- * los rotulos casi iguales ("Parking", "Parking", "Area", "Area"): habia que
+ * los rotulos casi iguales ("Parking", "Parking", "Área", "Área"): habia que
  * LEERLAS para acertar, que es justo lo que no se puede hacer con la
  * autocaravana en marcha. Con un color por sitio, la mano va sola.
  *
@@ -3413,7 +3414,7 @@ static lv_obj_t *casilla_sitio(lv_obj_t *padre, const char *nombre, bool de_pago
      * centro, que es justo donde se pulsa. */
     lv_obj_clear_flag(tag, LV_OBJ_FLAG_CLICKABLE);
     if (de_pago) {
-        lv_obj_set_style_bg_color(tag, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_color(tag, UI_COLOR_BG, 0);
         lv_obj_set_style_bg_opa(tag, LV_OPA_COVER, 0);
     }
 
@@ -3739,7 +3740,7 @@ static void inicio_puntual_resultado_cb(bool ok, int estado, void *user_data)
      * de ida completo en vez de solo la vuelta. */
 
     /* Deja el menu de Registro en PAN_PUNTUAL (no PAN_PRINCIPAL, que es solo
-     * "Nueva salida"/"Configuracion" y no dice nada de la salida en curso):
+     * "Nueva salida"/"Configuración" y no dice nada de la salida en curso):
      * si el usuario vuelve a esta pagina deslizando, vera el panel "en
      * marcha" en vez de un menu que no cuenta nada. */
     volver_al_menu();
@@ -4345,7 +4346,7 @@ static const cierre_t CIERRE[EV_COUNT] = {
     [EV_AGUAS]     = { CAT_AGUAS,          "Aguas terminadas",
                        "lo que has hecho y lo\nque te ha costado" },
     [EV_REPOSTAJE] = { CAT_REPOSTAJE,      "Finalizar repostaje",
-                       "el importe, los litros\ny los kilometros" },
+                       "el importe, los litros\ny los kilómetros" },
     [EV_PEAJE]     = { CAT_COUNT,          NULL,                 NULL },
     [EV_BOMBONA]   = { CAT_BOMBONA,        "Bombonas cargadas",
                        "cuantas son y lo que\nhan costado" },
@@ -4465,7 +4466,7 @@ static bool olvido_preguntar(void)
     duracion_texto(seg, dur, sizeof(dur));
     snprintf(s_parada_txt, sizeof(s_parada_txt),
              "Estuviste parado desde las %s,\n%s.\n\n"
-             "Si fue una parada, dime de que\ny la anoto con esa hora.", h, dur);
+             "Si fue una parada, dime de qué\ny la anoto con esa hora.", h, dur);
 
     s_olvido_ini = desde;
     /* Preguntado queda: se conteste lo que se conteste, no se vuelve a sacar en
@@ -4662,7 +4663,7 @@ static void puntual_cancelar_cb(lv_event_t *e)
     (void)e;
     if (salida_get()->tipo == SALIDA_PUNTUAL && salida_get()->declarado) {
         /* A la de info (bateria/aguas/temperaturas), no a PAN_PRINCIPAL --
-         * esa es solo "Nueva salida"/"Configuracion" y no trae nada util
+         * esa es solo "Nueva salida"/"Configuración" y no trae nada util
          * para el trayecto de vuelta. El menu de Registro se queda tal cual
          * (en PAN_PUNTUAL, mostrando "Terminar salida") para cuando se
          * vuelva a esta pagina deslizando. */
@@ -4768,7 +4769,7 @@ static void abiertos_fila_crear(lv_obj_t *body, int idx)
 
     s_ab_tipo[idx] = lv_label_create(col);
     lv_obj_set_style_text_font(s_ab_tipo[idx], &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(s_ab_tipo[idx], lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_color(s_ab_tipo[idx], UI_COLOR_TEXT, 0);
 
     s_ab_hora[idx] = lv_label_create(col);
     lv_obj_set_style_text_font(s_ab_hora[idx], &lv_font_montserrat_14, 0);
@@ -4820,7 +4821,7 @@ static void crear_menus(lv_obj_t *parent)
                           LV_FLEX_ALIGN_CENTER);
     boton_grande(body, ICO_MAS, "NUEVA SALIDA", "viaje o gestion suelta",
                  COL_ACCION_OK, ir_a_cb, (void *)(uintptr_t)PAN_TIPO);
-    boton_chico(body, "Configuracion", COL_AJUSTES, 160, ajustes_click_cb, NULL);
+    boton_chico(body, "Configuración", COL_AJUSTES, 160, ajustes_click_cb, NULL);
 
     /* --- 2. Tipo de salida --- */
     body = pantalla_crear(parent, PAN_TIPO, "TIPO DE SALIDA", PAN_PRINCIPAL);
@@ -4854,7 +4855,7 @@ static void crear_menus(lv_obj_t *parent)
     lv_obj_set_height(f, 46);
     lv_obj_set_flex_grow(boton_chico(f, "Terminar salida", COL_ACCION_STOP, 0,
                                      terminar_salida_cb, NULL), 1);
-    lv_obj_set_flex_grow(boton_chico(f, "Configuracion", COL_AJUSTES, 0,
+    lv_obj_set_flex_grow(boton_chico(f, "Configuración", COL_AJUSTES, 0,
                                      ajustes_click_cb, NULL), 1);
 
     /* --- 4. Las seis cosas que se anotan en un viaje --- */
@@ -4966,10 +4967,10 @@ static void crear_menus(lv_obj_t *parent)
                   declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_PARKING_GRATIS));
     casilla_sitio(f, "Parking", true,  COL_VIAJE,         CEL3_W,
                   declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_PARKING_PAGO));
-    casilla_sitio(f, "Area",    false, COL_MANTENIMIENTO, CEL3_W,
+    casilla_sitio(f, "Área",    false, COL_MANTENIMIENTO, CEL3_W,
                   declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_AREA_GRATIS));
     f = fila(body);
-    casilla_sitio(f, "Area",    true,  COL_MANTENIMIENTO, CEL3_W,
+    casilla_sitio(f, "Área",    true,  COL_MANTENIMIENTO, CEL3_W,
                   declarar_cb, DECL(EV_PARADA, MOTIVO_PERNOCTA, SITIO_AREA_PAGO));
     /* El camping ocupa lo que dos: sobra sitio y no tiene pareja gratis -- no
      * hay campings gratis. 145 + 10 + 300 = 455, los 456 utiles. */
@@ -5011,7 +5012,7 @@ static void crear_menus(lv_obj_t *parent)
 
 void view_registro_create(lv_obj_t *parent)
 {
-    lv_obj_set_style_bg_color(parent, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(parent, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
     lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
     /* El tema de LVGL mete padding y borde propios en la pantalla. El reparto

@@ -1,7 +1,7 @@
 /* view_ajustes.c - CONFIGURACION del aparato.
  *
  * Dos pantallas en una: el MENU (que version lleva puesta y un boton para el
- * Wi-Fi) y el formulario del WI-FI. Antes "Configuracion" entraba directamente
+ * Wi-Fi) y el formulario del WI-FI. Antes "Configuración" entraba directamente
  * al formulario, y ni siquiera habia donde mirar la version -- que es el primer
  * dato que hace falta cuando algo va raro.
  *
@@ -11,6 +11,7 @@
  * sin reflashear.
  */
 #include "view_ajustes.h"
+#include "ui/ui_style.h"   /* la paleta, en un solo sitio */
 #include "fonts/fonts_es.h"   /* Inter + acentos: ver fonts_es.h */
 #include "view_info.h"
 #include "../net/udp_rx.h"
@@ -90,7 +91,7 @@ static lv_obj_t *make_field(lv_obj_t *parent, const char *label_text, uint32_t m
 
     lv_obj_t *lbl = lv_label_create(cont);
     lv_label_set_text(lbl, label_text);
-    lv_obj_set_style_text_color(lbl, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(lbl, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 0, 0);
 
@@ -177,7 +178,7 @@ static void enlace_timer_cb(lv_timer_t *t)
     udp_rx_enlace(ssid, sizeof(ssid), &asociado, &rssi, &sin_datos);
     if (!asociado) {
         lv_label_set_text_fmt(s_enlace, "P4: sin red (busco %s)", ssid);
-        lv_obj_set_style_text_color(s_enlace, lv_color_hex(0xFF9800), 0);
+        lv_obj_set_style_text_color(s_enlace, UI_COLOR_ORANGE, 0);
     } else if (sin_datos < 0) {
         /* Asociada pero SIN haber recibido ni un mensaje desde que arranco.
          * Antes esto se pintaba como "sin datos 0s", que se lee justo al reves
@@ -186,15 +187,15 @@ static void enlace_timer_cb(lv_timer_t *t)
         char diag[48];
         enlace_diag_sufijo(diag, sizeof(diag));
         lv_label_set_text_fmt(s_enlace, "P4: %d dBm, sin datos todavia%s", rssi, diag);
-        lv_obj_set_style_text_color(s_enlace, lv_color_hex(0xFF9800), 0);
+        lv_obj_set_style_text_color(s_enlace, UI_COLOR_ORANGE, 0);
     } else if (sin_datos > 5) {
         char diag[48];
         enlace_diag_sufijo(diag, sizeof(diag));
         lv_label_set_text_fmt(s_enlace, "P4: %d dBm, sin datos %ds%s", rssi, sin_datos, diag);
-        lv_obj_set_style_text_color(s_enlace, lv_color_hex(0xFF9800), 0);
+        lv_obj_set_style_text_color(s_enlace, UI_COLOR_ORANGE, 0);
     } else {
         lv_label_set_text_fmt(s_enlace, "P4: %d dBm", rssi);
-        lv_obj_set_style_text_color(s_enlace, lv_color_hex(0x00C851), 0);
+        lv_obj_set_style_text_color(s_enlace, UI_COLOR_GREEN, 0);
     }
 }
 
@@ -305,7 +306,7 @@ void view_ajustes_refresh(void)
 
 void view_ajustes_create(lv_obj_t *parent)
 {
-    lv_obj_set_style_bg_color(parent, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(parent, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(parent, 0, 0);
     lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
@@ -329,7 +330,7 @@ void view_ajustes_create(lv_obj_t *parent)
 
     lv_obj_t *mback = lv_btn_create(mrow);
     lv_obj_set_size(mback, 80, 32);
-    lv_obj_set_style_bg_color(mback, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_bg_color(mback, UI_COLOR_BOTON, 0);
     lv_obj_align(mback, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_add_event_cb(mback, back_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *mback_lbl = lv_label_create(mback);
@@ -337,15 +338,15 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_center(mback_lbl);
 
     lv_obj_t *mtitle = lv_label_create(mrow);
-    lv_label_set_text(mtitle, "CONFIGURACION");
-    lv_obj_set_style_text_color(mtitle, lv_color_hex(0xFF9800), 0);
+    lv_label_set_text(mtitle, "CONFIGURACIÓN");
+    lv_obj_set_style_text_color(mtitle, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_text_font(mtitle, &lv_font_montserrat_22, 0);
     lv_obj_align(mtitle, LV_ALIGN_RIGHT_MID, 0, 0);
 
     /* El unico boton, y grande: es lo unico que se toca aqui. */
     lv_obj_t *wbtn = lv_btn_create(s_menu);
     lv_obj_set_size(wbtn, lv_pct(100), 64);
-    lv_obj_set_style_bg_color(wbtn, lv_color_hex(0x1565C0), 0);
+    lv_obj_set_style_bg_color(wbtn, UI_COLOR_CYAN, 0);
     lv_obj_add_event_cb(wbtn, wifi_open_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *wlbl = lv_label_create(wbtn);
     lv_label_set_text(wlbl, LV_SYMBOL_WIFI "   Wi-Fi");
@@ -362,7 +363,7 @@ void view_ajustes_create(lv_obj_t *parent)
      * de un segundo que solo trabaja si esta visible. */
     s_enlace = lv_label_create(s_menu);
     lv_obj_set_style_text_font(s_enlace, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(s_enlace, lv_color_hex(0x90A4AE), 0);
+    lv_obj_set_style_text_color(s_enlace, UI_COLOR_TEXT_DIM, 0);
     lv_label_set_text(s_enlace, "");
     if (!s_enlace_timer) {
         s_enlace_timer = lv_timer_create(enlace_timer_cb, 1000, NULL);
@@ -377,7 +378,7 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_t *vcard = lv_obj_create(s_menu);
     lv_obj_set_width(vcard, lv_pct(100));
     lv_obj_set_flex_grow(vcard, 1);
-    lv_obj_set_style_bg_color(vcard, lv_color_hex(0x111111), 0);
+    lv_obj_set_style_bg_color(vcard, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(vcard, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(vcard, 0, 0);
     lv_obj_set_style_radius(vcard, 10, 0);
@@ -391,19 +392,19 @@ void view_ajustes_create(lv_obj_t *parent)
     const esp_app_desc_t *app = esp_app_get_description();
 
     lv_obj_t *vrot = lv_label_create(vcard);
-    lv_label_set_text(vrot, "Version instalada");
-    lv_obj_set_style_text_color(vrot, lv_color_hex(0x888888), 0);
+    lv_label_set_text(vrot, "Versión instalada");
+    lv_obj_set_style_text_color(vrot, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_style_text_font(vrot, &lv_font_montserrat_20, 0);
 
     s_ver_lbl = lv_label_create(vcard);
     lv_label_set_text(s_ver_lbl, app ? app->version : "?");
-    lv_obj_set_style_text_color(s_ver_lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_color(s_ver_lbl, UI_COLOR_TEXT, 0);
     lv_obj_set_style_text_font(s_ver_lbl, &lv_font_montserrat_40, 0);
 
     lv_obj_t *vfecha = lv_label_create(vcard);
     if (app) lv_label_set_text_fmt(vfecha, "%s  %s", app->date, app->time);
     else     lv_label_set_text(vfecha, "");
-    lv_obj_set_style_text_color(vfecha, lv_color_hex(0xAAAAAA), 0);
+    lv_obj_set_style_text_color(vfecha, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_style_text_font(vfecha, &lv_font_montserrat_20, 0);
 
     /* Chivato de reinicio (ver diag_reset.c): aparece SOLO si el arranque
@@ -417,7 +418,7 @@ void view_ajustes_create(lv_obj_t *parent)
         lv_obj_t *vrein = lv_label_create(vcard);
         lv_label_set_text(vrein, diag_reset_resumen());
         lv_obj_set_style_text_align(vrein, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_color(vrein, lv_color_hex(0xE57373), 0);
+        lv_obj_set_style_text_color(vrein, UI_COLOR_RED, 0);
         lv_obj_set_style_text_font(vrein, &lv_font_montserrat_16, 0);
     } else {
         /* SI EL ARRANQUE NO FUE UN FALLO, SE DICE IGUAL (16-oct-2026, el
@@ -432,7 +433,7 @@ void view_ajustes_create(lv_obj_t *parent)
             lv_obj_t *vmot = lv_label_create(vcard);
             lv_label_set_text_fmt(vmot, "Arranque: %s", motivo);
             lv_obj_set_style_text_align(vmot, LV_TEXT_ALIGN_CENTER, 0);
-            lv_obj_set_style_text_color(vmot, lv_color_hex(0x90A4AE), 0);
+            lv_obj_set_style_text_color(vmot, UI_COLOR_TEXT_DIM, 0);
             lv_obj_set_style_text_font(vmot, &lv_font_montserrat_16, 0);
         }
     }
@@ -444,7 +445,7 @@ void view_ajustes_create(lv_obj_t *parent)
     s_uptime_lbl = lv_label_create(vcard);
     lv_label_set_text_fmt(s_uptime_lbl, "En marcha: %s", diag_reset_hace_texto());
     lv_obj_set_style_text_align(s_uptime_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(s_uptime_lbl, lv_color_hex(0x90A4AE), 0);
+    lv_obj_set_style_text_color(s_uptime_lbl, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_style_text_font(s_uptime_lbl, &lv_font_montserrat_16, 0);
 
     /* ── El formulario del WI-FI ─────────────────────────────────────────── */
@@ -470,7 +471,7 @@ void view_ajustes_create(lv_obj_t *parent)
 
     lv_obj_t *back = lv_btn_create(row);
     lv_obj_set_size(back, 80, 32);
-    lv_obj_set_style_bg_color(back, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_bg_color(back, UI_COLOR_BOTON, 0);
     lv_obj_align(back, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_add_event_cb(back, wifi_back_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *back_lbl = lv_label_create(back);
@@ -479,13 +480,13 @@ void view_ajustes_create(lv_obj_t *parent)
 
     lv_obj_t *title = lv_label_create(row);
     lv_label_set_text(title, "AJUSTES WI-FI");
-    lv_obj_set_style_text_color(title, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_text_color(title, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_22, 0);
     lv_obj_align(title, LV_ALIGN_RIGHT_MID, 0, 0);
 
     lv_obj_t *hint = lv_label_create(s_wifi);
     lv_label_set_text(hint, "Red de la P4 a la que se asocia la 35cabina\n(cambiar aqui al pasar a otra P4, sin reflashear)");
-    lv_obj_set_style_text_color(hint, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(hint, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_width(hint, lv_pct(100));
@@ -495,7 +496,7 @@ void view_ajustes_create(lv_obj_t *parent)
 
     lv_obj_t *hint2 = lv_label_create(s_wifi);
     lv_label_set_text(hint2, "Usuario y clave del PORTAL de la P4 (no del wifi),\npara mandarle los apuntes del viaje");
-    lv_obj_set_style_text_color(hint2, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(hint2, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_style_text_font(hint2, &lv_font_montserrat_14, 0);
     lv_obj_set_width(hint2, lv_pct(100));
 
@@ -504,7 +505,7 @@ void view_ajustes_create(lv_obj_t *parent)
 
     lv_obj_t *btn = lv_btn_create(s_wifi);
     lv_obj_set_width(btn, lv_pct(100));
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0x2E7D32), 0);
+    lv_obj_set_style_bg_color(btn, UI_COLOR_GREEN, 0);
     lv_obj_add_event_cb(btn, guardar_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *btn_lbl = lv_label_create(btn);
     lv_label_set_text(btn_lbl, "Guardar y reconectar");
@@ -512,7 +513,7 @@ void view_ajustes_create(lv_obj_t *parent)
 
     s_status_lbl = lv_label_create(s_wifi);
     lv_label_set_text(s_status_lbl, "");
-    lv_obj_set_style_text_color(s_status_lbl, lv_color_hex(0x4CD964), 0);
+    lv_obj_set_style_text_color(s_status_lbl, UI_COLOR_GREEN, 0);
     lv_obj_set_style_text_font(s_status_lbl, &lv_font_montserrat_14, 0);
 
     /* Se entra siempre por el menu. */
