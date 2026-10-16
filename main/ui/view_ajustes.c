@@ -384,7 +384,11 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_set_style_radius(vcard, 10, 0);
     lv_obj_set_style_pad_all(vcard, 6, 0);
     lv_obj_set_style_pad_row(vcard, 2, 0);
-    lv_obj_clear_flag(vcard, LV_OBJ_FLAG_SCROLLABLE);
+    /* CON SCROLL, aunque quepa: sin el, lo que no cabe se recorta en silencio
+     * (el usuario lo vio en la 5": informacion perdida arriba y abajo del numero
+     * de version). 16-oct-2026. */
+    lv_obj_set_scroll_dir(vcard, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(vcard, LV_SCROLLBAR_MODE_AUTO);
     lv_obj_set_flex_flow(vcard, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(vcard, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
