@@ -341,7 +341,7 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_label_set_text(mtitle, "CONFIGURACIÓN");
     lv_obj_set_style_text_color(mtitle, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_text_font(mtitle, &lv_font_montserrat_22, 0);
-    lv_obj_align(mtitle, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_align(mtitle, LV_ALIGN_CENTER, 0, 0);   /* TODOS los titulos van centrados (usuario, 16-oct) */
 
     /* El unico boton, y grande: es lo unico que se toca aqui. */
     lv_obj_t *wbtn = lv_btn_create(s_menu);
@@ -482,7 +482,7 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_label_set_text(title, "AJUSTES WI-FI");
     lv_obj_set_style_text_color(title, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_22, 0);
-    lv_obj_align(title, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_align(title, LV_ALIGN_CENTER, 0, 0);    /* centrado, como el resto de titulos */
 
     lv_obj_t *hint = lv_label_create(s_wifi);
     lv_label_set_text(hint, "Red de la P4 a la que se asocia la 35cabina\n(cambiar aqui al pasar a otra P4, sin reflashear)");
