@@ -158,7 +158,8 @@ jobs:
                    test/viaje_cola_control_arnes.c test/viaje_cola_control.sh \
                    test/viaje_cola_libre_arnes.c test/viaje_cola_libre.sh \
                    test/viaje_horario_arnes.c test/viaje_horario.sh \
-                   test/viaje_contadores.sh test/viaje_contadores_arnes.c ; do
+                   test/viaje_contadores.sh test/viaje_contadores_arnes.c \
+                   test/estilo.sh ; do
             if [ ! -f "35cabina/$f" ] || [ ! -f "cabina5/$f" ]; then
               echo "FALTA $f en alguno de los dos repos"; fallo=1; continue
             fi
@@ -196,3 +197,10 @@ jobs:
       # cruzarlos no salta a la vista (un viaje de 1200 km se lee como 4920).
       - name: Los km y las horas de conduccion llegan enteros
         run: bash 35cabina/test/viaje_contadores.sh
+
+      # Y el estilo de la UI: que ningun nombre de fuente se quede sin alias
+      # (si se queda, tira de la del SDK y el texto sale al tamaño literal, que
+      # es el fallo que se colo el 16-oct-2026), que no haya colores a mano y
+      # que los titulos vayan centrados.
+      - name: El estilo de la UI (fuentes, paleta, titulos)
+        run: bash 35cabina/test/estilo.sh
