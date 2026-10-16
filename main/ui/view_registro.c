@@ -1000,6 +1000,14 @@ static uint16_t btnmatrix_checked(lv_obj_t *bm, uint16_t count)
      * es NULL, y lv_buttonmatrix_has_button_ctrl(NULL, ...) desreferencia.
      * Devolver 0 es lo correcto: 0 = el primer boton = la opcion de siempre. */
     if (!bm) return 0;
+    /* Y TIENE QUE SER UNA BOTONERA DE VERDAD. Aqui no basta con mirar NULL: en
+     * la 5" alguien pasaba la FILA que contiene el selector (un lv_obj normal) y
+     * lv_buttonmatrix_has_button_ctrl() leia btn_cnt y ctrl_bits FUERA del
+     * bloque -> basura -> LoadProhibited. Es el reinicio del 16-oct-2026, que la
+     * guarda de NULL no tapaba porque el puntero no era NULL. Mismo patron que
+     * selector_reset(), que ya lo comprobaba desde el 9-oct (por un crash
+     * identico). */
+    if (!lv_obj_check_type(bm, &lv_buttonmatrix_class)) return 0;
     for (uint16_t i = 0; i < count; i++) {
         if (lv_btnmatrix_has_btn_ctrl(bm, i, LV_BTNMATRIX_CTRL_CHECKED)) return i;
     }
