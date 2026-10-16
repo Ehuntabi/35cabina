@@ -3076,6 +3076,13 @@ static void build_valoracion(lv_obj_t *form)
                                      s_val_extra_chk, COL_VIAJE, SERV_CHK_GAP);
     lv_obj_set_flex_align(lv_obj_get_parent(grid), LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
+
+    /* BOTON DE GUARDAR, pedido por el usuario el 16-oct-2026 ("necesita un boton
+     * de guardar mas que pulsar volver para entender que se ha grabado la
+     * seleccion"). Lo marcado ya viaja con la pernocta, pero salir por "Volver"
+     * no dice nada: asi el gesto de guardar es explicito. Mismo patron que
+     * "Guardar servicios". */
+    make_save_button(form, "Guardar pegas", back_click_cb, (void *)(uintptr_t)CAT_SERVICIOS);
 }
 
 /* === Menus de la salida ===================================================
