@@ -12,6 +12,7 @@
  * 320px de alto -- corregido 18-ago-2026.
  */
 #include "view_inclinacion.h"
+#include "fonts/fonts_es.h"   /* Inter + acentos: ver fonts_es.h */
 #include "../tilt.h"
 #include <stdio.h>
 #include <math.h>

@@ -21,12 +21,12 @@
  * (net/viaje_cola.c) -- ver viaje_do_iniciar() y viaje_do_finalizar().
  */
 #include "view_registro.h"
+#include "fonts/fonts_es.h"   /* Inter + acentos: ver fonts_es.h */
 #include "nav.h"
 #include "entry_screen.h"
 #include "confirm_screen.h"
 #include "view_info.h"
 #include "../icons/iconos.h"
-#include "../fonts/montserrat_bold.h"
 #include "config_storage.h"
 #include "p4_api.h"
 #include "viaje_cola.h"

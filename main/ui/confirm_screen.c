@@ -1,5 +1,6 @@
 /* confirm_screen.c - Confirmacion a pantalla completa. Ver confirm_screen.h. */
 #include "confirm_screen.h"
+#include "fonts/fonts_es.h"   /* Inter + acentos: ver fonts_es.h */
 #include <string.h>
 
 /* Reparto de los 320 px de alto. Los botones van abajo del todo, que es donde

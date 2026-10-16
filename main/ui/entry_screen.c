@@ -1,5 +1,6 @@
 /* entry_screen.c - Editor de un campo a pantalla completa. Ver entry_screen.h. */
 #include "entry_screen.h"
+#include "fonts/fonts_es.h"   /* Inter + acentos: ver fonts_es.h */
 #include <stdio.h>   /* snprintf (el encadenado de campos copia el rotulo) */
 
 /* Reparto vertical de los 320 px (ver display.h; la pantalla va apaisada).

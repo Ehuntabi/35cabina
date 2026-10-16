@@ -11,6 +11,7 @@
  * sin reflashear.
  */
 #include "view_ajustes.h"
+#include "fonts/fonts_es.h"   /* Inter + acentos: ver fonts_es.h */
 #include "view_info.h"
 #include "../net/udp_rx.h"
 #include "../net/mini_proto.h"   /* MINI_PROTO_VERSION: el diagnostico del enlace */

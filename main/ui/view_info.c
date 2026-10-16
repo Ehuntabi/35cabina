@@ -24,6 +24,7 @@
  * lucecitas.
  */
 #include "view_info.h"
+#include "fonts/fonts_es.h"   /* Inter + acentos: ver fonts_es.h */
 #include "brillo.h"
 #include "net/viaje_cola.h"   /* VIAJE_COLA_CAPACIDAD, para el aviso de casi llena */
 #include "net/p4_api.h"       /* mandar la orden de silencio a la P4 */
