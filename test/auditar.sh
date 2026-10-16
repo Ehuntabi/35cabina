@@ -7,10 +7,19 @@
 #
 # Uso:  bash test/auditar.sh        (desde la raiz del repo)
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 fallos=0
 ok()  { printf '  ok    %s\n' "$1"; }
 mal() { printf '  FALLO %s\n' "$1"; fallos=$((fallos+1)); }
+
+# ── EN CI, NO TENER BUILD ES UN FALLO (16-oct-2026) ─────────────────────────
+# Las reglas que miran el BINARIO o el sdkconfig.h se saltaban en silencio si no
+# existia build/ ("se omite"), asi que el dia que el step del build falle, se
+# renombre o se cambie el orden, esta auditoria diria OK sin haber mirado nada.
+# En CI el build va ANTES: si falta, es un fallo del workflow y se dice.
+if [ -n "${CI:-}" ] && [ ! -f build/35cabina.bin ]; then
+    mal "no hay build/35cabina.bin y en CI se compila antes de auditar: revisa el workflow (o el step del build)"
+fi
 
 echo "=== 1. El binario es el de la IDF que pide el proyecto (v5.5.5) ==="
 # 7-oct-2026: este proyecto se migro de v5.4.4 a v5.5.5 para que los tres
@@ -157,7 +166,6 @@ echo "=== 12. El build no puede ser mas viejo que el codigo ==="
 # no hay nada que recompilar. Visto el 7-oct-2026. Lo que importa es que ningun
 # fichero que entre en el binario sea mas nuevo que el .bin.
 if [ -n "$BIN" ]; then
-    mtime=$(stat -c %Y "$BIN" 2>/dev/null || echo 0)
     mas_nuevo=$(find main components partitions.csv sdkconfig -newer "$BIN" \
                 \( -name '*.c' -o -name '*.h' -o -name '*.csv' -o -name 'sdkconfig' \) \
                 2>/dev/null | grep -v managed_components | head -3)
