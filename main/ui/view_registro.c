@@ -908,6 +908,9 @@ static void make_check_money_row(lv_obj_t *parent, const char *label_text,
     lv_textarea_set_placeholder_text(ta, "0.00");
     lv_obj_set_size(ta, CHKMONEY_TA_W, alto - 6);
     lv_obj_align(ta, LV_ALIGN_RIGHT_MID, 0, 0);
+    /* En esta placa los nombres de fuente van 1:1 (ver fonts/fonts_es.h), asi que
+     * el "24" mide 24 de verdad y cabe en la caja: no hace falta elegir por
+     * alto como en la 5", donde la cadena de tamanos lo llevaba a 40. */
     lv_obj_set_style_text_font(ta, alto >= 40 ? &lv_font_montserrat_24
                                               : &lv_font_montserrat_20, 0);
     /* Sin el relleno vertical del tema. El numero salia CORTADO por arriba en
