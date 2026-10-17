@@ -16,8 +16,8 @@ usamos. Se guarda al lado, con la documentación del taller:
       7-Character&Picture_Molding_Tool/
       8-Burn operation/
 
-Del material del fabricante, en este repositorio se guardan **solo los dos
-esquemáticos** (que son los que hacen falta para medir y reparar):
+En `docs/` hay **7 PNG** (no solo los dos esquemáticos). Del material del
+fabricante son tres; los otros cuatro son fotos y recortes de taller:
 
 - `JC3248W535_V1.0_esquematico_p1.png` — alimentación (VOUT-BAT, buck U3, riel
   de 3,3 V con S3/S4, IP5306, USB-C) y conectores (P1 UART de 4 pines con 5 V,
@@ -25,6 +25,11 @@ esquemáticos** (que son los que hacen falta para medir y reparar):
 - `JC3248W535_V1.0_esquematico_p2.png` — ESP32-S3-WROOM-1 (mapa de GPIO),
   pantalla QSPI, táctil, microSD, cargador IP5306 con la batería (P5) y el
   amplificador de audio.
+- `JC3248W535_bloque_3v3_oficial.png` — el bloque de 3,3 V del esquemático,
+  ampliado (del material oficial).
+- `placa_puntos_de_medida.png`, `zona_3v3_medidas.png`, `conector_jst_4pines.png`
+  y `placa_fpc.png` — fotos/recortes hechos en el taller para medir y localizar
+  conectores.
 
 Regla de taller: las descargas gordas del fabricante van a `documentacion/`, no
 dentro de los repos. `publicar.sh` hace `git add -A`, así que lo que esté dentro

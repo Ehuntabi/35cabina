@@ -20,8 +20,8 @@ viaje, apuntes) responde **401** y el aviso dice *"La P4 no acepta la clave.
 Revisa usuario y clave en Ajustes"*.
 
 - Se ven en la **P4**: Ajustes → Wi-Fi.
-- Se meten en la **pantalla**: Ajustes → WiFi → *"Usuario del portal"* y
-  *"Clave del portal"* (no son los del wifi; la propia pantalla lo avisa).
+- Se meten en la **pantalla**: Ajustes → WiFi → *"Usuario"* y
+  *"Clave"* (no son los del wifi; la propia pantalla lo avisa).
 - Comprobación: iniciar un viaje de prueba y cerrarlo. Si la P4 lo acepta, la
   pantalla deja de dar el aviso y el viaje aparece en la carpeta de la P4.
 
@@ -58,10 +58,18 @@ el log, en castellano, sin crear ningún viaje:
 p4_test: credenciales del portal en NVS: si, usuario 'victron'
 p4_test: tcp 80: contesta (HTTP/1.1 401 Unauthorized      <- el portal esta vivo
 p4_test: auth 80: CON credenciales -> HTTP/1.1 200 OK      <- las credenciales valen
-p4_test: 3) CANAL DE VIAJES OK: HTTP 400 al apunte de prueba (rechazado a proposito)
-p4_test: 4) CANAL DE ALARMAS OK: HTTP 400 (mascara 0: no se calla nada)
+p4_test: 3) CANAL DE VIAJES OK: la P4 ha contestado HTTP 400 al apunte de prueba (rechazado a proposito, no se ha creado nada)
+p4_test: 4) CANAL DE ALARMAS OK: la P4 acepta la orden (HTTP 200; con mascara 0 no se ha callado ninguna alarma)
 p4_test: 5) con credenciales malas la P4 contesta 401, como debe
 ```
+
+Ojo con los dos códigos, que no significan lo mismo (revisión del 13-oct-2026):
+
+- **Viajes**: la prueba manda una operación que la P4 no conoce, así que lo
+  correcto es un **400 exacto** (ni 404, ni 413, ni 401: esos también son 4xx y
+  antes se daban por buenos).
+- **Alarmas**: se manda el cuerpo real (`{"alarmas":0}`) y se exige **2xx**. Un
+  **400** aquí es un fallo: quiere decir "no entiendo esa orden", no "atendida".
 
 Si sale `CANAL DE VIAJES ROTO`, o `401` donde debería salir un 4xx, los apuntes
 del cuaderno no se guardarán: se arregla poniendo usuario y clave del portal en
@@ -101,10 +109,10 @@ Todo lo comprobable sin datos reales ni sondas, con las dos placas en el banco:
 | P4 -> cabina, telemetria | UDP :4242, contador y CRC | **OK**: 1 paquete/s, 0 corruptos |
 | Centinelas de "sin dato" | P4 sin shunt + simulador | **OK**: se pintan como `--` |
 | Cabina -> P4, latido | UDP :4243 | **OK**: la P4 lo registra con su IP |
-| Cabina -> P4, viajes | POST /api/viaje (auth ESTRICTA) | **OK**: HTTP 400 a la operacion de prueba |
-| Cabina -> P4, alarmas | POST /api/alarma | **OK**: HTTP 400 con mascara 0 |
+| Cabina -> P4, viajes | POST /api/viaje (nivel ABIERTO del portal: usuario/clave del portal, no la de administracion) | **OK**: HTTP 400 a la operacion de prueba |
+| Cabina -> P4, alarmas | POST /api/alarma | **OK**: HTTP 2xx con mascara 0 (un 400 aqui es fallo) |
 | Credenciales malas | POST con clave incorrecta | **OK**: 401, el aviso de Ajustes saltaria |
-| Contrato entre repos | `test/protocolo_cabina.sh` | **OK**: 15 campos y 4 operaciones |
+| Contrato entre repos | `victron/test/protocolo_cabina.sh` (vive en el repo de la P4) | **OK**: 15 campos y 4 operaciones |
 | Reinicio rapido de la P4 | reset y cronometro | **OK**: vuelve a los ~15 s |
 | Arranque lento de la P4 | P4 tardando ~50 s en levantar el AP | **OK**: reintenta y entra sola |
 | Apagon/encendido de la cabina | reset del satelite | **OK**: datos a los ~7 s |

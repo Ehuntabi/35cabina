@@ -69,10 +69,10 @@ Lo que manda la P4, una vez por segundo. No se toca nada aquí, solo se mira.
 
 ### Silenciar una alarma desde aquí
 
-**El pitido de las alarmas lo hace la pantalla de 7"**, que es la que lleva
-altavoz; esta de cabina no tiene. Para callarlo desde el asiento del conductor
-—que es justo lo que antes obligaba a ir hasta atrás en marcha— esta pantalla le
-manda la orden a la P4.
+**El pitido de las alarmas lo hace la P4** (la pantalla de 7"), que es la que
+lleva el altavoz; esta de cabina no tiene. Para callarlo desde el asiento del
+conductor —que es justo lo que antes obligaba a ir hasta atrás en marcha— esta
+pantalla le manda la orden a la P4.
 
 Cuando la P4 tiene una alarma activa (agua en reserva, aguas grises llenas,
 batería baja o congelador), en la esquina de **la tarjeta que toca** sale un
@@ -106,8 +106,12 @@ pitido, no la señal visual.
 **Dos toques seguidos en cualquier parte de la pantalla de Datos** cambian el
 brillo entre **30 %** y **100 %**. Otros dos toques y vuelve al anterior.
 
-- **Se acuerda al apagar.** Enciendes y sigue como lo dejaste.
-- **De fábrica arranca al 100 %.**
+- **El brillo no se recuerda.** Enciendes y vuelve **siempre al 100 %**: el valor
+  se guarda, pero al arrancar no se aplica (`brillo.c:45`). Es a propósito: con la
+  pantalla oscura, un arranque al 30 % se ve como si estuviera apagada y no habría
+  forma de subirla sin saber dónde tocar.
+- **Al cambiar de brillo sí queda apuntado** (para el registro), pero no se aplica
+  al siguiente encendido.
 - Los toques tienen que ir seguidos: si tardas más de **0,4 segundos** entre uno y
   otro, no cuenta y no pasa nada.
 - **Deslizar para cambiar de pantalla no cuenta como toque**, así que no vas a
@@ -127,9 +131,10 @@ cuanto la P4 vuelva, y **no se pierden al quitar el contacto**. Está siempre a
 la vista mientras quede algo, porque esta pantalla no puede saber que vas a
 apagar — se queda sin corriente y ya.
 
-> **Si ese aviso se pone ROJO y dice «CASI LLENA», hazle caso.** Caben **16**
-> apuntes esperando, y como la P4 está siempre encendida lo normal es que la cola
-> se vacíe sola en segundos: que llegue a acumular tantos significa que no le
+> **Si ese aviso se pone ROJO y dice «CASI LLENA», hazle caso.** Caben **14**
+> apuntes esperando (la cola son 16 huecos y 2 están reservados para que el cierre
+> del viaje entre siempre), y como la P4 está siempre encendida lo normal es que la
+> cola se vacíe sola en segundos: que llegue a acumular tantos significa que no le
 > están llegando —la P4 sin corriente, o esta pantalla fuera de su wifi—. Si se
 > llena del todo, el siguiente apunte **no se puede anotar** y te lo dice.
 
@@ -764,7 +769,7 @@ la vez:
 
 - **SSID** y **Password** — la red de la P4 a la que se conecta esta pantalla.
   Sirve para **cambiar a otra P4 sin reflashear**.
-- **Usuario del portal** y **Clave del portal** — los del **portal** de la P4,
+- **Usuario** y **Clave** — los del **portal** de la P4,
   **no los del Wi-Fi**. Hacen falta para todo lo que esta pantalla le manda:
   los apuntes del viaje y **callar las alarmas**. Se leen en la P4, en Ajustes →
   Wi-Fi → tarjeta **"Acceso a Actualizar y Claves"** (o aquí mismo, que se quedan
@@ -772,9 +777,10 @@ la vez:
 
 **Para escribir en un campo, tócalo**: se abre un editor a pantalla completa con
 el nombre del campo arriba, el texto en grande y el teclado debajo; se acepta con
-el **✓** del teclado y se descarta con la **✗**. Los campos **se ven en claro**
-(no van tapados), así que de aquí puedes leer la clave del portal si la has
-perdido.
+el **✓** del teclado y se descarta con la **✗**. En la pantalla de ajustes el
+**SSID** se ve tal cual, pero las dos claves (Password y Clave) van **tapadas**
+con puntos; al abrir el editor sí se ven en claro, así que de ahí puedes leer la
+clave del portal si la has perdido.
 
 Al tocar **"Guardar y reconectar"**:
 
@@ -943,9 +949,12 @@ Para no llevarse sorpresas:
 4. **No tiene reloj propio.** Sin haber visto a la P4 desde que arrancó no sabe
    qué hora es; en ese caso el apunte se marca como de **hora aproximada** y la
    P4 le pone la de recepción.
-5. **No lleva acentos ni ñ en pantalla.** Las letras que trae la fuente son solo
-   las básicas; poner acentos sacaría cuadraditos vacíos. Decisión consciente:
-   compilar fuentes nuevas era mucho lío para poco.
+5. **Sí lleva acentos y ñ.** Desde el 16-oct-2026 las fuentes son las Inter de
+   `main/fonts/fonts_es.h`, con el castellano completo: por la pantalla se lee
+   "Área de pago", "CONFIGURACIÓN", "Kilómetros". Lo que **no** traen son los
+   símbolos de moneda (€, £) ni un par de letras raras (ł, č), así que las monedas
+   van con su código (EUR, GBP) y "zl"/"Kc" sin diacríticos. Antes (con las
+   Montserrat del SDK) sí era verdad lo de los cuadraditos.
 
 Lo que viene: la posición de cada apunte suelto (el recorrido y los kilómetros
 del viaje ya están, ver §9).

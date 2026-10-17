@@ -35,10 +35,14 @@
 #define CAB_BACK_GAP  8
 
 /* Lo que hay que dejar libre a la izquierda del titulo para no pisar el boton.
- * 320 px de ancho no dan para centrar "CONFIGURACIÓN" (185,9 px) en la fila
- * entera: el rotulo empezaba en x=59 y el boton llega a x=80 -- 21 px de solape
- * (visto en la placa; con "AJUSTES WI-FI" eran 9,3 px). Centrandolo en el hueco
- * que queda a la derecha del Volver sigue centrado y no se pisan. */
+ * La pantalla son 480x320 logicos (480 de ancho, no 320: display.h + la
+ * rotacion de 90 grados de main.c). El boton "Volver" ocupa de 0 a 80 y el
+ * rotulo "CONFIGURACIÓN" mide 185,9 px. Los 21 px de solape que se midieron en
+ * la placa salen de una fila de 304 px (la pantalla a 320 de ancho menos los
+ * 8 px de pad a cada lado): (304 - 185,9) / 2 = 59, que es donde empezaba el
+ * rotulo. Con los 480 de ahora el centrado a fila entera ya no llega al boton,
+ * pero el pad se queda: es lo que impide que un rotulo mas largo (o un boton
+ * mas ancho) acabe debajo. */
 #define CAB_TITULO_X  (CAB_BACK_W + CAB_BACK_GAP)
 
 /* Centra un titulo de cabecera en el hueco de la derecha del Volver: la

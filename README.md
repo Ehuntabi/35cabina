@@ -323,13 +323,15 @@ de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   en julio una estimación de "ronda los 300" para la parada (que eran 505) costó
   una auditoría y apuntes perdidos en silencio.
 
-  **`CAPACIDAD` de la cola: 64 → 16** (24-ago-2026), y el número sale de una
-  cuenta y no de un redondeo: la partición `nvs` son 16 KB (`partitions.csv`) y
-  ahí dentro viven además las credenciales Wi-Fi, la calibración del nivel, el
-  estado de la salida y los contadores del viaje. Con la pernocta a 693 bytes, 64
-  no se alcanzan ni de lejos: la NVS se llenaría mucho antes y el aviso saldría
-  como un error de escritura en vez de un «cola llena». No se perdía nada en
-  silencio, pero el mensaje era el equivocado.
+  **`CAPACIDAD` de la cola: 64 → 16** (24-ago-2026). Ojo: la partición `nvs`
+  **pasó a 64 KB el 09-sep-2026** (`partitions.csv`: 0x10000; antes 0x4000 = 16 KB),
+  así que el motivo original ya no es el que hay: con 16 KB no cabían ni de lejos
+  las 16 entradas de hasta 896 B (~14 KB) más el resto de lo que vive en el mismo
+  namespace (Wi-Fi, calibración, estado de la salida, contadores) y la página que
+  NVS se reserva para el compactado. Con 64 KB sí cabe, y las 16 se quedan porque
+  ya eran el número que hacía falta, no el problema (ver `main/net/viaje_cola.c`).
+  Y lo que de verdad usa la pantalla son **14**: dos huecos están reservados para
+  el cierre y el descarte del viaje (`VIAJE_COLA_RESERVA_CONTROL`, `viaje_cola.h`).
 
   Y se avisa **antes** de llegar: a menos de 3 huecos, la pastilla de la pantalla
   de datos se pone roja y añade «CASI LLENA» (`VIAJE_COLA_CAPACIDAD`, expuesto en
@@ -478,7 +480,12 @@ de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   Hasta aquí la pantalla iba **clavada al 5 %** desde el `chore: scaffold
   inicial`: era la línea del ejemplo del fabricante y nadie la revisó, así que
   el satélite ha estado meses casi apagado sin que hubiera forma de subirlo.
-  Ahora alterna **30 % ↔ 100 %**, arranca al 100 % y se recuerda.
+  Ahora alterna **30 % ↔ 100 %** y **arranca SIEMPRE al 100 %**: el valor se
+  guarda en NVS (y se lee para dejarlo en el log), pero **no se aplica al
+  encender** (`brillo.c:45`). Es a propósito: con el tema oscuro, arrancar al 30 %
+  se ve como una pantalla apagada y, como el valor se recordaba, un arranque a
+  oscuras se quedaba grabado y volvía a pasar (misma regla que la 5" desde el
+  9-oct-2026).
 
   Tres decisiones que no son obvias:
 
