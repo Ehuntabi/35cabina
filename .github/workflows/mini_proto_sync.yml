@@ -52,8 +52,25 @@ jobs:
 
       - name: Comparar mini_proto.h entre los tres proyectos
         run: |
-          diff 35cabina/main/net/mini_proto.h victron/main/net/mini_proto.h
-          diff 35cabina/main/net/mini_proto.h cabina5/main/net/mini_proto.h
+          # Mismo reintento que el paso del ciclo del viaje (carrera de push
+          # entre los tres repos: se publican de uno en uno).
+          for intento in 1 2 3 4; do
+            if diff -q 35cabina/main/net/mini_proto.h victron/main/net/mini_proto.h >/dev/null &&
+               diff -q 35cabina/main/net/mini_proto.h cabina5/main/net/mini_proto.h >/dev/null; then
+              echo "mini_proto.h identico en los tres proyectos"
+              exit 0
+            fi
+            if [ "$intento" = 4 ]; then break; fi
+            echo "--- intento $intento: alguno de los vecinos puede ir por detras; se reintenta en 45 s"
+            sleep 45
+            for r in victron cabina5; do
+              git -C "$r" fetch -q origin main && git -C "$r" reset -q --hard origin/main || true
+            done
+          done
+          diff 35cabina/main/net/mini_proto.h victron/main/net/mini_proto.h || true
+          diff 35cabina/main/net/mini_proto.h cabina5/main/net/mini_proto.h || true
+          echo "mini_proto.h se ha separado entre los proyectos"
+          exit 1
 
   # Espejo del job "viaje_body_sync" de victron (el otro repo del par): el
   # limite de cuerpo del apunte tambien se mantiene sincronizado A MANO
@@ -136,7 +153,16 @@ jobs:
 
       - name: El ciclo del viaje, identico en las dos cabinas
         run: |
-          fallo=0
+          # CARRERA DE PUSH (17-oct-2026): los dos repos de las cabinas se
+          # publican de uno en uno, y este job compara contra la rama del
+          # vecino en el instante en que corre. Un cambio que toca el espejo
+          # llega primero a un repo y unos segundos despues al otro; si el job
+          # del primero corre en medio ve la version vieja del vecino y se pone
+          # rojo SIN que haya deriva ninguna (paso tres veces seguidas el
+          # 17-oct). Antes de darse por vencido se vuelve a traer la rama del
+          # vecino y se reintenta: si la diferencia es de verdad, sigue ahi al
+          # cuarto intento y el job cae igual.
+          compara() {
           for f in main/net/viaje_cola.c \
                    main/net/viaje_cola.h \
                    main/net/p4_api.c \
@@ -165,7 +191,7 @@ jobs:
                    main/ui/ui_style.h \
                    test/estilo.sh ; do
             if [ ! -f "35cabina/$f" ] || [ ! -f "cabina5/$f" ]; then
-              echo "FALTA $f en alguno de los dos repos"; fallo=1; continue
+              echo "FALTA $f en alguno de los dos repos"; return 1
             fi
             # Se comparan SIN las lineas de #include: la 5" es LVGL 9 y la 3,5"
             # LVGL 8, asi que el include de compatibilidad difiere y no es
@@ -175,11 +201,20 @@ jobs:
               echo "DISTINTO: $f"
               diff -u <(grep -v '^#include' "35cabina/$f") \
                       <(grep -v '^#include' "cabina5/$f") | head -40
-              fallo=1
+              return 1
             fi
           done
-          [ "$fallo" = 0 ] || { echo "Las dos cabinas tienen que llevar el MISMO ciclo de viaje"; exit 1; }
-          echo "ciclo del viaje identico en las dos cabinas"
+          return 0
+          }
+          for intento in 1 2 3 4; do
+            if compara; then echo "ciclo del viaje identico en las dos cabinas"; exit 0; fi
+            if [ "$intento" = 4 ]; then break; fi
+            echo "--- intento $intento: cabina5 puede ir por detras (se publica de uno en uno); se reintenta en 45 s"
+            sleep 45
+            git -C cabina5 fetch -q origin main && git -C cabina5 reset -q --hard origin/main || true
+          done
+          echo "Las dos cabinas tienen que llevar el MISMO ciclo de viaje"
+          exit 1
 
       # Y la clasificacion de la que depende la garantia del cierre se PRUEBA
       # (saca la funcion real de viaje_cola.c y la compila).
