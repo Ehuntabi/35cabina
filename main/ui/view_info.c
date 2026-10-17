@@ -1500,14 +1500,29 @@ void view_info_create(lv_obj_t *parent)
     lv_obj_set_style_bg_color(s_pendientes, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_bg_opa(s_pendientes, LV_OPA_COVER, 0);
     lv_obj_set_style_text_color(s_pendientes, UI_COLOR_SOBRE_CLARO, 0);
-    /* Letra 24 y no 14: con la 14 quedaba tan pequena que se confundia con un
-     * rotulo mas de la pantalla, y esto es lo unico que puede impedirte irte a
-     * casa con un apunte sin entregar. Tiene que verse de un vistazo desde el
-     * asiento, no leerse de cerca. */
+    /* Letra 24 (en esta placa el nombre va 1:1, Inter 24) y no 14: con la 14
+     * quedaba tan pequena que se confundia con un rotulo mas de la pantalla, y
+     * esto es lo unico que puede impedirte irte a casa con un apunte sin
+     * entregar. Tiene que verse de un vistazo desde el asiento.
+     *
+     * ANCHO CASI COMPLETO + SCROLL CIRCULAR (D1): el texto mas largo medido
+     * -- "14 sin cerrar - ... - NO CONTESTA, TOCA AQUI" -- mide 704 px en una
+     * pantalla de 480, asi que la pastilla se salia por los dos lados y se
+     * perdian el numero y la unica salida del atasco. Con el 96% del ancho y
+     * una sola linea, el texto corto se ve centrado y entero (LVGL conserva el
+     * CENTER si cabe) y el largo se desplaza en bucle en vez de recortarse.
+     * El alto se fija al de UNA linea (mas relleno y borde) porque, si se
+     * dejara a LV_SIZE_CONTENT, una cadena larga se partiria en varias lineas y
+     * la pastilla volveria a crecer hacia arriba. */
     lv_obj_set_style_text_font(s_pendientes, &lv_font_montserrat_24, 0);
     lv_obj_set_style_pad_hor(s_pendientes, 20, 0);
     lv_obj_set_style_pad_ver(s_pendientes, 8, 0);
     lv_obj_set_style_radius(s_pendientes, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_width(s_pendientes, lv_pct(96));
+    lv_obj_set_style_text_align(s_pendientes, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(s_pendientes, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_content_height(s_pendientes,
+                              lv_font_get_line_height(&lv_font_montserrat_24));
     /* Sombra negra alrededor: la pastilla cae ENCIMA de las tarjetas de aguas y
      * temperaturas, y sin separacion el naranja se pegaba a sus bordes. */
     lv_obj_set_style_border_color(s_pendientes, UI_COLOR_BG, 0);
@@ -1660,8 +1675,15 @@ static void pendientes_aplicar(void *arg)
         lv_label_ins_text(s_pendientes, LV_LABEL_POS_LAST, "  -  CASI LLENA");
     }
     bool rojo = (casi || atascada || cred_mal || p4_no_escribe || sin_resp);
-    lv_obj_set_style_bg_color(s_pendientes, lv_color_hex(rojo ? 0xFF4444 : 0xFF9800), 0);
-    lv_obj_set_style_text_color(s_pendientes, lv_color_hex(rojo ? 0xFFFFFF : 0x000000), 0);
+    /* Mismos valores de siempre, pero por token: el color de "error" y el de
+     * "aviso" son de la paleta, no numeros sueltos. El texto va en blanco o en
+     * negro segun el fondo porque la pastilla es CLARA. */
+    lv_obj_set_style_bg_color(s_pendientes,
+                              lv_color_hex(rojo ? UI_COLOR_RED_HEX
+                                                : UI_COLOR_ORANGE_HEX), 0);
+    lv_obj_set_style_text_color(s_pendientes,
+                                lv_color_hex(rojo ? UI_COLOR_TEXT_HEX
+                                                  : UI_COLOR_SOBRE_CLARO_HEX), 0);
 
     lv_obj_clear_flag(s_pendientes, LV_OBJ_FLAG_HIDDEN);
     lv_obj_align(s_pendientes, LV_ALIGN_BOTTOM_MID, 0, -6);

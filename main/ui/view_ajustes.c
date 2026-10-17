@@ -116,7 +116,7 @@ static void ta_click_cb(lv_event_t *e)
  * mas largo tecleado aqui se guardaba bien la primera vez y luego, en la
  * siguiente recarga de esta pantalla, fallaba a leerse -- el campo aparecia
  * vacio, como si "se hubiera olvidado" la credencial. entry_screen_open ya
- * respeta lv_textarea_get_max_length() del campo origen (entry_screen.c:113),
+ * respeta lv_textarea_get_max_length() del campo origen (entry_screen_open),
  * asi que el editor a pantalla completa hereda el tope sin tocar nada mas
  * alli. Detectado por el usuario el 09-sep-2026. */
 /* 'oculto': el campo se enseña con puntitos y solo se ve al abrirlo en el
@@ -137,7 +137,8 @@ static void ta_click_cb(lv_event_t *e)
  * Los numeros son fijos, como en la 5" ("posiciones a mano, sin flex"): esta
  * pantalla son 480x320 logicos, el formulario deja 8 px de margen a cada lado
  * (464 utiles), y 92 del rotulo + 8 de aire dejan 364 para la caja. En 92 px
- * entra el rotulo mas largo ("Password", 62 px medidos con la Inter 14). */
+ * entra el rotulo mas largo ("Password", 64 px medidos con la Inter 14; el
+ * comentario decia 62 y no era la medida real). */
 #define WF_MARGEN     8
 #define WF_ROTULO_W   92
 #define WF_AIRE       8
@@ -200,6 +201,20 @@ static void mostrar_menu(bool menu)
         lv_obj_add_flag(s_menu, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(s_wifi, LV_OBJ_FLAG_HIDDEN);
     }
+}
+
+/* Estado del guardado del Wi-Fi, con el COLOR del resultado (D4).
+ *
+ * POR QUE: s_status_lbl nacia en verde y se quedaba en verde tambien cuando el
+ * guardado fallaba o faltaba el SSID; el usuario leia "Falta el SSID" en verde
+ * de exito. Aqui se cambia el texto y el color a la vez, para que no haya una
+ * salida que se deje uno de los dos. Verde = se guardo; rojo = no. */
+static void wifi_estado(const char *txt, bool ok)
+{
+    if (!s_status_lbl) return;
+    lv_label_set_text(s_status_lbl, txt);
+    lv_obj_set_style_text_color(s_status_lbl,
+                                ok ? UI_COLOR_GREEN : UI_COLOR_RED, 0);
 }
 
 /* El Volver del formulario de Wi-Fi no sale de Configuracion: vuelve al menu,
@@ -481,7 +496,7 @@ static void do_guardar(void *ud)
      * que acaba de borrar el campo sin querer. No se toca nada mas: ni la NVS,
      * ni la referencia de "lo que habia", ni las credenciales del portal. */
     if (ssid[0] == '\0') {
-        lv_label_set_text(s_status_lbl, "Falta el SSID: no lo he guardado");
+        wifi_estado("Falta el SSID: no lo he guardado", false);
         ESP_LOGW(TAG, "Guardado cancelado: el SSID esta vacio");
         return;
     }
@@ -498,11 +513,30 @@ static void do_guardar(void *ud)
                       == ESP_OK);
 
     if (ok_wifi && ok_portal) {
-        lv_label_set_text(s_status_lbl, "Guardado, reconectando...");
+        wifi_estado("Guardado, reconectando...", true);
         ESP_LOGI(TAG, "Nuevas credenciales guardadas desde Ajustes");
     } else {
-        lv_label_set_text(s_status_lbl, "No he podido guardarlo");
+        wifi_estado("No he podido guardarlo", false);
         ESP_LOGW(TAG, "Guardado fallido: wifi=%d portal=%d", ok_wifi, ok_portal);
+    }
+}
+
+/* Guarda SOLO las credenciales del PORTAL. Es la accion del boton rojo
+ * ("Cancelar") del cartel "Cambiar de red?" (D7).
+ *
+ * POR QUE HACE FALTA: si has cambiado la red, el cartel pregunta antes de
+ * tocar la Wi-Fi. Si decides cancelar, hasta ahora se salia sin guardar NADA,
+ * asi que lo que habias tecleado en Usuario/Clave del portal se perdia sin
+ * avisar (la red no se toca, pero el portal si se puede guardar sin riesgo).
+ * Este callback guarda esa parte y lo dice en la linea de estado. */
+static void guardar_solo_portal(void *ud)
+{
+    (void)ud;
+    if (save_portal_creds(lv_textarea_get_text(s_http_user_ta),
+                          lv_textarea_get_text(s_http_pass_ta)) == ESP_OK) {
+        wifi_estado("Guardado.", true);
+    } else {
+        wifi_estado("No he podido guardarlo", false);
     }
 }
 
@@ -524,12 +558,7 @@ static void guardar_cb(lv_event_t *e)
      * mensaje claro. La confirmacion se reserva para lo que si puede dejarte
      * sin datos, que es cambiar de red. */
     if (!cambio_red) {
-        if (save_portal_creds(lv_textarea_get_text(s_http_user_ta),
-                              lv_textarea_get_text(s_http_pass_ta)) == ESP_OK) {
-            lv_label_set_text(s_status_lbl, "Guardado.");
-        } else {
-            lv_label_set_text(s_status_lbl, "No he podido guardarlo");
-        }
+        guardar_solo_portal(NULL);
         return;
     }
 
@@ -538,6 +567,10 @@ static void guardar_cb(lv_event_t *e)
     /* Naranja, el mismo color del titulo de esta pantalla. */
     confirm_screen_open("Cambiar de red?", body, 0xFF9800,
                         "Si, cambiar", "Cancelar", do_guardar, NULL);
+    /* El rojo ("Cancelar") no puede tirar lo tecleado del portal: guarda SOLO
+     * esa parte y vuelve al formulario. Se engancha DESPUES de open porque
+     * cada apertura limpia la accion del boton izquierdo. */
+    confirm_screen_no_accion(guardar_solo_portal, NULL);
 }
 
 void view_ajustes_refresh(void)
@@ -554,7 +587,7 @@ void view_ajustes_refresh(void)
     lv_textarea_set_text(s_http_pass_ta, hp);
     mostrar_menu(true);
 
-    lv_label_set_text(s_status_lbl, "");
+    wifi_estado("", true);
 }
 
 void view_ajustes_create(lv_obj_t *parent)
@@ -825,9 +858,8 @@ void view_ajustes_create(lv_obj_t *parent)
     lv_obj_center(btn_lbl);
 
     s_status_lbl = lv_label_create(s_wifi);
-    lv_label_set_text(s_status_lbl, "");
-    lv_obj_set_style_text_color(s_status_lbl, UI_COLOR_GREEN, 0);
     lv_obj_set_style_text_font(s_status_lbl, &lv_font_montserrat_14, 0);
+    wifi_estado("", true);
 
     /* Se entra siempre por el menu. */
     mostrar_menu(true);
