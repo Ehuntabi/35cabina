@@ -24,6 +24,7 @@
 #include "net/udp_rx.h"
 #include "net/viaje_cola.h"
 #include "net/p4_test.h"   /* auto-test del canal de subida a la P4 */
+#include "net/ota_rx.h"   /* actualizacion por Wi-Fi desde Ajustes */
 #include "ui/view_info.h"
 #include "capture_carousel.h"   /* modo captura de pantallas por USB */
 #include "esp_log.h"
@@ -418,6 +419,14 @@ void setup(void) {
     lvgl_port_unlock();
 
     udp_rx_start();
+
+    /* EL CLIENTE DE ACTUALIZACION (net/ota_rx.c), y va justo aqui:
+     *   - para dar por buena una version recien instalada hace falta el enlace
+     *     con la P4 (asociada + IP), y eso empieza a existir en udp_rx_start();
+     *   - deja en el log de que particion esta corriendo, que es el primer dato
+     *     para saber si una actualizacion se aplico de verdad.
+     * Si no hay nada que validar (el caso normal) solo escribe esas dos lineas. */
+    ota_rx_arranque();
 
     /* El repartidor de apuntes pendientes. Va DESPUES de udp_rx_start() porque
      * necesita la red, y arranca aunque la cola este vacia: lo normal es que

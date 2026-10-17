@@ -32,13 +32,31 @@ CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 # dio (tolera cualquier chip de flash) y el bootloader pasa a QIO de verdad
 # despues. Auditado el 07-sep-2026.
 
-# === Tabla de particiones propia (partitions.csv, 4 MB para la app) ===
+# === Tabla de particiones propia (partitions.csv, DOS huecos de app) ===
 # Sin esto el build usa la de fabrica (particion 'factory' de 1 MB) y el binario
 # de ~1,9 MB NO CABE: "app partition is too small for binary ... overflow".
 # Estaba solo en el sdkconfig; al regenerarlo (migracion a 5.5.5, 7-oct-2026) se
 # perdio y el build fallo al final, despues de compilar todo.
+#
+# Desde el 17-oct-2026 la tabla tiene ota_0 + ota_1 (reparto nuevo, igual que la
+# 5"): con una sola particion de app NO hay actualizacion por Wi-Fi. Ese cambio
+# necesita UN grabado por cable; ver el comentario largo de partitions.csv.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# ── ANTILADRILLO DE LA ACTUALIZACION OTA (17-oct-2026) ──────────────────────
+# La pantalla ya se actualiza sola desde Ajustes (main/net/ota_rx.c). Esta opcion
+# es la RED DE SEGURIDAD: con ella, el bootloader arranca la version recien
+# instalada EN PRUEBAS y solo la da por buena cuando la app llama a
+# esp_ota_mark_app_valid_cancel_rollback() (aqui: cuando engancha con la P4,
+# tiene IP y aguanta 8 s; ver tarea_validar). Si la nueva se queda colgada o sin
+# red y la placa se reinicia, el bootloader vuelve SOLA a la version anterior.
+#
+# OJO, Y ES FACIL DE CREER QUE YA ESTA: esto lo ejecuta el BOOTLOADER, y una OTA
+# solo cambia la app. En una placa grabada solo por OTA con un bootloader viejo
+# la proteccion NO existe; en la 3,5" queda puesta desde el grabado por cable
+# que estrena la tabla nueva.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # === LVGL: fuentes que USA el codigo ===
 # OJO: aqui solo estaban la 22 y la 48, y el sdkconfig versionado tenia las siete

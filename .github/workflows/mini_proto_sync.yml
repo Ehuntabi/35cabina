@@ -141,6 +141,8 @@ jobs:
                    main/net/viaje_cola.h \
                    main/net/p4_api.c \
                    main/net/p4_api.h \
+                   main/net/ota_rx.c \
+                   main/net/ota_rx.h \
                    main/net/apunte.c \
                    main/net/apunte.h \
                    main/net/udp_rx.c \
@@ -159,6 +161,7 @@ jobs:
                    test/viaje_cola_libre_arnes.c test/viaje_cola_libre.sh \
                    test/viaje_horario_arnes.c test/viaje_horario.sh \
                    test/viaje_contadores.sh test/viaje_contadores_arnes.c \
+                   test/ota_version.sh test/ota_version_arnes.c \
                    main/ui/ui_style.h \
                    test/estilo.sh ; do
             if [ ! -f "35cabina/$f" ] || [ ! -f "cabina5/$f" ]; then
@@ -198,6 +201,12 @@ jobs:
       # cruzarlos no salta a la vista (un viaje de 1200 km se lee como 4920).
       - name: Los km y las horas de conduccion llegan enteros
         run: bash 35cabina/test/viaje_contadores.sh
+
+      # Y las decisiones de la actualizacion OTA (comparacion de versiones y
+      # sha256): se sacan del ota_rx.c real y se compilan en el runner. Un error
+      # aqui deja la pantalla con un firmware que no arranca.
+      - name: La actualizacion OTA decide bien (version y sha256)
+        run: bash 35cabina/test/ota_version.sh
 
       # Y el estilo de la UI: que ningun nombre de fuente se quede sin alias
       # (si se queda, tira de la del SDK y el texto sale al tamaño literal, que
