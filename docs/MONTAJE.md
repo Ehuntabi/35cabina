@@ -6,7 +6,7 @@ Escrito el 7-oct-2026, cuando se sustituyó la unidad averiada por una nueva.
 ## Antes de llevarla
 
 La placa sale del banco ya probada: arranca, se asocia al AP de la P4, recibe
-telemetría, y la UI, el táctil y el brillo funcionan (100 % ↔ 30 % con doble
+telemetría, y la UI, el táctil y el brillo funcionan (100 % ↔ 25 % con doble
 toque). El firmware que lleva es el **v2.16** o posterior (el que esté publicado
 en la Release: `git describe --tags --match "v*.*"`).
 

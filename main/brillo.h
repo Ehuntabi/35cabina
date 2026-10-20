@@ -16,15 +16,16 @@
 extern "C" {
 #endif
 
-/* Los dos unicos valores validos. */
-#define BRILLO_BAJO   30
+/* Los dos unicos valores validos. El bajo lo pidio el usuario al 25 % el
+ * 20-oct-2026 (antes 30 %): un paso por debajo, para las noches sin luna. */
+#define BRILLO_BAJO   25
 #define BRILLO_ALTO  100
 
 /* Enciende la retroiluminacion AL MAXIMO, siempre, mire lo que mire la NVS.
  * Necesita NVS ya arrancado y el display ya iniciado, porque el PWM de la
  * retroiluminacion se configura dentro de bsp_display_start_with_config().
  *
- * NO aplica el nivel guardado a proposito: el 30 % se ve como una pantalla
+ * NO aplica el nivel guardado a proposito: el 25 % se ve como una pantalla
  * apagada (tema oscuro) y, como el valor se recuerda, un arranque a oscuras se
  * grababa y volvia a pasar. Arrancando al maximo, un desliz bajando el brillo
  * siempre se arregla desenchufando. */

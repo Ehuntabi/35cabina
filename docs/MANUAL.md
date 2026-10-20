@@ -104,15 +104,15 @@ pitido, no la señal visual.
 ### Cambiar el brillo: dos toques
 
 **Dos toques seguidos en cualquier parte de la pantalla de Datos** cambian el
-brillo entre **30 %** y **100 %**. Otros dos toques y vuelve al anterior.
+brillo entre **25 %** y **100 %**. Otros dos toques y vuelve al anterior.
 
 - **El brillo no se recuerda.** Enciendes y vuelve **siempre al 100 %**: el valor
   se guarda, pero al arrancar no se aplica (`brillo.c:45`). Es a propósito: con la
-  pantalla oscura, un arranque al 30 % se ve como si estuviera apagada y no habría
+  pantalla oscura, un arranque al 25 % se ve como si estuviera apagada y no habría
   forma de subirla sin saber dónde tocar.
 - **Al cambiar de brillo sí queda apuntado** (para el registro), pero no se aplica
   al siguiente encendido.
-- Los toques tienen que ir seguidos: si tardas más de **0,4 segundos** entre uno y
+- Los toques tienen que ir seguidos: si tardas más de **0,65 segundos** entre uno y
   otro, no cuenta y no pasa nada.
 - **Deslizar para cambiar de pantalla no cuenta como toque**, así que no vas a
   cambiar el brillo sin querer al moverte.
