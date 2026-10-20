@@ -2417,7 +2417,12 @@ static void viaje_do_finalizar(void *ud)
      * el cierre se quedaba en la cola y el viaje no se cerraba (lo cazo la
      * revision adversarial del 13-oct-2026, el mismo dia que se anadio 'dev'). */
     char cuerpo[160];
-    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), trip_eventos_get() + 1,
+    /* SI LA CUENTA NO SE PUEDE LEER, EL FIN VA SIN 'eventos' (tanda 2 de la
+     * auditoria del 18-oct-2026): decir 1 daba el viaje por COMPLETO aunque
+     * faltaran apuntes. Sin el campo, la P4 lo marca "SIN VERIFICAR". */
+    uint32_t n_ev = 0;
+    uint32_t eventos_fin = trip_eventos_get_ok(&n_ev) ? n_ev + 1 : 0;
+    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), eventos_fin,
                       s_destino_nuevo, s_viaje_km_llegada);
 
     viaje_cola_error_t motivo;
@@ -3369,9 +3374,14 @@ static lv_obj_t *pantalla_crear(lv_obj_t *parent, pantalla_t id,
 
 /* Refresca hora y puntos de TODAS las pantallas de menu. Una sola pasada por
  * segundo: son siete etiquetas, no compensa afinar mas. */
+/* Pantalla de esta vista, para no refrescar la barra cuando no se ve
+ * (tanda 2 de la auditoria del 18-oct-2026). */
+static lv_obj_t *s_pantalla_barra;
+
 static void barra_timer_cb(lv_timer_t *t)
 {
     (void)t;
+    if (s_pantalla_barra && lv_scr_act() != s_pantalla_barra) return;
     mini_data_t d;
     data_model_get(&d);
     uint32_t ms     = (uint32_t)(esp_timer_get_time() / 1000);
@@ -5368,6 +5378,7 @@ void view_registro_create(lv_obj_t *parent)
     confirm_screen_init(parent);
 
     /* Hora y puntos de la franja, una pasada por segundo. */
+    s_pantalla_barra = lv_obj_get_screen(parent);
     lv_timer_create(barra_timer_cb, 1000, NULL);
 
     /* El menu de partida sale del ESTADO, no de un valor por defecto: si se

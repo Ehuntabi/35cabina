@@ -53,3 +53,7 @@ Thumbs.db
 
 # Descargas del fabricante (van a documentacion/, no al repo). Ver docs/MATERIAL_FABRICANTE.md
 docs/Guition*/
+
+# Bytecode de los ayudantes de los tests (test/extrae_cuerpo.py)
+__pycache__/
+*.pyc
