@@ -20,6 +20,7 @@
 #include "esp_lcd_panel_interface.h"
 
 #include "lv_port.h"
+#include "capture_carousel.h"   /* CAPTURE_CAROUSEL_ENABLE: el snapshot solo hace falta ahi */
 #include "lvgl.h"
 
 #ifdef ESP_LVGL_PORT_TOUCH_COMPONENT
@@ -687,10 +688,20 @@ static void lvgl_port_flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, 
             }
 
             /* Snapshot (3.M5): el trozo, ya rotado, va a su sitio en la copia
-             * de lo que el panel esta enseñando. */
+             * de lo que el panel esta enseñando.
+             *
+             * SOLO EN EL BUILD DE DOCUMENTACION (tanda 1 de la auditoria del
+             * 18-oct-2026). Esto copiaba el cuadro ENTERO en cada flush (153.600
+             * px, otros 307 KB de PSRAM por frame, y en ROT_90 leyendo con salto
+             * de 640 B: un fallo de caché por píxel) para un snapshot que solo
+             * usa capture_carousel.c -- y ese fichero va compilado FUERA en el
+             * firmware normal. Con el macro a 0 no hay copia ni se reservan los
+             * 307 KB (el buffer se pide dentro de lvgl_port_snapshot_store()). */
+#if CAPTURE_CAROUSEL_ENABLE
             snap_ok = lvgl_port_snapshot_store(disp_ctx, drv, to, x_start_tmp,
                                                y_start_tmp, width, height,
                                                trans_width, trans_height) || snap_ok;
+#endif
 
             if (0 == i) {
                 if (disp_ctx->draw_wait_cb) {
