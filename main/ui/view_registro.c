@@ -1959,7 +1959,7 @@ static const char *cola_fallo_texto(viaje_cola_error_t motivo)
  * el resto del viaje. Se limpia (pendiente=false) solo al tener EXITO; si el
  * usuario abandona el intento sin reintentar, el conteo ya hecho se queda
  * puesto -- eso SI es la perdida real que "esperados" tiene que reflejar
- * (mismo espiritu que trip_eventos_get(), ver config_storage.c). Requiere
+ * (mismo espiritu que trip_eventos_get_ok(), ver config_storage.c). Requiere
  * que do_save() NO llame a show_grid()/clear_forms() en el fallo de un
  * suelto -- si no, no habria forma de distinguir "reintento de lo mismo" de
  * "entrada nueva" (el formulario vacio no deja ninguna pista). Detectado
@@ -2259,7 +2259,7 @@ static void viaje_marcar_iniciado(void)
      * suelto abandonado sin exito en un viaje ANTERIOR dejaria su categoria
      * "pendiente" para siempre, y la primera vez que se intentase esa misma
      * categoria en ESTE viaje reutilizaria el id viejo y no contaria -- justo
-     * cuando trip_eventos_get() ya ha vuelto a 1 para este viaje nuevo. */
+     * cuando trip_eventos_get_ok() ya da 1 para este viaje nuevo. */
     memset(s_suelto_pendiente, 0, sizeof(s_suelto_pendiente));
 }
 
@@ -3893,7 +3893,7 @@ static void inicio_puntual_resultado_cb(bool ok, int estado, void *user_data)
     ESP_LOGI(TAG, "salida puntual iniciada en la P4: '%s'", EV_NOMBRE[s_puntual_tipo]);
     /* Mismo contador que un viaje real (trip_eventos), reseteado a 1 (el
      * inicio ya cuenta) igual que hace viaje_marcar_iniciado() -- para que
-     * puntual_do_terminar() pueda mandar trip_eventos_get()+1 en vez de un
+     * puntual_do_terminar() pueda mandar la cuenta real en vez de un
      * "3" fijo. El fijo asumia SIEMPRE inicio+registro+fin, pero si la
      * parada se descarta (avisa_de_lo_abierto en Terminar salida, o un
      * Deshacer que no llega a redeclararse) el registro de en medio nunca
@@ -4049,7 +4049,7 @@ static void puntual_do_terminar(void *ud)
      * 400 "json invalido": el cierre se quedaba en la cola para siempre.
      * Revision adversarial del 13-oct-2026. */
     char cuerpo[160];
-    /* trip_eventos_get()+1, NO un "3" fijo: una puntual SIEMPRE tiene como
+    /* la cuenta real +1, NO un "3" fijo: una puntual SIEMPRE tiene como
      * mucho una parada, pero no siempre la tiene DE VERDAD mandada -- si se
      * descarta con eventos abiertos (avisa_de_lo_abierto ya lo permite,
      * confirmando que se pierden) el registro de en medio nunca llega a la
@@ -4062,7 +4062,13 @@ static void puntual_do_terminar(void *ud)
      * el 09-sep-2026. */
     /* Sin cuentakilometros (0): una salida puntual no lo pide ni al empezar ni
      * al cerrar (la lectura es del VIAJE del cuaderno). */
-    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), trip_eventos_get() + 1,
+    /* SI LA CUENTA NO SE PUEDE LEER, SE VA SIN 'eventos' (tanda 2 de la
+     * auditoria del 18-oct-2026): decir 1 cerraba la salida como COMPLETA aunque
+     * faltaran apuntes. Este camino se quedo con el contrato viejo cuando el
+     * viaje normal ya lo arreglo (ver viaje_do_finalizar). */
+    uint32_t n_ev = 0;
+    uint32_t eventos_fin = trip_eventos_get_ok(&n_ev) ? n_ev + 1 : 0;
+    p4_api_cuerpo_fin(cuerpo, sizeof(cuerpo), next_trip_seq(), eventos_fin,
                       s_destino_nuevo, 0);
 
     viaje_cola_error_t motivo;
