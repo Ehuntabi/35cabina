@@ -480,9 +480,9 @@ de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   Hasta aquí la pantalla iba **clavada al 5 %** desde el `chore: scaffold
   inicial`: era la línea del ejemplo del fabricante y nadie la revisó, así que
   el satélite ha estado meses casi apagado sin que hubiera forma de subirlo.
-  Ahora alterna **20 % ↔ 100 %** y **arranca SIEMPRE al 100 %**: el valor se
+  Ahora alterna **15 % ↔ 100 %** y **arranca SIEMPRE al 100 %**: el valor se
   guarda en NVS (y se lee para dejarlo en el log), pero **no se aplica al
-  encender** (`brillo.c:45`). Es a propósito: con el tema oscuro, arrancar al 20 %
+  encender** (`brillo.c:45`). Es a propósito: con el tema oscuro, arrancar al 15 %
   se ve como una pantalla apagada y, como el valor se recordaba, un arranque a
   oscuras se quedaba grabado y volvía a pasar (misma regla que la 5" desde el
   9-oct-2026).

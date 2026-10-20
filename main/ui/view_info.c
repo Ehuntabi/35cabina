@@ -44,7 +44,7 @@
 #define COL_CARD_BG_BOT  UI_COLOR_CARD
 #define COL_TEXT         UI_COLOR_TEXT
 /* ── Paleta con dos modos ──────────────────────────────────────────────────
- * El 20% de brillo se queda con los colores de siempre. Con el 100% (que es lo
+ * El 15% de brillo se queda con los colores de siempre. Con el 100% (que es lo
  * que se usa cuando hay sol) se sube el contraste: los azules y los grises se
  * cambian por blanco, porque en un TFT al sol el azul es lo primero que
  * desaparece, y los bordes de las tarjetas pasan a blanco. Se cambia con el
@@ -125,7 +125,7 @@ static void paleta_aplicar(void)
 /* Modo contraste: YA NO LO ENCIENDE NADIE (16-oct-2026). Mismo arreglo que en
  * la 5", donde se quito el 9-oct.
  *
- * Estaba atado al brillo: al 100 % se ponia el contraste alto y al 20 % se
+ * Estaba atado al brillo: al 100 % se ponia el contraste alto y al 15 % se
  * quedaba el color. Tiene sentido para el sol, pero en la placa se veia como
  * DOS pantallas distintas en vez de la misma mas clara o mas oscura -- "es o
  * encendido o apagado, no 100% 50%" --, porque el doble toque cambiaba a la vez

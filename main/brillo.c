@@ -18,7 +18,7 @@ static uint8_t s_nivel = BRILLO_ALTO;
 /* ARRANCA SIEMPRE AL MAXIMO, y el valor guardado NO se aplica al encender.
  *
  * POR QUE (regla que ya seguia la 5" desde el 9-oct-2026, adoptada aqui el
- * 16-oct-2026): un arranque al 20 % con el tema oscuro de esta interfaz se ve
+ * 16-oct-2026): un arranque al 15 % con el tema oscuro de esta interfaz se ve
  * como una pantalla APAGADA -- es el fallo que el README avisa de mirar
  * ("La pantalla esta negra -> mirar el brillo antes que nada"). Y como el valor
  * se recuerda, un arranque a oscuras se quedaba grabado y volvia a pasar en el
@@ -26,7 +26,7 @@ static uint8_t s_nivel = BRILLO_ALTO;
  * saber donde tocar.
  *
  * LA REGLA: la luz NUNCA puede depender de lo que quedo guardado. Al encender,
- * 100 %. Si te pasas bajando al 20 % y no ves nada, se desenchufa y vuelve --
+ * 100 %. Si te pasas bajando al 15 % y no ves nada, se desenchufa y vuelve --
  * siempre hay una salida. Lo guardado se sigue leyendo para dejarlo en el log
  * (si el usuario dice "arranco apagada", el log lo dice), pero no se aplica.
  *
