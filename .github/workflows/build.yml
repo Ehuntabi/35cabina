@@ -64,3 +64,10 @@ jobs:
       # se omiten solos (aqui solo se clona este).
       - name: Auditoria (reglas del proyecto)
         run: bash test/auditar.sh
+
+      # El cambio de hora de OCTUBRE (B19, auditoria del 27-oct-2026): al atrasar
+      # el reloj, el calculo de antes decia "este tramo empezo despues del cambio" y
+      # no lo corregia. Se prueba la cuenta nueva (desfase con el que se abrio cada
+      # tramo) en los dos cambios y la caida al calculo viejo cuando no hay dato.
+      - name: El cambio de hora no deja mal los tramos abiertos
+        run: bash test/reloj_cambio_hora.sh
