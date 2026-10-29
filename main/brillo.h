@@ -44,7 +44,6 @@ uint8_t brillo_alternar(void);
 
 /* Nivel actual (BRILLO_BAJO o BRILLO_ALTO). Hoy no lo usa nadie para pintar:
  * el contraste ya no sigue al brillo. Se queda como parte de la API. */
-uint8_t brillo_nivel(void);
 
 #ifdef __cplusplus
 }

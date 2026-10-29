@@ -49,7 +49,6 @@ void brillo_init(void)
     bsp_display_brightness_set(s_nivel);
 }
 
-uint8_t brillo_nivel(void) { return s_nivel; }
 
 uint8_t brillo_alternar(void)
 {
