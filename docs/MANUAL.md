@@ -62,7 +62,8 @@ Lo que manda la P4, una vez por segundo. No se toca nada aquí, solo se mira.
 
 > **En la pantalla de 5"** —que sustituye a esta— la de Datos lleva además una
 > tarjeta en medio, de lado a lado, con los **kilómetros de la salida en curso** a
-> la izquierda y las **horas de conducción acumuladas** a la derecha (ver §9).
+> la izquierda y el **tiempo conduciendo** a la derecha, con sus unidades:
+> **`2h 35m`** y, pasado un día, **`1d 2h 35m`** (26-oct-2026; ver §9).
 > Los dos números los manda la P4; sin viaje abierto, o con la P4 sin hablar, se
 > quedan en `--`. En la 3,5" no caben: su pantalla de Datos son dos filas y no
 > hay hueco para una tercera.
@@ -103,15 +104,25 @@ pitido, no la señal visual.
 
 ### Cambiar el brillo: dos toques
 
-**Dos toques seguidos en cualquier parte de la pantalla de Datos** cambian el
-brillo entre **8 %** y **100 %**. Otros dos toques y vuelve al anterior.
+**Dos toques seguidos en cualquier parte de la pantalla de Datos** bajan el brillo;
+otros dos lo devuelven al **100 %**. A qué nivel baja depende de la pantalla:
 
-- **El brillo no se recuerda.** Enciendes y vuelve **siempre al 100 %**: el valor
-  se guarda, pero al arrancar no se aplica (`brillo.c:45`). Es a propósito: con la
-  pantalla oscura, un arranque al 8 % se ve como si estuviera apagada y no habría
-  forma de subirla sin saber dónde tocar.
-- **Al cambiar de brillo sí queda apuntado** (para el registro), pero no se aplica
-  al siguiente encendido.
+- **En la de 5"** baja al **mínimo que hayas elegido** (21-oct-2026). Tal como sale
+  de fábrica ese mínimo es el **80 %**, así que al principio parece que el doble
+  toque no hace nada: por encima de ahí el panel apenas cambia.
+- **En la de 3,5"** baja siempre al **8 %**.
+
+**En la 5" ese mínimo se elige en Configuración → Brillo mínimo**, con **−** y
+**+**, de 5 en 5 entre el **5 %** y el **80 %**. Si la pantalla está en ese momento
+en el nivel bajo, el cambio se ve en el acto; si está al 100 %, se aplica en el
+siguiente doble toque. El tope del 80 % es a propósito: por debajo, este panel ya
+se ve muy oscuro a la luz del día, y el doble toque está para no deslumbrar de
+noche, no para dejar la pantalla ilegible.
+
+- **El brillo no se recuerda al arrancar.** Enciendes y vuelve **siempre al 100 %**,
+  aunque el mínimo elegido sí se guarda. Es a propósito: con la pantalla oscura, un
+  arranque en el nivel bajo se ve como si estuviera apagada y no habría forma de
+  subirla sin saber dónde tocar.
 - Los toques tienen que ir seguidos: si tardas más de **0,65 segundos** entre uno y
   otro, no cuenta y no pasa nada.
 - **Deslizar para cambiar de pantalla no cuenta como toque**, así que no vas a
@@ -549,6 +560,16 @@ nada.
 > sabemos, no era nuestro, y mandar un número inventado lo marcaría como
 > incompleto sin serlo.
 
+**Un caso más, que no es un fallo de la clave**: si al cerrar o apartar el viaje
+ajeno la P4 contesta que **pide su clave de administración** (no la del portal),
+abajo sale la pastilla **«LA P4 PIDE CLAVE ADMIN»** y un aviso que lo explica
+(29-oct-2026). Esa clave no se pone en esta pantalla: la P4 la pide para dejar
+cerrar un viaje que está grabando **otra** pantalla. El aviso ofrece
+**«Descartarlo»**, que tira ese cierre de la cola para que los apuntes siguientes
+sigan su camino (el viaje ajeno se queda como estaba, abierto), y **«Esperar»**,
+que no toca nada. Antes ese caso se confundía con «la clave del portal está mal» y
+mandaba a Ajustes a reescribir una clave que estaba bien, sin dejar salir de ahí.
+
 El viaje **no se da por empezado hasta que la P4 lo confirma**. Si algo falla te
 lo dice y todo se queda como estaba, en vez de poner «viaje en curso» mientras en
 la tarjeta no hay nada.
@@ -745,19 +766,27 @@ cambian por eje, no sueltas); si no, ese selector ni se ve. Abajo, **Km** y
 
 Se llega con el botón **Configuración**, que solo sale en **dos pantallas del
 cuaderno**: la principal (sin salida en marcha) y la del viaje en marcha, donde
-comparte fila con «Terminar salida». Tiene dos cosas:
+comparte fila con «Terminar salida». En la **5"** tiene cuatro cosas (la 3,5"
+solo el botón de Wi-Fi y la versión, porque se actualiza sola desde la P4):
 
 ```
         [ < Volver ]        CONFIGURACION
 
-        [        Wi-Fi        ]
+        [  Wi-Fi  ]   [ Actualizar pantalla ]
+
+        Brillo mínimo         ( - )   80 %   ( + )
 
               Version instalada
-                  v1.9.1
-             Aug 24 2026  14:20
+                  v1.48
+             Oct 29 2026  09:47
 ```
 
-- Un botón de **Wi-Fi**, que lleva a los ajustes de abajo.
+- Dos botones: **Wi-Fi**, que lleva a los ajustes de abajo, y **Actualizar
+  pantalla**, que mira si la P4 tiene una versión nueva y, si la hay, **pregunta
+  antes** de instalarla (la actualización automática no pregunta).
+- **Brillo mínimo** — el nivel al que baja el doble toque en la pantalla de Datos
+  (ver «Cambiar el brillo»). Con **−** y **+**, de 5 en 5 entre el **5 %** y el
+  **80 %**; de fábrica el **80 %**. El número del medio es el que hay elegido.
 - Y **la versión que lleva puesta**, en grande, con la fecha de compilación
   debajo. Es el primer dato que hace falta cuando algo va raro: te dice si la
   pantalla tiene lo último o se quedó en una versión vieja. La fecha distingue
