@@ -47,7 +47,7 @@ inclinación se queda sin datos.
 La de la autocaravana tiene que llevar el arreglo del publicador UDP
 (`udp_tx`: recrear el socket si se queda sin salida). Sin él, hay arranques en
 los que la P4 se queda muda y la cabina no recibe nada hasta reiniciarla a mano.
-Se graba por USB: `idf.py -p PUERTO flash` desde `~/joint/victron`.
+Se graba por USB: `idf.py -p PUERTO flash` desde `~/joint/p4`.
 
 ## El canal de subida se prueba solo (v2.17 en adelante)
 

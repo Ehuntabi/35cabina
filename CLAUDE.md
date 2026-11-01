@@ -2,20 +2,20 @@
 
 Proyecto **nuevo desde 0** (no fork) para el módulo Guition JC3248W535 3.5"
 (ESP32-S3 + AXS15231B QSPI + táctil, 320×480). Convierte ese hardware en un
-satélite de la P4 (`~/joint/victron`), reutilizando el bring-up de hardware
+satélite de la P4 (`~/joint/p4`), reutilizando el bring-up de hardware
 del fork anterior (`~/joint/victronsolardisplayesp-multi-device_pantalla_3.5`,
 descartado como producto).
 
 - **Target**: `esp32s3`. **ESP-IDF**: v5.5.5 (mismo entorno que la P4 y que la
   pantalla de 5", migrado el 7-oct-2026; antes 5.4.4, que venia heredado de la
   saga del hang del LCD/SD). OJO: el IDF de este PC lleva los parches del
-  proyecto de la P4 (`~/joint/victron/patches`), asi que `idf.py --version` dice
+  proyecto de la P4 (`~/joint/p4/patches`), asi que `idf.py --version` dice
   `v5.5.5-dirty`; es lo esperado, no un arbol sucio por descuido.
 - **LVGL 8.4.0** — misma versión que el fork anterior; permite portar
   patrones de UI (`view_quad.c`) sin migración de API.
 - **Sin lógica Victron/BLE/AES/portal Wi-Fi propia** — todo eso lo hace la
   P4; este dispositivo solo **recibe** telemetría (`net/udp_rx.c`, protocolo
-  `mini_proto.h`, MANTENER SINCRONIZADO con `~/joint/victron`).
+  `mini_proto.h`, MANTENER SINCRONIZADO con `~/joint/p4`).
   Desde el 22-ago-2026 **ya envía de vuelta** el inicio y el fin de viaje, y
   desde el 23-ago-2026 también cada registro suelto (parada, aguas,
   repostaje, peaje, bombona, avería/mant.): `POST /api/viaje` contra el
@@ -54,7 +54,8 @@ Qué comprobar en una unidad nueva (es el único momento en que se estrena de
 verdad: la NVS viene vacía, así que todo son valores de fábrica):
 
 1. **Arranca y conecta**: en el log, `Wi-Fi: IP ...` y el contador de paquetes de
-   la P4 subiendo (viene del AP `VictronConfig`; las credenciales de fábrica
+   la P4 subiendo (viene del AP `P4Config` -- el nombre viejo `VictronConfig` se
+   sigue aceptando, ver `udp_rx.c`; las credenciales de fábrica
    salen de `main/wifi_credentials.h`, que NO está versionado — si el log dice que
    no encuentra la red, es esto).
 2. **Brillo**: la NVS vacía deja el nivel por defecto (ALTO). Si la unidad sale

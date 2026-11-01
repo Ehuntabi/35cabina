@@ -2,7 +2,7 @@
 # Impide commitear dependencies.lock con una ruta ABSOLUTA dentro.
 #
 # Este fichero se versiona desde el 18-sep-2026 con el MISMO criterio que la P4
-# (~/joint/victron): fija las versiones resueltas de los componentes para que el
+# (~/joint/p4): fija las versiones resueltas de los componentes para que el
 # build sea reproducible, y evita que un `idf.py reconfigure` meta una ruta
 # local que en el runner de GitHub no existe (el build moriria al configurar con
 # "The path field in the manifest does not point to a directory").

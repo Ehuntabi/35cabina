@@ -8,7 +8,7 @@
 
 Proyecto **nuevo desde 0** para el módulo Guition JC3248W535 3.5"
 (ESP32-S3 + AXS15231B QSPI + táctil, 320×480, LVGL 8.4.0), reconvertido en
-**satélite de la P4** (`~/joint/victron`, pantalla de 7" del salón) en vez
+**satélite de la P4** (`~/joint/p4`, pantalla de 7" del salón) en vez
 de hacer su propio escaneo BLE/AES como el fork anterior
 (`~/joint/victronsolardisplayesp-multi-device_pantalla_3.5`, descartado
 como producto — su lógica Victron/BLE/AES/portal Wi-Fi no se reutiliza).
@@ -19,13 +19,14 @@ Se reutiliza:
   LVGL. Estabilidad heredada de la saga del hang cerrada 18-may-2026 (mismo
   `sdkconfig`).
 - La **arquitectura de red y datos**: recepción UDP broadcast del AP
-  de la P4 (SSID el que tenga guardado en su NVS; de fábrica `VictronConfig`
+  de la P4 (SSID el que tenga guardado en su NVS; de fábrica `P4Config`, y el
+  nombre viejo `VictronConfig` también vale: se prueban los dos
   — `ESP_DC078D` fue un valor transitorio causado por un bug de la pantalla
   de Ajustes de la P4, arreglado el 21-ago-2026), protocolo `mini_msg_t`
   (40 bytes, versión 5, puerto 4242).
 
 > **El C6 queda descartado (20-ago-2026): esta pantalla lo sustituye.**
-> `mini_proto.h` ya sólo se sincroniza con `~/joint/victron`, y el protocolo
+> `mini_proto.h` ya sólo se sincroniza con `~/joint/p4`, y el protocolo
 > puede crecer sin arrastrar los 32 bytes heredados. Aviso mientras el C6
 > siga enchufado: subir `MINI_PROTO_VERSION` lo deja mudo, porque rechaza
 > las versiones que no conoce.
@@ -716,7 +717,7 @@ de proyecto `project_pantalla_35_satelite_p4`. Resumen:
   con la autocaravana nivelada (botón "Calibrar nivel", guarda el offset en
   NVS y solo hay que hacerlo una vez).
 - **Fase 4 — COMPLETA** (22-ago-2026). Canal de vuelta hacia la P4
-  (`~/joint/victron`). Diseño en
+  (`~/joint/p4`). Diseño en
   `docs/superpowers/specs/2026-08-22-viaje-con-nombre-y-carpeta-design.md`,
   cinco sub-fases, **las cinco hechas y probadas en la placa**:
   1. `POST /api/viaje` con Basic Auth estricta, inicio/fin, carpeta
@@ -748,7 +749,7 @@ de proyecto `project_pantalla_35_satelite_p4`. Resumen:
 ## Trabajo multi-equipo (`./empiezo` / `./termino`)
 
 Para trabajar indistintamente en PC y portátil manteniendo el repo
-siempre sincronizado (mismo patrón que `~/joint/victron`):
+siempre sincronizado (mismo patrón que `~/joint/p4`):
 
 - **`./empiezo`** — al sentarte: aparta cambios locales (stash), `git
   pull --rebase`, recupera tus cambios y abre Claude Code. `--no-claude`
@@ -777,7 +778,7 @@ idf.py build
 
 **New project from scratch** for the Guition JC3248W535 3.5" module
 (ESP32-S3 + AXS15231B QSPI + touch, 320×480, LVGL 8.4.0), turned into a
-**satellite of the "P4"** (the 7" salon display, `~/joint/victron`) instead
+**satellite of the "P4"** (the 7" salon display, `~/joint/p4`) instead
 of doing its own BLE/AES scanning like the previous fork (discarded as a
 product; its Victron/BLE/AES/Wi-Fi-portal logic is not reused here).
 
@@ -787,7 +788,8 @@ Reused:
   I2C bus, LVGL. Stability inherited from the "hang saga" closed on
   2026-05-18 (same `sdkconfig`).
 - The **network/data architecture**: UDP broadcast reception from the P4's
-  Soft-AP (SSID from its NVS; factory default `VictronConfig`), `mini_msg_t`
+  Soft-AP (SSID from its NVS; factory default `P4Config`, and the old name
+  `VictronConfig` is accepted too), `mini_msg_t`
   protocol (38 bytes, version 4, port 4242).
 
 See the roadmap above (Fases 0-4) for what's implemented vs. planned.

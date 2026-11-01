@@ -1,6 +1,6 @@
 name: mini_proto_sync
 
-# mini_proto.h se mantiene sincronizado A MANO entre este repo y victron
+# mini_proto.h se mantiene sincronizado A MANO entre este repo y p4
 # (protocolo UDP compartido, ver la cabecera del fichero). Sin esto, editar
 # solo una copia no falla hasta que los dos aparatos se rechazan los
 # paquetes en produccion, semanas despues. Detectado auditando el
@@ -34,11 +34,11 @@ jobs:
         with:
           path: 35cabina
 
-      - name: Checkout victron
+      - name: Checkout p4
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          repository: Ehuntabi/victron-jc1060p470c-esp32p4
-          path: victron
+          repository: Ehuntabi/p4
+          path: p4
 
       # La 5" (cabina5) tambien habla el mismo protocolo y NO estaba en este
       # job: tocar mini_proto.h alli no lo detectaba nadie (auditoria del
@@ -55,7 +55,7 @@ jobs:
           # Mismo reintento que el paso del ciclo del viaje (carrera de push
           # entre los tres repos: se publican de uno en uno).
           for intento in 1 2 3 4; do
-            if diff -q 35cabina/main/net/mini_proto.h victron/main/net/mini_proto.h >/dev/null &&
+            if diff -q 35cabina/main/net/mini_proto.h p4/main/net/mini_proto.h >/dev/null &&
                diff -q 35cabina/main/net/mini_proto.h cabina5/main/net/mini_proto.h >/dev/null; then
               echo "mini_proto.h identico en los tres proyectos"
               exit 0
@@ -63,21 +63,21 @@ jobs:
             if [ "$intento" = 4 ]; then break; fi
             echo "--- intento $intento: alguno de los vecinos puede ir por detras; se reintenta en 45 s"
             sleep 45
-            for r in victron cabina5; do
+            for r in p4 cabina5; do
               git -C "$r" fetch -q origin main && git -C "$r" reset -q --hard origin/main || true
             done
           done
-          diff 35cabina/main/net/mini_proto.h victron/main/net/mini_proto.h || true
+          diff 35cabina/main/net/mini_proto.h p4/main/net/mini_proto.h || true
           diff 35cabina/main/net/mini_proto.h cabina5/main/net/mini_proto.h || true
           echo "mini_proto.h se ha separado entre los proyectos"
           exit 1
 
-  # Espejo del job "viaje_body_sync" de victron (el otro repo del par): el
+  # Espejo del job "viaje_body_sync" de p4 (el otro repo del par): el
   # limite de cuerpo del apunte tambien se mantiene sincronizado A MANO
   # (CUERPO_MAX en este satelite tiene que caber siempre en VIAJE_BODY_MAX de
-  # la P4, con margen). El guard vivia SOLO en el CI de victron -- el repo
+  # la P4, con margen). El guard vivia SOLO en el CI de p4 -- el repo
   # que puede romper el limite (subiendo CUERPO_MAX aqui) no tenia forma de
-  # detectarlo el mismo, solo se enteraba victron, y despues del push, sin
+  # detectarlo el mismo, solo se enteraba p4, y despues del push, sin
   # senalar a quien lo causo. Detectado por el usuario el 09-sep-2026 (mismo
   # motivo que mini_proto_sync).
   viaje_body_sync:
@@ -88,11 +88,11 @@ jobs:
         with:
           path: 35cabina
 
-      - name: Checkout victron
+      - name: Checkout p4
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          repository: Ehuntabi/victron-jc1060p470c-esp32p4
-          path: victron
+          repository: Ehuntabi/p4
+          path: p4
 
       - name: Checkout cabina5
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -104,19 +104,19 @@ jobs:
         run: |
           cuerpo_max=$(grep -oP '#define\s+CUERPO_MAX\s+\K[0-9]+' 35cabina/main/net/viaje_cola.h)
           cuerpo_max5=$(grep -oP '#define\s+CUERPO_MAX\s+\K[0-9]+' cabina5/main/net/viaje_cola.h)
-          body_max=$(grep -oP '#define\s+VIAJE_BODY_MAX\s+\K[0-9]+' victron/main/portal/config_server_viaje.c)
+          body_max=$(grep -oP '#define\s+VIAJE_BODY_MAX\s+\K[0-9]+' p4/main/portal/config_server_viaje.c)
           echo "CUERPO_MAX (35cabina) = $cuerpo_max"
           echo "CUERPO_MAX (cabina5)  = $cuerpo_max5"
           if [ "$cuerpo_max" != "$cuerpo_max5" ]; then
             echo "CUERPO_MAX distinto entre las dos cabinas ($cuerpo_max vs $cuerpo_max5)"
             exit 1
           fi
-          echo "VIAJE_BODY_MAX (victron) = $body_max"
+          echo "VIAJE_BODY_MAX (p4) = $body_max"
           if [ -z "$cuerpo_max" ] || [ -z "$body_max" ]; then
             echo "No se pudo leer alguna de las dos constantes"; exit 1
           fi
           if [ "$cuerpo_max" -ge "$body_max" ]; then
-            echo "CUERPO_MAX ($cuerpo_max) ya no cabe con margen en VIAJE_BODY_MAX ($body_max) -- subir VIAJE_BODY_MAX en victron"
+            echo "CUERPO_MAX ($cuerpo_max) ya no cabe con margen en VIAJE_BODY_MAX ($body_max) -- subir VIAJE_BODY_MAX en p4"
             exit 1
           fi
 
@@ -144,12 +144,12 @@ jobs:
       # Y LA P4, que hasta el 16-oct-2026 no se bajaba en este job: el test de
       # los contadores del viaje saca de udp_tx.c el trozo que los parte en
       # bytes, y sin el repo al lado no puede comprobar nada (fallaba con "no
-      # encuentro el repo victron").
-      - name: Checkout victron
+      # encuentro el repo p4").
+      - name: Checkout p4
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          repository: Ehuntabi/victron-jc1060p470c-esp32p4
-          path: victron
+          repository: Ehuntabi/p4
+          path: p4
 
       - name: El ciclo del viaje, identico en las dos cabinas
         run: |
