@@ -104,6 +104,29 @@ esp_err_t lvgl_port_init(const lvgl_port_cfg_t *cfg);
 esp_err_t lvgl_port_deinit(void);
 
 /**
+ * @brief Para el bucle de LVGL (no repinta) sin destruirlo
+ *
+ * @note Existe en lv_port.c desde siempre, pero no estaba declarada aqui: la
+ *       necesita net/ota_rx.c para dejar la pantalla quieta mientras escribe la
+ *       flash (ver el comentario de OTA_REFRESCO_PCT). Se reanuda con
+ *       lvgl_port_resume().
+ *
+ * @return
+ *      - ESP_OK on success
+ *      - ESP_ERR_INVALID_STATE if the timer is not running
+ */
+esp_err_t lvgl_port_stop(void);
+
+/**
+ * @brief Reanuda el bucle de LVGL parado con lvgl_port_stop()
+ *
+ * @return
+ *      - ESP_OK on success
+ *      - ESP_ERR_INVALID_STATE if the timer is not running
+ */
+esp_err_t lvgl_port_resume(void);
+
+/**
  * @brief Add display handling to LVGL
  *
  * @note Allocated memory in this function is not free in deinit. You must call lvgl_port_remove_disp for free all memory!
