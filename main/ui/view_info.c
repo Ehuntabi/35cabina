@@ -29,7 +29,8 @@
 #include "brillo.h"
 #include "net/viaje_cola.h"   /* VIAJE_COLA_CAPACIDAD, para el aviso de casi llena */
 #include "net/p4_api.h"       /* mandar la orden de silencio a la P4 */
-#include "net/mini_proto.h"   /* MINI_ALARM_*, el byte de alarmas de la telemetria */
+#include "net/mini_proto.h"
+#include "net/ota_rx.h"      /* ota_rx_grabando(): no repintar al grabar la flash */   /* MINI_ALARM_*, el byte de alarmas de la telemetria */
 #include "nav.h"
 #include "view_registro.h"    /* view_registro_puntual_declarar_llegada() */
 #include "confirm_screen.h"   /* descartar a mano el apunte atascado, desde la pastilla */
@@ -1117,6 +1118,12 @@ static void refresh_cb(lv_timer_t *t)
     }
 
     if (s_pantalla && lv_scr_act() != s_pantalla) return;   /* no se ve: no se pinta */
+
+    /* Ni se pinta mientras se graba la flash (29-oct-2026): cada borrado de
+     * sector deja el refresco a medias y el repintado se ve a trozos (el usuario
+     * lo describio como "cuando detecta la actualizacion la pantalla principal se
+     * vuelve loca"). Se deja la ultima imagen quieta un minuto. */
+    if (ota_rx_grabando()) return;
 
     mini_data_t d;
     data_model_get(&d);

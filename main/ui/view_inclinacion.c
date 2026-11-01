@@ -11,6 +11,7 @@
  * todo verticalmente como en un primer intento no cabia comodo en solo
  * 320px de alto -- corregido 18-ago-2026.
  */
+#include "net/ota_rx.h"
 #include "view_inclinacion.h"
 #include "ui/ui_style.h"   /* la paleta, en un solo sitio */
 #include "fonts/fonts_es.h"   /* Inter + acentos: ver fonts_es.h */
@@ -158,6 +159,9 @@ static bool  s_texto_escrito;
 
 static void refresh_cb(lv_timer_t *t)
 {
+    /* No repintar el nivel mientras se graba la flash (ver ota_rx_grabando). */
+    if (ota_rx_grabando()) return;
+
     (void)t;
     if (!tilt_is_present()) {
         lv_obj_add_flag(s_bubble, LV_OBJ_FLAG_HIDDEN);
