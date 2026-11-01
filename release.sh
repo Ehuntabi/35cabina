@@ -165,7 +165,7 @@ command -v xtensa-esp32s3-elf-gcc >/dev/null || {
 # tambien -- es idempotente -- para que los dos proyectos compilen contra el
 # MISMO arbol y no haya "en mi PC funciona". Si el repo de la P4 no esta al
 # lado, se avisa y se sigue: este firmware no usa ese camino del SPI.
-PARCHE="$HOME/joint/victron/scripts/aplicar_parche_idf.sh"
+PARCHE="$HOME/joint/p4/scripts/aplicar_parche_idf.sh"
 if [ -x "$PARCHE" ]; then
     "$PARCHE" >/dev/null && echo "[ok] parches del IDF aplicados (los mismos que la P4)"
 else
