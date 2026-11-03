@@ -902,6 +902,16 @@ te deja miles de líneas repetidas. Al volver, ese fichero se abre en Google
 Earth o en cualquier programa de mapas y ves por dónde fuiste. Un mes de viaje
 ocupa medio mega.
 
+**Y en el mismo mapa, dónde hiciste cada gasto.** Cada apunte que guardas
+(repostaje, bombona, peaje, servicios…) se apunta **con la posición** que tenía
+la P4 en ese momento, así que el viaje lleva dos ficheros: el `ruta.csv` de
+siempre (el camino) y un **`viaje.gpx`** que se abre directamente en Google Earth
+o en Google Maps y trae **el recorrido y una chincheta por apunte**, con su
+nombre y su importe ("bombona 25.90 EUR"). El mapa se genera al cerrar el viaje y
+también al bajarte la carpeta por Wi-Fi. Sin cobertura de GPS no hay chincheta de
+ese apunte (el importe se guarda igual): mejor eso que una chincheta en mitad del
+mar.
+
 Los puntos se van juntando en la memoria de la P4 y bajan a la tarjeta cada
 cinco minutos, no uno a uno: así la tarjeta se desgasta diez veces menos. Si se
 corta la corriente a lo bruto puedes perder los últimos minutos de traza, nunca
