@@ -1,5 +1,14 @@
 # 35cabina — satélite táctil de la P4 (autocaravana)
 
+> **RETIRADA el 09-nov-2026.** La cabina de 3,5" salió del sistema: la que está
+> puesta es la de 5" (`~/joint/cabina5`, ESP32-S3 con LVGL 9). Este repo se
+> conserva por historial —su código, sus tags y sus Releases— pero **no se
+> graba, no se publica y no entra en la batería de pruebas de `~/joint`**: la
+> comprobación de que `mini_proto.h` y el ciclo del viaje eran idénticos a los de
+> las otras placas ya no aplica, y por eso la batería sólo mira P4 y cabina5.
+> El árbol de la autocaravana y qué documento manda: `~/joint/INDICE.md`.
+
+
 > **ES** | [**EN**](#en)
 
 > 📖 **[Manual de uso](docs/MANUAL.md)** ([PDF](docs/MANUAL.pdf)) — cómo se usan
